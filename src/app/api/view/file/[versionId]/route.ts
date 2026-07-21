@@ -6,7 +6,7 @@ import {
   itemGrant,
   resolveLink,
 } from "@/lib/access";
-import { getObjectStream, presignDownload } from "@/lib/storage";
+import { getObjectStream } from "@/lib/storage";
 
 /**
  * Serves document bytes to a granted viewer session.
@@ -60,8 +60,6 @@ export async function GET(
         { error: "Downloads are disabled for this link" },
         { status: 403 }
       );
-    const url = await presignDownload(version.fileKey, version.fileName);
-    // mark the view as having downloaded
     if (session.viewId) {
       await db.view
         .update({
@@ -70,27 +68,42 @@ export async function GET(
         })
         .catch(() => {});
     }
-    return NextResponse.redirect(url);
+    return streamObject(version.fileKey, version.contentType, {
+      disposition: `attachment; filename="${encodeURIComponent(version.fileName)}"`,
+    });
   }
 
-  // Media streams via a short-lived presigned URL so range requests work.
-  if (
+  // The object store is private and internal, so all bytes stream through the
+  // app. Media honours Range requests so seeking works.
+  const isMedia =
     version.contentType.startsWith("video/") ||
-    version.contentType.startsWith("audio/")
-  ) {
-    const url = await presignDownload(version.fileKey);
-    return NextResponse.redirect(url);
-  }
+    version.contentType.startsWith("audio/");
+  return streamObject(version.fileKey, version.contentType, {
+    disposition: "inline",
+    range: isMedia ? req.headers.get("range") : null,
+  });
+}
 
+async function streamObject(
+  key: string,
+  contentType: string,
+  opts: { disposition: string; range?: string | null }
+) {
   try {
-    const obj = await getObjectStream(version.fileKey);
+    const obj = await getObjectStream(key, opts.range ?? undefined);
+    const headers: Record<string, string> = {
+      "content-type": contentType,
+      "content-disposition": opts.disposition,
+      "cache-control": "private, max-age=600",
+      "x-content-type-options": "nosniff",
+      "accept-ranges": "bytes",
+    };
+    if (obj.ContentLength != null)
+      headers["content-length"] = String(obj.ContentLength);
+    if (obj.ContentRange) headers["content-range"] = obj.ContentRange;
     return new NextResponse(obj.Body!.transformToWebStream(), {
-      headers: {
-        "content-type": version.contentType,
-        "content-disposition": "inline",
-        "cache-control": "private, max-age=600",
-        "x-content-type-options": "nosniff",
-      },
+      status: opts.range && obj.ContentRange ? 206 : 200,
+      headers,
     });
   } catch {
     return NextResponse.json({ error: "Not found" }, { status: 404 });

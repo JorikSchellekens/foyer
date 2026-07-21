@@ -5,7 +5,6 @@ import {
   GetObjectCommand,
   DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { randomBytes } from "crypto";
 
 let _client: S3Client | null = null;
@@ -31,36 +30,6 @@ export function newFileKey(teamId: string, fileName: string) {
   return `${teamId}/${randomBytes(8).toString("hex")}/${safe}`;
 }
 
-export async function presignUpload(key: string, contentType: string) {
-  return getSignedUrl(
-    s3(),
-    new PutObjectCommand({
-      Bucket: BUCKET(),
-      Key: key,
-      ContentType: contentType,
-    }),
-    { expiresIn: 600 }
-  );
-}
-
-export async function presignDownload(key: string, fileName?: string) {
-  return getSignedUrl(
-    s3(),
-    new GetObjectCommand({
-      Bucket: BUCKET(),
-      Key: key,
-      ...(fileName
-        ? {
-            ResponseContentDisposition: `attachment; filename="${encodeURIComponent(
-              fileName
-            )}"`,
-          }
-        : {}),
-    }),
-    { expiresIn: 600 }
-  );
-}
-
 export async function putObject(
   key: string,
   body: Buffer | Uint8Array,
@@ -76,9 +45,13 @@ export async function putObject(
   );
 }
 
-export async function getObjectStream(key: string) {
+export async function getObjectStream(key: string, range?: string) {
   const res = await s3().send(
-    new GetObjectCommand({ Bucket: BUCKET(), Key: key })
+    new GetObjectCommand({
+      Bucket: BUCKET(),
+      Key: key,
+      ...(range ? { Range: range } : {}),
+    })
   );
   return res;
 }
