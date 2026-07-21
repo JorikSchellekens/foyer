@@ -11,6 +11,7 @@ import {
   Link2,
 } from "lucide-react";
 import {
+  Command,
   CommandDialog,
   CommandInput,
   CommandList,
@@ -78,9 +79,10 @@ export function CommandPalette() {
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder="Search documents, data rooms, visitors…" />
-      <CommandList>
-        <CommandEmpty>No matches.</CommandEmpty>
+      <Command>
+        <CommandInput placeholder="Search documents, data rooms, visitors…" />
+        <CommandList>
+          <CommandEmpty>No matches.</CommandEmpty>
         <CommandGroup heading="Actions">
           {ACTIONS.map((a) => (
             <CommandItem
@@ -117,7 +119,8 @@ export function CommandPalette() {
             </CommandGroup>
           );
         })}
-      </CommandList>
+        </CommandList>
+      </Command>
     </CommandDialog>
   );
 }
