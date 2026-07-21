@@ -9,6 +9,7 @@ import {
   setViewerSession,
   isEmailAllowed,
   resolveLink,
+  evaluateAccess,
 } from "@/lib/access";
 import { verifyPassword, createVerificationToken } from "@/lib/tokens";
 import { sendViewerVerification } from "@/lib/email";
@@ -116,13 +117,30 @@ export async function signAgreement(
   const link = await loadLink(slug);
   if (!link || !link.agreement) return { error: "Link unavailable." };
   const session = await getViewerSession(link.id);
+
+  // Only record a signature when the agreement is genuinely the remaining gate:
+  // evaluateAccess returns "agreement" exactly when every prior gate (expiry,
+  // password, email, verification) is already satisfied. This keeps forged/
+  // premature signatures out of the audit trail, and dedups - an already-signed
+  // session evaluates to "granted", not "agreement", so a re-sign is rejected.
+  if (evaluateAccess(link, session).kind !== "agreement")
+    return { error: "Link unavailable." };
+
+  const h = await headers();
+  const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+
+  // A PUBLIC link with only an agreement has no prior gate, so bound flooding
+  // (each call would otherwise write a View + AgreementResponse row).
+  if (
+    !rateLimit(`sign:ip:${ip ?? "unknown"}`, 10, 10 * 60_000).ok ||
+    !rateLimit(`sign:link:${link.id}`, 60, 60 * 60_000).ok
+  )
+    return { error: "Too many attempts. Please try again in a few minutes." };
+
   if (link.agreement.requireName && !payload.name?.trim())
     return { error: "Enter your full name to sign." };
   if (link.agreement.type === "EMBEDDED" && !payload.signatureData)
     return { error: "Draw your signature to continue." };
-
-  const h = await headers();
-  const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
 
   // The response is recorded against the view created after granting; store
   // it in a standalone row keyed by a temporary view once granted. To keep an
