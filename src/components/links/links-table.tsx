@@ -43,6 +43,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { CopyButton } from "@/components/shell/copy-button";
+import { LivePresenceProvider, LiveDot } from "@/components/links/live-presence";
 import { timeAgo } from "@/lib/format";
 import {
   LinkEditor,
@@ -95,26 +96,28 @@ export function LinksTable({
   showTarget?: boolean;
 }) {
   return (
-    <div className="rounded-lg border bg-card">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Link</TableHead>
-            {showTarget && <TableHead>Shares</TableHead>}
-            <TableHead className="w-20">Views</TableHead>
-            <TableHead className="w-28">Last viewed</TableHead>
-            <TableHead className="w-20">Active</TableHead>
-            <TableHead className="w-12" />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((row) => (
-            <LinkRow key={row.id} row={row} ctx={ctx} showTarget={showTarget} />
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+    <LivePresenceProvider>
+      <div className="rounded-lg border bg-card">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Link</TableHead>
+              {showTarget && <TableHead>Shares</TableHead>}
+              <TableHead className="w-20">Views</TableHead>
+              <TableHead className="w-28">Last viewed</TableHead>
+              <TableHead className="w-20">Active</TableHead>
+              <TableHead className="w-12" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row) => (
+              <LinkRow key={row.id} row={row} ctx={ctx} showTarget={showTarget} />
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </LivePresenceProvider>
   );
 }
 
@@ -130,10 +133,16 @@ function LinkRow({
   const router = useRouter();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [active, setActive] = useState(!row.isArchived);
 
   return (
     <TableRow>
-      <TableCell className="font-medium">{row.name}</TableCell>
+      <TableCell className="font-medium">
+        <span className="flex items-center gap-2">
+          <LiveDot linkId={row.id} />
+          {row.name}
+        </span>
+      </TableCell>
       <TableCell>
         <div className="flex items-center gap-1">
           <span className="max-w-52 truncate font-mono text-xs text-muted-foreground">
@@ -167,11 +176,17 @@ function LinkRow({
       </TableCell>
       <TableCell>
         <Switch
-          checked={!row.isArchived}
+          checked={active}
           onCheckedChange={async (v) => {
-            await setLinkArchived(row.id, !v);
-            toast.success(v ? "Link activated" : "Link deactivated");
-            router.refresh();
+            setActive(v); // optimistic: flip immediately
+            try {
+              await setLinkArchived(row.id, !v);
+              toast.success(v ? "Link activated" : "Link deactivated");
+              router.refresh();
+            } catch {
+              setActive(!v); // reconcile on failure
+              toast.error("Could not update the link.");
+            }
           }}
         />
       </TableCell>
