@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import { formatDuration, timeAgo, initials } from "@/lib/format";
 import { teamMemberEmails } from "@/lib/internal-views";
+import { ExportButton } from "@/components/shell/export-button";
 
 export const metadata = { title: "Visitors" };
 
@@ -60,7 +61,9 @@ export default async function VisitorsPage() {
       <PageHeader
         title="Visitors"
         description="Everyone who has opened your links, and how deeply they read."
-      />
+      >
+        {rows.length > 0 && <ExportButton href="/api/export/visitors" />}
+      </PageHeader>
       <div className="px-4 sm:px-8 py-6">
         {rows.length === 0 ? (
           <EmptyState

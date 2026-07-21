@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import { Stat } from "@/components/shell/stat";
 import { EmptyState } from "@/components/shell/empty-state";
+import { ExportButton } from "@/components/shell/export-button";
 import { LinkEditor } from "@/components/links/link-editor";
 import { LinksTable } from "@/components/links/links-table";
 import { ViewsTable } from "@/components/analytics/views-table";
@@ -490,6 +491,7 @@ async function AnalyticsTab({
   dataroom,
 }: {
   dataroom: {
+    id: string;
     views: (import("@prisma/client").View & {
       viewer: import("@prisma/client").Viewer | null;
       link: import("@prisma/client").Link & {
@@ -517,6 +519,11 @@ async function AnalyticsTab({
 
   return (
     <div className="space-y-6">
+      {views.length > 0 && (
+        <div className="flex justify-end">
+          <ExportButton href={`/api/export/dataroom/${dataroom.id}`} />
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Stat label="Visits" value={views.length} />
         <Stat label="Unique visitors" value={uniqueEmails.size} />

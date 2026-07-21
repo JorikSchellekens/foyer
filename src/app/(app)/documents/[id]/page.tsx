@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/shell/empty-state";
 import { LinkEditor } from "@/components/links/link-editor";
 import { LinksTable } from "@/components/links/links-table";
 import { ViewsTable } from "@/components/analytics/views-table";
+import { ExportButton } from "@/components/shell/export-button";
 import { PageDwell } from "@/components/analytics/page-dwell";
 import { getEditorContext, toEditorLink, linkUrl } from "@/lib/link-helpers";
 import { teamMemberEmails, externalViews } from "@/lib/internal-views";
@@ -227,7 +228,12 @@ export default async function DocumentPage({
         )}
 
         <section>
-          <h2 className="mb-3 font-display text-xl">Recent views</h2>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="font-display text-xl">Recent views</h2>
+            {doc.views.length > 0 && (
+              <ExportButton href={`/api/export/document/${doc.id}`} />
+            )}
+          </div>
           <ViewsTable
             rows={await Promise.all(doc.views.map(async (v) => ({
               id: v.id,
