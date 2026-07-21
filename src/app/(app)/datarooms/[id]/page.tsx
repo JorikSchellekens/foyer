@@ -29,6 +29,7 @@ import { formatDuration } from "@/lib/format";
 import { DataroomMenu } from "./dataroom-menu";
 import {
   AddFromLibraryDialog,
+  AddNotionToDataroomDialog,
   DataroomUploadButtons,
   DrDocumentRow,
   DrFolderRow,
@@ -413,6 +414,10 @@ async function ContentsTabInner({
         </nav>
         <div className="flex items-center gap-2">
           <NewDrFolderButton dataroomId={dataroom.id} parentId={folderId} />
+          <AddNotionToDataroomDialog
+            dataroomId={dataroom.id}
+            folderId={folderId}
+          />
           <AddFromLibraryDialog
             dataroomId={dataroom.id}
             folderId={folderId}
@@ -431,7 +436,7 @@ async function ContentsTabInner({
         <EmptyState
           icon={FolderLock}
           title="Nothing here yet"
-          description="Upload files, bring in documents from your library, or create folders to build the index your visitors will see."
+          description="Upload files, link a published Notion page, bring in documents from your library, or create folders to build the index your visitors will see."
         />
       ) : (
         <div className="rounded-lg border bg-card">

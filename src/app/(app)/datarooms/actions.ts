@@ -5,6 +5,7 @@ import { requireRole, requireTeam } from "@/lib/auth";
 import { canAccessDataroom } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { docTypeFromName } from "@/lib/doc-types";
+import { parseNotionUrl } from "@/lib/notion";
 import { notifyTeam } from "@/lib/notify";
 import type { PermissionLevel } from "@prisma/client";
 import type { UploadedFile } from "@/app/(app)/documents/actions";
@@ -200,6 +201,59 @@ export async function uploadIntoDataroom(
   bust(dataroomId);
   revalidatePath("/documents");
   return { added: uploads.length };
+}
+
+/** Add a published Notion page as a live asset straight into a dataroom. */
+export async function addNotionToDataroom(
+  dataroomId: string,
+  url: string,
+  folderId: string | null
+) {
+  const owned = await ownDataroom(dataroomId);
+  if (!owned) return { error: "Data room not found." };
+  const { ctx } = owned;
+
+  const parsed = parseNotionUrl(url);
+  if ("error" in parsed) return parsed;
+
+  const doc = await db.document.create({
+    data: {
+      teamId: ctx.team.id,
+      name: parsed.name,
+      type: "NOTION",
+      externalUrl: parsed.url,
+      versions: {
+        create: {
+          versionNumber: 1,
+          fileName: "notion",
+          contentType: "text/html",
+          uploadedById: ctx.user.id,
+        },
+      },
+    },
+    include: { versions: true },
+  });
+  await db.document.update({
+    where: { id: doc.id },
+    data: { currentVersionId: doc.versions[0].id },
+  });
+
+  const max = await db.dataroomDocument.aggregate({
+    where: { dataroomId },
+    _max: { orderIndex: true },
+  });
+  await db.dataroomDocument.create({
+    data: {
+      dataroomId,
+      documentId: doc.id,
+      folderId,
+      orderIndex: (max._max.orderIndex ?? 0) + 1,
+    },
+  });
+
+  bust(dataroomId);
+  revalidatePath("/documents");
+  return { added: 1 };
 }
 
 export async function removeFromDataroom(

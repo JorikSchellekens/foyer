@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
+  BookOpen,
   FileUp,
   Folder,
   FolderPlus,
@@ -41,6 +42,7 @@ import { FileIcon } from "@/components/shell/file-icon";
 import { formatBytes, timeAgo, pluralize } from "@/lib/format";
 import {
   addDocumentsToDataroom,
+  addNotionToDataroom,
   createDataroomFolder,
   deleteDataroomFolder,
   renameDataroomFolder,
@@ -93,6 +95,84 @@ export function NewDrFolderButton({
           />
           <DialogFooter>
             <Button type="submit">Create folder</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function AddNotionToDataroomDialog({
+  dataroomId,
+  folderId,
+}: {
+  dataroomId: string;
+  folderId: string | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const [url, setUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  const router = useRouter();
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline">
+          <BookOpen className="size-4" /> Add Notion page
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add a Notion page</DialogTitle>
+          <DialogDescription>
+            Link a published Notion page so your team can keep editing it in
+            Notion while visitors always see the latest version.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          action={async () => {
+            setBusy(true);
+            try {
+              const res = await addNotionToDataroom(dataroomId, url, folderId);
+              if (res && "error" in res && res.error) {
+                toast.error(res.error);
+                return;
+              }
+              toast.success("Notion page added");
+              setOpen(false);
+              setUrl("");
+              router.refresh();
+            } finally {
+              setBusy(false);
+            }
+          }}
+          className="space-y-4"
+        >
+          <div className="space-y-2">
+            <Label htmlFor="dr-notion-url">Public Notion URL</Label>
+            <Input
+              id="dr-notion-url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://yourteam.notion.site/Page-abc123"
+              autoFocus
+              required
+            />
+            <p className="text-xs text-muted-foreground">
+              The page must be published to the web in Notion. Visitors get a
+              live, tracked preview.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button type="submit" disabled={busy}>
+              {busy ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" /> Adding
+                </>
+              ) : (
+                "Add page"
+              )}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

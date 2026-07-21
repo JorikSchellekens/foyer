@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireTeam } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { docTypeFromName } from "@/lib/doc-types";
+import { parseNotionUrl } from "@/lib/notion";
 import { getObjectBuffer } from "@/lib/storage";
 
 async function countPdfPages(fileKey: string): Promise<number | null> {
@@ -96,28 +97,16 @@ export async function createNotionDocument(
   folderId: string | null
 ) {
   const ctx = await requireTeam();
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return { error: "Enter a valid Notion URL." };
-  }
-  if (!parsed.hostname.endsWith("notion.site") && !parsed.hostname.endsWith("notion.so"))
-    return { error: "Only public notion.site or notion.so links are supported." };
-
-  const name = decodeURIComponent(
-    parsed.pathname.split("/").filter(Boolean).pop() ?? "Notion page"
-  )
-    .replace(/-[a-f0-9]{32}$/i, "")
-    .replace(/-/g, " ");
+  const parsed = parseNotionUrl(url);
+  if ("error" in parsed) return parsed;
 
   const doc = await db.document.create({
     data: {
       teamId: ctx.team.id,
       folderId,
-      name: name || "Notion page",
+      name: parsed.name,
       type: "NOTION",
-      externalUrl: url,
+      externalUrl: parsed.url,
       versions: {
         create: {
           versionNumber: 1,

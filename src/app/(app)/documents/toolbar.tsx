@@ -85,7 +85,7 @@ export function AddNotionDialog({ folderId }: { folderId: string | null }) {
         <form
           action={async () => {
             const res = await createNotionDocument(url, folderId);
-            if (res?.error) {
+            if (res && "error" in res && res.error) {
               toast.error(res.error);
               return;
             }
