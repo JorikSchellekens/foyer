@@ -13,6 +13,7 @@ import {
   Plus,
   LogOut,
   Check,
+  Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -78,6 +79,20 @@ export function Sidebar({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+      </div>
+
+      <div className="px-3 pb-1">
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new Event("foyer:open-command"))}
+          className="flex w-full items-center gap-2 rounded-md border bg-card px-2.5 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <Search className="size-3.5" />
+          <span className="flex-1">Search</span>
+          <kbd className="rounded border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+            ⌘K
+          </kbd>
+        </button>
       </div>
 
       <nav className="flex-1 space-y-0.5 px-3 py-3">

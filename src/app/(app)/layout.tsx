@@ -2,6 +2,7 @@ import { requireTeam } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Sidebar } from "@/components/shell/sidebar";
 import { MobileNav } from "@/components/shell/mobile-nav";
+import { CommandPalette } from "@/components/shell/command-palette";
 
 export default async function AppLayout({
   children,
@@ -32,6 +33,7 @@ export default async function AppLayout({
         userEmail={ctx.user.email}
       />
       <main className="min-w-0 flex-1">{children}</main>
+      <CommandPalette />
     </div>
   );
 }
