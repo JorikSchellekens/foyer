@@ -106,7 +106,7 @@ export async function createLink(
     target: target.type.toLowerCase(),
   });
   revalidateLinkPages();
-  return { id: link.id };
+  return { id: link.id, slug: link.slug };
 }
 
 export async function updateLink(linkId: string, config: LinkConfig) {

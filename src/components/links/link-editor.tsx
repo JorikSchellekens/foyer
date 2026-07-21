@@ -141,7 +141,8 @@ export function LinkEditor({
       }
       router.refresh();
       if (mode === "create") {
-        setCreatedUrl(`https://${host}/${cfg.slug || "…"}`);
+        const slug = ("slug" in res && res.slug) || cfg.slug;
+        setCreatedUrl(`https://${host}/${slug}`);
         toast.success("Link created");
       } else {
         toast.success("Link updated");
