@@ -25,6 +25,7 @@ import {
   buildTree,
   linkUrl,
 } from "@/lib/link-helpers";
+import { teamMemberEmails, externalViews } from "@/lib/internal-views";
 import { formatDuration } from "@/lib/format";
 import { DataroomMenu } from "./dataroom-menu";
 import {
@@ -62,6 +63,10 @@ export default async function DataroomPage({
   const { canAccessDataroom } = await import("@/lib/permissions");
   if (!(await canAccessDataroom(ctx, id, "VIEW"))) notFound();
 
+  // Internal visits (a team member opening their own link) are excluded from
+  // the analytics counts and the visitor list.
+  const extFilter = externalViews(await teamMemberEmails(ctx.team.id));
+
   const dataroom = await db.dataroom.findFirst({
     where: { id, teamId: ctx.team.id },
     include: {
@@ -78,15 +83,17 @@ export default async function DataroomPage({
           permissions: true,
           recipients: true,
           views: {
+            where: extFilter,
             orderBy: { startedAt: "desc" },
             take: 1,
             select: { startedAt: true },
           },
-          _count: { select: { views: true } },
+          _count: { select: { views: { where: extFilter } } },
         },
         orderBy: { createdAt: "desc" },
       },
       views: {
+        where: extFilter,
         orderBy: { startedAt: "desc" },
         take: 100,
         include: {

@@ -5,6 +5,7 @@ import {
   getViewerSession,
   itemGrant,
   resolveLink,
+  verifyPreviewToken,
 } from "@/lib/access";
 import { ensureView } from "@/lib/view-session";
 import { resolveBranding, gateBrand } from "@/lib/viewer-brand";
@@ -17,23 +18,36 @@ import {
 
 export default async function DataroomDocumentPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string; itemId: string }>;
+  searchParams: Promise<{ preview?: string }>;
 }) {
   const { slug, itemId } = await params;
+  const { preview } = await searchParams;
   const h = await headers();
   const host = h.get("host") ?? "";
   const link = await resolveLink(host, slug);
   if (!link || link.target !== "DATAROOM" || !link.dataroom) notFound();
 
   const session = await getViewerSession(link.id);
-  const access = evaluateAccess(link, session);
-  if (access.kind !== "granted") redirect(`/view/${slug}`);
+  const isPreview = await verifyPreviewToken(preview, link.id);
+  const previewSuffix = isPreview
+    ? `&preview=${encodeURIComponent(preview!)}`
+    : "";
+  const backHref = isPreview
+    ? `/view/${slug}?preview=${encodeURIComponent(preview!)}`
+    : `/view/${slug}`;
+
+  if (!isPreview) {
+    const access = evaluateAccess(link, session);
+    if (access.kind !== "granted") redirect(`/view/${slug}`);
+  }
 
   const item = link.dataroom.documents.find((d) => d.id === itemId);
   if (!item) notFound();
   const grant = itemGrant(link, "DATAROOM_DOCUMENT", item.id);
-  if (!grant.canView) redirect(`/view/${slug}`);
+  if (!grant.canView) redirect(backHref);
 
   const doc = await db.document.findUnique({
     where: { id: item.documentId },
@@ -41,9 +55,9 @@ export default async function DataroomDocumentPage({
   });
   if (!doc) notFound();
 
-  const { viewId, trackToken } = await ensureView(link, session, {
-    documentId: doc.id,
-  });
+  const { viewId, trackToken } = isPreview
+    ? { viewId: "", trackToken: "" }
+    : await ensureView(link, session, { documentId: doc.id });
 
   const branding = await resolveBranding(link);
   const brand = gateBrand(link, branding);
@@ -59,11 +73,11 @@ export default async function DataroomDocumentPage({
     versionId: version?.id ?? null,
     numPages: version?.numPages ?? null,
     fileUrl: version?.fileKey
-      ? `/api/view/file/${version.id}?slug=${slug}`
+      ? `/api/view/file/${version.id}?slug=${slug}${previewSuffix}`
       : null,
     downloadUrl:
       grant.canDownload && version?.fileKey
-        ? `/api/view/file/${version.id}?slug=${slug}&download=1`
+        ? `/api/view/file/${version.id}?slug=${slug}&download=1${previewSuffix}`
         : null,
     recordMap,
   };
@@ -73,6 +87,7 @@ export default async function DataroomDocumentPage({
       doc={viewerDoc}
       viewId={viewId}
       trackToken={trackToken}
+      preview={isPreview}
       brand={{
         teamName: link.team.name,
         brandColor: brand.brandColor,
@@ -82,7 +97,7 @@ export default async function DataroomDocumentPage({
       }}
       watermarkText={link.watermark ? (session.email ?? "confidential") : null}
       protection={link.screenshotProtection}
-      backHref={`/view/${slug}`}
+      backHref={backHref}
     />
   );
 }

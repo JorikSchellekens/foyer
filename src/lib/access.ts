@@ -89,6 +89,25 @@ export async function setViewerSession(session: ViewerSession) {
   });
 }
 
+// ---------- owner preview ----------
+
+/**
+ * Owner-preview tokens let a signed-in team member open the real visitor
+ * experience for their own link without tripping any gate or recording a view.
+ * The token is minted by /api/links/[id]/preview and carried as ?preview= on
+ * the viewer URL and on the file bytes it requests. It is scoped to one link.
+ */
+export async function verifyPreviewToken(
+  token: string | undefined | null,
+  linkId: string
+): Promise<boolean> {
+  if (!token) return false;
+  const payload = await verifyPayload<{ preview?: boolean; lid?: string }>(
+    token
+  );
+  return !!payload?.preview && payload.lid === linkId;
+}
+
 // ---------- gate evaluation ----------
 
 export type AccessState =

@@ -13,6 +13,7 @@ import { LinksTable } from "@/components/links/links-table";
 import { ViewsTable } from "@/components/analytics/views-table";
 import { PageDwell } from "@/components/analytics/page-dwell";
 import { getEditorContext, toEditorLink, linkUrl } from "@/lib/link-helpers";
+import { teamMemberEmails, externalViews } from "@/lib/internal-views";
 import {
   formatBytes,
   formatDuration,
@@ -31,6 +32,10 @@ export default async function DocumentPage({
   const ctx = await requireTeam();
   const { id } = await params;
 
+  // Internal visits (a team member opening their own link) are excluded from
+  // the counts and the recent-views list.
+  const extFilter = externalViews(await teamMemberEmails(ctx.team.id));
+
   const doc = await db.document.findFirst({
     where: { id, teamId: ctx.team.id },
     include: {
@@ -45,15 +50,17 @@ export default async function DocumentPage({
           permissions: true,
           recipients: true,
           views: {
+            where: extFilter,
             orderBy: { startedAt: "desc" },
             take: 1,
             select: { startedAt: true },
           },
-          _count: { select: { views: true } },
+          _count: { select: { views: { where: extFilter } } },
         },
         orderBy: { createdAt: "desc" },
       },
       views: {
+        where: extFilter,
         orderBy: { startedAt: "desc" },
         take: 50,
         include: {

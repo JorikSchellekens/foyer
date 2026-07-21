@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { PageHeader } from "@/components/shell/page-header";
 import { EmptyState } from "@/components/shell/empty-state";
 import { timeAgo, pluralize } from "@/lib/format";
+import { teamMemberEmails, externalViews } from "@/lib/internal-views";
 import { NewDataroomDialog } from "./new-dataroom";
 
 export const metadata = { title: "Data rooms" };
@@ -13,13 +14,20 @@ export default async function DataroomsPage() {
   const ctx = await requireTeam();
   const { accessibleDataroomIds } = await import("@/lib/permissions");
   const allowed = await accessibleDataroomIds(ctx);
+  const extFilter = externalViews(await teamMemberEmails(ctx.team.id));
   const datarooms = await db.dataroom.findMany({
     where: {
       teamId: ctx.team.id,
       ...(allowed === "all" ? {} : { id: { in: allowed } }),
     },
     include: {
-      _count: { select: { documents: true, links: true, views: true } },
+      _count: {
+        select: {
+          documents: true,
+          links: true,
+          views: { where: extFilter },
+        },
+      },
     },
     orderBy: { updatedAt: "desc" },
   });

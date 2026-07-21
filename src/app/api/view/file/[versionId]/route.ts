@@ -5,6 +5,7 @@ import {
   getViewerSession,
   itemGrant,
   resolveLink,
+  verifyPreviewToken,
 } from "@/lib/access";
 import { getObjectStream } from "@/lib/storage";
 
@@ -26,8 +27,11 @@ export async function GET(
   if (!link) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const session = await getViewerSession(link.id);
-  const access = evaluateAccess(link, session);
-  if (access.kind !== "granted")
+  const isPreview = await verifyPreviewToken(
+    req.nextUrl.searchParams.get("preview"),
+    link.id
+  );
+  if (!isPreview && evaluateAccess(link, session).kind !== "granted")
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const version = await db.documentVersion.findUnique({

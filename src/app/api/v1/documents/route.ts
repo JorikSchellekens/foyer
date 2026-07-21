@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateApi } from "@/lib/api-auth";
 import { db } from "@/lib/db";
+import { teamMemberEmails, externalViews } from "@/lib/internal-views";
 
 export async function GET(req: NextRequest) {
   const auth = await authenticateApi(req);
   if (!auth)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Internal visits (team members opening their own links) are not counted.
+  const extFilter = externalViews(await teamMemberEmails(auth.teamId));
   const q = req.nextUrl.searchParams.get("q") ?? undefined;
   const documents = await db.document.findMany({
     where: {
@@ -15,7 +18,7 @@ export async function GET(req: NextRequest) {
     },
     include: {
       currentVersion: true,
-      _count: { select: { views: true, links: true } },
+      _count: { select: { views: { where: extFilter }, links: true } },
     },
     orderBy: { updatedAt: "desc" },
     take: 200,

@@ -4,19 +4,22 @@ import { authenticateApi } from "@/lib/api-auth";
 import { db } from "@/lib/db";
 import { generateSlug } from "@/lib/slug";
 import { originFromRequest } from "@/lib/origin";
+import { teamMemberEmails, externalViews } from "@/lib/internal-views";
 
 export async function GET(req: NextRequest) {
   const auth = await authenticateApi(req);
   if (!auth)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Internal visits (team members opening their own links) are not counted.
+  const extFilter = externalViews(await teamMemberEmails(auth.teamId));
   const links = await db.link.findMany({
     where: { teamId: auth.teamId },
     include: {
       domain: true,
       document: true,
       dataroom: true,
-      _count: { select: { views: true } },
+      _count: { select: { views: { where: extFilter } } },
     },
     orderBy: { createdAt: "desc" },
     take: 200,

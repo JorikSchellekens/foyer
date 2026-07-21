@@ -10,11 +10,13 @@ import {
   buildTree,
   linkUrl,
 } from "@/lib/link-helpers";
+import { teamMemberEmails, externalViews } from "@/lib/internal-views";
 
 export const metadata = { title: "Links" };
 
 export default async function LinksPage() {
   const ctx = await requireTeam();
+  const extFilter = externalViews(await teamMemberEmails(ctx.team.id));
   const [links, editorCtx] = await Promise.all([
     db.link.findMany({
       where: { teamId: ctx.team.id },
@@ -30,11 +32,12 @@ export default async function LinksPage() {
           },
         },
         views: {
+          where: extFilter,
           orderBy: { startedAt: "desc" },
           take: 1,
           select: { startedAt: true },
         },
-        _count: { select: { views: true } },
+        _count: { select: { views: { where: extFilter } } },
       },
       orderBy: { createdAt: "desc" },
     }),

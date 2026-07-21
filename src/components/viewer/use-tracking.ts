@@ -14,6 +14,7 @@ export function useTracking({
   versionId,
   numPages,
   claimSession = false,
+  preview = false,
 }: {
   viewId: string;
   token: string;
@@ -21,6 +22,8 @@ export function useTracking({
   numPages?: number | null;
   /** persist this view id into the gate cookie (top-level views only) */
   claimSession?: boolean;
+  /** owner preview: meter nothing, send no beacons */
+  preview?: boolean;
 }) {
   const pageRef = useRef(1);
   const maxPageRef = useRef(1);
@@ -45,6 +48,7 @@ export function useTracking({
 
   const flush = useCallback(
     (useBeacon = false) => {
+      if (preview) return;
       const now = Date.now();
       let delta = 0;
       if (document.visibilityState === "visible" || useBeacon) {
@@ -92,7 +96,7 @@ export function useTracking({
         }).catch(() => {});
       }
     },
-    [token, viewId, versionId, numPages]
+    [token, viewId, versionId, numPages, preview]
   );
 
   // Mouse sampling, throttled. Coordinates are relative to the rendered
@@ -124,12 +128,12 @@ export function useTracking({
   }, []);
 
   useEffect(() => {
-    if (!claimSession) return;
+    if (preview || !claimSession) return;
     fetch("/api/view/claim", {
       method: "POST",
       body: JSON.stringify({ token, viewId }),
     }).catch(() => {});
-  }, [claimSession, token, viewId]);
+  }, [claimSession, token, viewId, preview]);
 
   useEffect(() => {
     lastBeatRef.current = Date.now();
@@ -150,12 +154,13 @@ export function useTracking({
   }, [flush]);
 
   const notifyDownload = useCallback(() => {
+    if (preview) return;
     fetch("/api/view/track", {
       method: "POST",
       body: JSON.stringify({ token, viewId, downloaded: true }),
       keepalive: true,
     }).catch(() => {});
-  }, [token, viewId]);
+  }, [token, viewId, preview]);
 
   return { setPage, containerRef, notifyDownload };
 }

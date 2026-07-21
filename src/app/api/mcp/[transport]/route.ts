@@ -5,6 +5,7 @@ import { hashApiKey } from "@/lib/tokens";
 import { generateSlug } from "@/lib/slug";
 import { appHost } from "@/lib/cloudflare";
 import { formatDuration } from "@/lib/format";
+import { teamMemberEmails, externalViews } from "@/lib/internal-views";
 
 type Auth = {
   token: string;
@@ -27,6 +28,7 @@ const handler = createMcpHandler(
       { query: z.string().optional() },
       async ({ query }, extra) => {
         const teamId = await teamFromAuth(extra);
+        const extFilter = externalViews(await teamMemberEmails(teamId));
         const docs = await db.document.findMany({
           where: {
             teamId,
@@ -36,7 +38,7 @@ const handler = createMcpHandler(
           },
           include: {
             currentVersion: true,
-            _count: { select: { views: true, links: true } },
+            _count: { select: { views: { where: extFilter }, links: true } },
           },
           orderBy: { updatedAt: "desc" },
           take: 100,
@@ -70,10 +72,17 @@ const handler = createMcpHandler(
       {},
       async (_args, extra) => {
         const teamId = await teamFromAuth(extra);
+        const extFilter = externalViews(await teamMemberEmails(teamId));
         const rooms = await db.dataroom.findMany({
           where: { teamId },
           include: {
-            _count: { select: { documents: true, views: true, links: true } },
+            _count: {
+              select: {
+                documents: true,
+                views: { where: extFilter },
+                links: true,
+              },
+            },
           },
         });
         return {
@@ -103,13 +112,14 @@ const handler = createMcpHandler(
       {},
       async (_args, extra) => {
         const teamId = await teamFromAuth(extra);
+        const extFilter = externalViews(await teamMemberEmails(teamId));
         const links = await db.link.findMany({
           where: { teamId },
           include: {
             domain: true,
             document: true,
             dataroom: true,
-            _count: { select: { views: true } },
+            _count: { select: { views: { where: extFilter } } },
           },
           orderBy: { createdAt: "desc" },
           take: 100,
@@ -202,10 +212,11 @@ const handler = createMcpHandler(
       { linkId: z.string() },
       async ({ linkId }, extra) => {
         const teamId = await teamFromAuth(extra);
+        const extFilter = externalViews(await teamMemberEmails(teamId));
         const link = await db.link.findFirst({
           where: { id: linkId, teamId },
           include: {
-            views: { orderBy: { startedAt: "desc" }, take: 100 },
+            views: { where: extFilter, orderBy: { startedAt: "desc" }, take: 100 },
           },
         });
         if (!link)
@@ -246,8 +257,10 @@ const handler = createMcpHandler(
       {},
       async (_args, extra) => {
         const teamId = await teamFromAuth(extra);
+        // Team members are internal, not visitors - keep them out of the list.
+        const members = await teamMemberEmails(teamId);
         const viewers = await db.viewer.findMany({
-          where: { teamId },
+          where: { teamId, email: { notIn: members } },
           include: { views: { select: { totalDuration: true } } },
           take: 200,
         });

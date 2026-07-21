@@ -13,11 +13,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDuration, timeAgo, initials } from "@/lib/format";
+import { teamMemberEmails } from "@/lib/internal-views";
 
 export const metadata = { title: "Visitors" };
 
 export default async function VisitorsPage() {
   const ctx = await requireTeam();
+  // Team members are internal, not visitors - keep them out of the directory.
+  const members = new Set(await teamMemberEmails(ctx.team.id));
   const viewers = await db.viewer.findMany({
     where: { teamId: ctx.team.id },
     include: {
@@ -33,6 +36,7 @@ export default async function VisitorsPage() {
   });
 
   const rows = viewers
+    .filter((v) => !members.has(v.email.toLowerCase()))
     .map((v) => {
       const lastSeen = v.views.reduce<Date | null>(
         (acc, view) => (!acc || view.startedAt > acc ? view.startedAt : acc),

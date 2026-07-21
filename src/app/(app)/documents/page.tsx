@@ -12,6 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { teamMemberEmails, externalViews } from "@/lib/internal-views";
 import { NewFolderDialog, AddNotionDialog } from "./toolbar";
 import { DocumentRow, FolderRow } from "./rows";
 
@@ -24,6 +25,8 @@ export default async function DocumentsPage({
 }) {
   const ctx = await requireTeam();
   const { folder: folderId = null } = await searchParams;
+
+  const extFilter = externalViews(await teamMemberEmails(ctx.team.id));
 
   const currentFolder = folderId
     ? await db.folder.findFirst({
@@ -51,7 +54,7 @@ export default async function DocumentsPage({
       where: { teamId: ctx.team.id, folderId },
       include: {
         currentVersion: true,
-        _count: { select: { links: true, views: true } },
+        _count: { select: { links: true, views: { where: extFilter } } },
       },
       orderBy: { updatedAt: "desc" },
     }),

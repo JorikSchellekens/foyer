@@ -9,6 +9,7 @@ import { Loader2 } from "lucide-react";
 import { useTracking } from "./use-tracking";
 import { Watermark } from "./watermark";
 import { NotionViewer } from "./notion-viewer";
+import { PreviewBanner } from "./preview-banner";
 
 // pdf.js touches DOM globals at module scope; only load it in the browser
 const PdfViewer = dynamic(
@@ -67,6 +68,7 @@ export function DocumentViewer({
   protection,
   backHref,
   claimSession = false,
+  preview = false,
 }: {
   doc: ViewerDoc;
   viewId: string;
@@ -76,6 +78,7 @@ export function DocumentViewer({
   protection: boolean;
   backHref: string | null;
   claimSession?: boolean;
+  preview?: boolean;
 }) {
   const { setPage, containerRef, notifyDownload } = useTracking({
     viewId,
@@ -83,6 +86,7 @@ export function DocumentViewer({
     versionId: doc.versionId,
     numPages: doc.type === "PDF" ? doc.numPages : 1,
     claimSession,
+    preview,
   });
 
   const onPageChange = useCallback(
@@ -113,6 +117,7 @@ export function DocumentViewer({
         protection ? "protected-content" : ""
       }`}
     >
+      {preview && <PreviewBanner />}
       <header className="z-40 flex h-14 shrink-0 items-center gap-3 border-b border-white/10 bg-[#0c1013] px-4 text-white">
         {backHref && (
           <Link

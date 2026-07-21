@@ -5,6 +5,7 @@ import { itemGrant, type FullLink, type ViewerSession } from "@/lib/access";
 import type { GateBrand } from "@/components/viewer/gates";
 import { Watermark } from "@/components/viewer/watermark";
 import { FoyerMark } from "@/components/brand/logo";
+import { PreviewBanner } from "@/components/viewer/preview-banner";
 import { formatBytes } from "@/lib/format";
 import { db } from "@/lib/db";
 import { IndexTracker } from "./index-tracker";
@@ -44,6 +45,7 @@ export async function DataroomIndex({
   session,
   viewId,
   trackToken,
+  previewToken = null,
 }: {
   link: FullLink;
   slug: string;
@@ -53,8 +55,12 @@ export async function DataroomIndex({
   viewId: string;
   trackToken: string;
   currentFolderId: string | null;
+  previewToken?: string | null;
 }) {
   const dataroom = link.dataroom!;
+  const previewQuery = previewToken
+    ? `?preview=${encodeURIComponent(previewToken)}`
+    : "";
 
   // flatten visible tree with book-index numbering
   const entries: Entry[] = [];
@@ -123,6 +129,7 @@ export async function DataroomIndex({
       className="relative min-h-screen"
       style={{ backgroundColor: bg, color: text }}
     >
+      {previewToken && <PreviewBanner />}
       {link.watermark && session.email && <Watermark text={session.email} />}
       {brand.bannerUrl && (
         <div className="h-44 w-full overflow-hidden sm:h-56">
@@ -131,7 +138,11 @@ export async function DataroomIndex({
         </div>
       )}
 
-      <IndexTracker viewId={viewId} trackToken={trackToken}>
+      <IndexTracker
+        viewId={viewId}
+        trackToken={trackToken}
+        preview={!!previewToken}
+      >
         <div className="mx-auto max-w-3xl px-6 pb-20 pt-10">
           <header className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -229,7 +240,7 @@ export async function DataroomIndex({
                   ) : (
                     <li key={entry.key}>
                       <Link
-                        href={`/view/${slug}/d/${entry.itemId}`}
+                        href={`/view/${slug}/d/${entry.itemId}${previewQuery}`}
                         prefetch={false}
                         className="group flex items-baseline rounded-md px-2 py-2 transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
                         style={{ marginLeft: entry.depth * 24 - 8 }}

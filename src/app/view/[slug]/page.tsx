@@ -6,6 +6,7 @@ import {
   evaluateAccess,
   getViewerSession,
   resolveLink,
+  verifyPreviewToken,
 } from "@/lib/access";
 import { ensureView } from "@/lib/view-session";
 import { resolveBranding, gateBrand } from "@/lib/viewer-brand";
@@ -78,56 +79,64 @@ export default async function ViewPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ folder?: string }>;
+  searchParams: Promise<{ folder?: string; preview?: string }>;
 }) {
   const { slug } = await params;
-  const { folder } = await searchParams;
+  const { folder, preview } = await searchParams;
   const link = await load(slug);
   if (!link) notFound();
 
   const branding = await resolveBranding(link);
   const brand = gateBrand(link, branding);
   const session = await getViewerSession(link.id);
-  const access = evaluateAccess(link, session);
+  const isPreview = await verifyPreviewToken(preview, link.id);
 
-  switch (access.kind) {
-    case "expired":
-      return <ExpiredGate brand={brand} />;
-    case "blocked":
-      return <BlockedGate brand={brand} reason={access.reason} />;
-    case "password":
-      return <PasswordGate slug={slug} brand={brand} />;
-    case "email":
-      return (
-        <EmailGate
-          slug={slug}
-          brand={brand}
-          requireVerification={access.requireVerification}
-        />
-      );
-    case "verify-sent":
-      return <VerifySentGate brand={brand} email={session.email} />;
-    case "agreement":
-      return (
-        <AgreementGate
-          slug={slug}
-          brand={brand}
-          agreement={{
-            name: link.agreement!.name,
-            type: link.agreement!.type,
-            requireName: link.agreement!.requireName,
-            content: link.agreement!.content,
-            externalUrl: link.agreement!.externalUrl,
-            fileUrl: link.agreement!.fileKey
-              ? `/api/view/agreement/${slug}`
-              : null,
-          }}
-        />
-      );
+  if (!isPreview) {
+    const access = evaluateAccess(link, session);
+    switch (access.kind) {
+      case "expired":
+        return <ExpiredGate brand={brand} />;
+      case "blocked":
+        return <BlockedGate brand={brand} reason={access.reason} />;
+      case "password":
+        return <PasswordGate slug={slug} brand={brand} />;
+      case "email":
+        return (
+          <EmailGate
+            slug={slug}
+            brand={brand}
+            requireVerification={access.requireVerification}
+          />
+        );
+      case "verify-sent":
+        return <VerifySentGate brand={brand} email={session.email} />;
+      case "agreement":
+        return (
+          <AgreementGate
+            slug={slug}
+            brand={brand}
+            agreement={{
+              name: link.agreement!.name,
+              type: link.agreement!.type,
+              requireName: link.agreement!.requireName,
+              content: link.agreement!.content,
+              externalUrl: link.agreement!.externalUrl,
+              fileUrl: link.agreement!.fileKey
+                ? `/api/view/agreement/${slug}`
+                : null,
+            }}
+          />
+        );
+    }
   }
 
-  // granted
-  const { viewId, trackToken } = await ensureView(link, session);
+  // granted (or an owner preview, which records nothing)
+  const { viewId, trackToken } = isPreview
+    ? { viewId: "", trackToken: "" }
+    : await ensureView(link, session);
+  const previewSuffix = isPreview
+    ? `&preview=${encodeURIComponent(preview!)}`
+    : "";
 
   if (link.target === "DOCUMENT" && link.document) {
     const doc = link.document;
@@ -143,11 +152,11 @@ export default async function ViewPage({
       versionId: version?.id ?? null,
       numPages: version?.numPages ?? null,
       fileUrl: version?.fileKey
-        ? `/api/view/file/${version.id}?slug=${slug}`
+        ? `/api/view/file/${version.id}?slug=${slug}${previewSuffix}`
         : null,
       downloadUrl:
         link.allowDownload && version?.fileKey
-          ? `/api/view/file/${version.id}?slug=${slug}&download=1`
+          ? `/api/view/file/${version.id}?slug=${slug}&download=1${previewSuffix}`
           : null,
       recordMap,
     };
@@ -157,6 +166,7 @@ export default async function ViewPage({
         doc={viewerDoc}
         viewId={viewId}
         trackToken={trackToken}
+        preview={isPreview}
         brand={{
           teamName: link.team.name,
           brandColor: brand.brandColor,
@@ -185,6 +195,7 @@ export default async function ViewPage({
         viewId={viewId}
         trackToken={trackToken}
         currentFolderId={folder ?? null}
+        previewToken={isPreview ? preview! : null}
       />
     );
   }

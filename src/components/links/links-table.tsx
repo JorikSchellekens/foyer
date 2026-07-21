@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ExternalLink,
+  Eye,
   FileText,
   FolderLock,
   MailPlus,
@@ -203,6 +204,15 @@ function LinkRow({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem asChild>
+                <a
+                  href={`/api/links/${row.id}/preview`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <Eye className="size-4" /> Preview as visitor
+                </a>
+              </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <a href={row.url} target="_blank" rel="noreferrer">
                   <ExternalLink className="size-4" /> Open link
