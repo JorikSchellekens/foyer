@@ -26,6 +26,7 @@ import {
 import { initials } from "@/lib/format";
 import { switchTeam } from "@/app/(app)/actions";
 import { FoyerLogo } from "@/components/brand/logo";
+import { NotificationBell } from "@/components/shell/notification-bell";
 
 export const NAV = [
   { href: "/dashboard", label: "Overview", icon: LayoutGrid },
@@ -49,10 +50,11 @@ export function Sidebar({
 
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground max-md:hidden">
-      <div className="px-5 pb-2 pt-5">
+      <div className="flex items-center justify-between px-5 pb-2 pt-5">
         <Link href="/dashboard" aria-label="Foyer">
           <FoyerLogo size="md" />
         </Link>
+        <NotificationBell />
       </div>
 
       <div className="px-3 pb-2">
