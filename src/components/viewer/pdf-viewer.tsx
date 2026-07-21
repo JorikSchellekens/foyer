@@ -43,7 +43,10 @@ export function PdfViewer({
 }) {
   const [numPages, setNumPages] = useState(0);
   const [page, setPage] = useState(1);
-  const [width, setWidth] = useState<number>(800);
+  const [frame, setFrame] = useState({ w: 800, h: 600 });
+  // Page aspect ratio (height / width) of the loaded document, so we can size
+  // the page to fill the frame rather than a fixed cap.
+  const [aspect, setAspect] = useState<number | null>(null);
   const [zoom, setZoom] = useState(1);
   const [showThumbs, setShowThumbs] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -57,7 +60,7 @@ export function PdfViewer({
     const el = frameRef.current;
     if (!el) return;
     const obs = new ResizeObserver(() => {
-      setWidth(Math.min(el.clientWidth - 2, 1100));
+      setFrame({ w: el.clientWidth, h: el.clientHeight });
     });
     obs.observe(el);
     return () => obs.disconnect();
@@ -120,7 +123,15 @@ export function PdfViewer({
     setSearchMsg("No matches");
   }
 
-  const renderWidth = width * zoom;
+  // "Fit page": the largest width that keeps the whole page inside the frame,
+  // so a landscape deck fills the screen instead of sitting in a fixed 1100px
+  // column, and a portrait page shows in full. Zoom scales up from there.
+  const H_PAD = 40; // horizontal breathing room
+  const V_PAD = 56; // vertical padding (matches py-6 plus a little)
+  const fitWidth = aspect
+    ? Math.min(frame.w - H_PAD, (frame.h - V_PAD) / aspect)
+    : Math.min(frame.w - H_PAD, 1100);
+  const renderWidth = Math.round(Math.max(320, fitWidth) * zoom);
 
   return (
     <div className="flex h-full flex-col">
@@ -258,13 +269,18 @@ export function PdfViewer({
 
           {/* main page */}
           <div ref={frameRef} className="relative min-w-0 flex-1 overflow-auto">
-            <div className="flex min-h-full min-w-max items-start justify-center py-6">
-              <div className="shadow-2xl" data-track-page>
+            <div className="flex min-h-full min-w-max justify-center py-6">
+              <div className="m-auto shadow-2xl" data-track-page>
                 <Page
                   pageNumber={page}
                   width={renderWidth}
                   renderTextLayer={!protection}
                   renderAnnotationLayer={false}
+                  onLoadSuccess={(p) => {
+                    const w = p.originalWidth || p.width;
+                    const h = p.originalHeight || p.height;
+                    if (w && h) setAspect(h / w);
+                  }}
                 />
               </div>
             </div>

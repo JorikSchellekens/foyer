@@ -78,13 +78,13 @@ export async function GET(
   }
 
   // The object store is private and internal, so all bytes stream through the
-  // app. Media honours Range requests so seeking works.
-  const isMedia =
-    version.contentType.startsWith("video/") ||
-    version.contentType.startsWith("audio/");
+  // app. Honour Range on every inline response: video/audio need it for
+  // seeking, and pdf.js needs it to fetch a large PDF in chunks and render the
+  // first page without downloading the whole file first. (We already advertise
+  // accept-ranges: bytes, so a viewer that sends Range must get a 206 back.)
   return streamObject(version.fileKey, version.contentType, {
     disposition: "inline",
-    range: isMedia ? req.headers.get("range") : null,
+    range: req.headers.get("range"),
   });
 }
 
