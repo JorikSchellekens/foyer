@@ -15,7 +15,9 @@ services:
     environment:
       # Coolify generates the domain and routes it to this service's port 3000
       - SERVICE_FQDN_APP_3000
-      - NEXT_PUBLIC_APP_URL=${SERVICE_FQDN_APP}
+      # SERVICE_URL_APP includes the scheme (https://…); SERVICE_FQDN_APP is
+      # a bare host, which new URL() cannot parse.
+      - NEXT_PUBLIC_APP_URL=${SERVICE_URL_APP}
       - AUTH_SECRET=${SERVICE_BASE64_64_AUTHSECRET}
       - DATABASE_URL=postgresql://foyer:${SERVICE_PASSWORD_POSTGRES}@db:5432/foyer
       - RESEND_API_KEY=${RESEND_API_KEY:-}

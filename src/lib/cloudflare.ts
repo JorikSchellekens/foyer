@@ -118,8 +118,14 @@ export async function resolveDns(
 }
 
 export function appHost(): string {
-  const url = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  return new URL(url).host;
+  const raw = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  // Tolerate a scheme-less value (e.g. a bare host from a PaaS env var).
+  const url = /^https?:\/\//.test(raw) ? raw : `https://${raw}`;
+  try {
+    return new URL(url).host;
+  } catch {
+    return "localhost:3000";
+  }
 }
 
 /** A domain verifies when it CNAMEs to us, resolves through Cloudflare, or serves our health endpoint. */
