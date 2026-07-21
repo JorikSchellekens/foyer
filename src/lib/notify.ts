@@ -8,7 +8,8 @@ export type NotificationKey =
   | "dataroom_visited"
   | "file_uploaded"
   | "new_question"
-  | "blocked_access";
+  | "blocked_access"
+  | "access_requested";
 
 const NOTIFICATION_META: Record<
   NotificationKey,
@@ -42,6 +43,12 @@ const NOTIFICATION_META: Record<
     heading: () => `An access attempt was blocked`,
     body: (p) =>
       `<strong>${p.who ?? "A visitor"}</strong> was denied access to the link "${p.linkName}"${p.detail ? ` (${p.detail})` : ""}.`,
+  },
+  access_requested: {
+    subject: (p) => `${p.who ?? "Someone"} requested access to ${p.linkName}`,
+    heading: () => `Someone requested access`,
+    body: (p) =>
+      `<strong>${p.who ?? "A visitor"}</strong> asked for access to the link "${p.linkName}"${p.detail ? `:<br/><br/><em>${p.detail}</em>` : "."} Grant or dismiss it from your dashboard.`,
   },
 };
 

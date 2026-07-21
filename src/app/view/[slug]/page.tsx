@@ -97,7 +97,14 @@ export default async function ViewPage({
       case "expired":
         return <ExpiredGate brand={brand} />;
       case "blocked":
-        return <BlockedGate brand={brand} reason={access.reason} />;
+        return (
+          <BlockedGate
+            slug={slug}
+            brand={brand}
+            reason={access.reason}
+            defaultEmail={session.email ?? ""}
+          />
+        );
       case "password":
         return <PasswordGate slug={slug} brand={brand} />;
       case "email":

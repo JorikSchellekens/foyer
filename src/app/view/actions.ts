@@ -143,6 +143,37 @@ export async function signAgreement(
   return { ok: true };
 }
 
+export async function requestAccess(
+  slug: string,
+  emailRaw: string,
+  note?: string
+) {
+  const link = await loadLink(slug);
+  if (!link) return { error: "Link unavailable." };
+  const parsed = z.string().email().safeParse(emailRaw.trim().toLowerCase());
+  if (!parsed.success) return { error: "Enter a valid email address." };
+  const email = parsed.data;
+  const trimmedNote = note?.trim().slice(0, 500) || null;
+
+  // Collapse repeat requests from the same email on the same link.
+  const existing = await db.accessRequest.findFirst({
+    where: { linkId: link.id, email, status: "PENDING" },
+  });
+  if (!existing) {
+    await db.accessRequest.create({
+      data: { teamId: link.teamId, linkId: link.id, email, note: trimmedNote },
+    });
+    await notifyTeam(link.teamId, "access_requested", {
+      who: email,
+      linkName: link.name,
+      itemName: link.document?.name ?? link.dataroom?.name ?? link.name,
+      detail: trimmedNote ?? undefined,
+      href: `/dashboard`,
+    });
+  }
+  return { ok: true };
+}
+
 export async function askQuestion(slug: string, body: string) {
   const link = await loadLink(slug);
   if (!link || !link.enableQA || !link.dataroomId)

@@ -72,6 +72,7 @@ model Team {
   webhooks      Webhook[]
   notifications Notification[]
   notifPrefs    NotificationPreference[]
+  accessRequests AccessRequest[]
 }
 
 model TeamMember {
@@ -313,10 +314,33 @@ model Link {
   permissions LinkPermission[]
   recipients  LinkRecipient[]
   views       View[]
+  accessRequests AccessRequest[]
 
   @@unique([domainId, slug])
   @@index([teamId])
   @@index([slug])
+}
+
+enum AccessRequestStatus {
+  PENDING
+  GRANTED
+  DISMISSED
+}
+
+model AccessRequest {
+  id        String              @id @default(cuid())
+  teamId    String
+  linkId    String
+  email     String
+  note      String?
+  status    AccessRequestStatus @default(PENDING)
+  createdAt DateTime            @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  link Link @relation(fields: [linkId], references: [id], onDelete: Cascade)
+
+  @@index([teamId, status])
+  @@index([linkId])
 }
 
 model LinkPermission {

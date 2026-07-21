@@ -2,7 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, Eye, FolderInput, FileUp, MessageCircle, ShieldX } from "lucide-react";
+import {
+  Bell,
+  Eye,
+  FolderInput,
+  FileUp,
+  MessageCircle,
+  ShieldX,
+  KeyRound,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,6 +30,7 @@ const ICON: Record<string, typeof Bell> = {
   file_uploaded: FileUp,
   new_question: MessageCircle,
   blocked_access: ShieldX,
+  access_requested: KeyRound,
 };
 
 export function NotificationBell() {

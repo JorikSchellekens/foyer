@@ -33,6 +33,8 @@ function summarize(type: string, p: Payload): string {
       return `${p.who ?? "A visitor"} asked a question in ${p.itemName ?? "a data room"}`;
     case "blocked_access":
       return `Blocked access on ${p.linkName ?? "a link"}`;
+    case "access_requested":
+      return `${p.who ?? "Someone"} requested access to ${p.linkName ?? "a link"}`;
     default:
       return type.replace(/_/g, " ");
   }

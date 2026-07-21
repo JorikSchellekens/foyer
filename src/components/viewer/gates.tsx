@@ -12,6 +12,7 @@ import {
   submitPassword,
   submitEmail,
   signAgreement,
+  requestAccess,
 } from "@/app/view/actions";
 
 export type GateBrand = {
@@ -374,12 +375,21 @@ export function AgreementGate({
 }
 
 export function BlockedGate({
+  slug,
   brand,
   reason,
+  defaultEmail = "",
 }: {
+  slug: string;
   brand: GateBrand;
   reason: string;
+  defaultEmail?: string;
 }) {
+  const [email, setEmail] = useState(defaultEmail);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+
   return (
     <GateShell brand={brand}>
       <div className={cardClass}>
@@ -390,6 +400,56 @@ export function BlockedGate({
             <p className="mt-1 text-sm text-neutral-600">{reason}</p>
           </div>
         </div>
+
+        {sent ? (
+          <div className="mt-5 rounded-md bg-neutral-50 px-3 py-3 text-sm text-neutral-600">
+            Your request was sent. You will hear back if access is granted.
+          </div>
+        ) : (
+          <form
+            className="mt-5 space-y-3 border-t pt-4"
+            action={async () => {
+              setBusy(true);
+              try {
+                const res = await requestAccess(slug, email, note);
+                if (res && "error" in res && res.error) {
+                  toast.error(res.error);
+                  return;
+                }
+                setSent(true);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <p className="text-sm text-neutral-600">
+              Think this is a mistake? Ask the owner for access.
+            </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="req-email">Your email</Label>
+              <Input
+                id="req-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@company.com"
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="req-note">Note (optional)</Label>
+              <Input
+                id="req-note"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Who you are, why you need access"
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={busy}>
+              {busy ? "Sending…" : "Request access"}
+            </Button>
+          </form>
+        )}
       </div>
     </GateShell>
   );

@@ -33,6 +33,12 @@ const KEYS = [
     title: "Blocked access attempt",
     caption: "When a visitor is denied access to a link",
   },
+  {
+    key: "access_requested",
+    group: "Security",
+    title: "Access requested",
+    caption: "When a blocked visitor asks the owner for access",
+  },
 ];
 
 export default async function NotificationsPage() {

@@ -8,6 +8,7 @@ import { linkUrl } from "@/lib/link-helpers";
 import { VisitsChart } from "@/components/analytics/visits-chart";
 import { ViewsTable } from "@/components/analytics/views-table";
 import { HotLeads } from "@/components/analytics/hot-leads";
+import { AccessRequests } from "@/components/analytics/access-requests";
 import { hotLeads } from "@/lib/analytics";
 import { formatDuration } from "@/lib/format";
 
@@ -52,6 +53,12 @@ export default async function DashboardPage() {
 
   const isEmpty = docCount === 0 && dataroomCount === 0;
   const leads = isEmpty ? [] : await hotLeads(teamId);
+  const accessRequests = await db.accessRequest.findMany({
+    where: { teamId, status: "PENDING" },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+    include: { link: { select: { name: true } } },
+  });
 
   return (
     <div>
@@ -117,6 +124,16 @@ export default async function DashboardPage() {
           </div>
         ) : (
           <>
+            <AccessRequests
+              requests={accessRequests.map((r) => ({
+                id: r.id,
+                email: r.email,
+                note: r.note,
+                linkName: r.link.name,
+                createdAt: r.createdAt.toISOString(),
+              }))}
+            />
+
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
               <Stat label="Documents" value={docCount} />
               <Stat label="Data rooms" value={dataroomCount} />

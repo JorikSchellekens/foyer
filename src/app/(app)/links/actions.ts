@@ -290,3 +290,33 @@ export async function revokeRecipient(recipientId: string) {
   });
   revalidateLinkPages();
 }
+
+/** Grant a pending access request by adding its email to the link allow list. */
+export async function grantAccessRequest(requestId: string) {
+  const ctx = await requireTeam();
+  const req = await db.accessRequest.findFirst({
+    where: { id: requestId, teamId: ctx.team.id, status: "PENDING" },
+    include: { link: true },
+  });
+  if (!req) return { error: "Request not found." };
+  const allowList = [...new Set([...req.link.allowList, req.email])];
+  await db.$transaction([
+    db.link.update({ where: { id: req.linkId }, data: { allowList } }),
+    db.accessRequest.update({
+      where: { id: requestId },
+      data: { status: "GRANTED" },
+    }),
+  ]);
+  revalidatePath("/dashboard");
+  revalidateLinkPages();
+  return { ok: true };
+}
+
+export async function dismissAccessRequest(requestId: string) {
+  const ctx = await requireTeam();
+  await db.accessRequest.updateMany({
+    where: { id: requestId, teamId: ctx.team.id, status: "PENDING" },
+    data: { status: "DISMISSED" },
+  });
+  revalidatePath("/dashboard");
+}
