@@ -1,0 +1,32 @@
+name: Deploy to Coolify
+
+# Autodeploys pushes to main onto the boop-dev Coolify instance
+# (https://foyer.boop.it). Uses a deploy-scoped Coolify token.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: coolify-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Coolify deployment
+        run: |
+          code=$(curl -s -o /tmp/resp.json -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_DEPLOY_TOKEN }}" \
+            -H "Accept: application/json" \
+            "https://coolify.boop.it/api/v1/deploy?uuid=nrtb2luot098mfmgadx54o6q&force=false")
+          echo "HTTP $code"
+          cat /tmp/resp.json
+          echo
+          if [ "$code" != "200" ]; then
+            echo "::error::Coolify deploy request failed with HTTP $code"
+            exit 1
+          fi
