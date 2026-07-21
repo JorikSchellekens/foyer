@@ -39,6 +39,12 @@ const KEYS = [
     title: "Access requested",
     caption: "When a blocked visitor asks the owner for access",
   },
+  {
+    key: "weekly_digest",
+    group: "Digests",
+    title: "Weekly digest",
+    caption: "A Monday summary of visits and who is worth following up",
+  },
 ];
 
 export default async function NotificationsPage() {
@@ -51,7 +57,10 @@ export default async function NotificationsPage() {
     <NotificationsClient
       items={KEYS.map((k) => ({
         ...k,
-        enabled: prefs.find((p) => p.key === k.key)?.email ?? true,
+        // Digests are opt-in; every other notification defaults on.
+        enabled:
+          prefs.find((p) => p.key === k.key)?.email ??
+          k.key !== "weekly_digest",
       }))}
     />
   );
