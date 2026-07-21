@@ -47,5 +47,9 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // Exclude /api/ so Next does not treat API calls as proxied and buffer their
+  // request bodies in memory (which silently truncates large uploads at the
+  // proxyClientMaxBodySize cap). Middleware only ever passed /api/ through
+  // unchanged, so excluding it is behaviour-preserving.
+  matcher: ["/((?!api/|_next/static|_next/image|favicon.ico).*)"],
 };

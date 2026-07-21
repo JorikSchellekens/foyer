@@ -7,6 +7,10 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: "10mb",
     },
+    // The viewer middleware makes Next buffer every proxied request body,
+    // capped here. Uploads bypass middleware (see matcher) so they are not
+    // buffered, but keep headroom for any other proxied route.
+    proxyClientMaxBodySize: "50mb",
   },
   // pdf.js worker + canvas shims
   webpack: (config) => {
