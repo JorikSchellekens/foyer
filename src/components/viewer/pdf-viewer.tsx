@@ -10,6 +10,7 @@ import {
   PanelLeft,
   Search,
   X,
+  Loader2,
 } from "lucide-react";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
@@ -56,15 +57,20 @@ export function PdfViewer({
   const pdfRef = useRef<PdfDoc | null>(null);
   const pageTextRef = useRef<Map<number, string>>(new Map());
 
+  // Re-run when the document finishes loading: the frame element only exists
+  // once <Document> renders its children (during loading it shows the loader),
+  // so an effect that ran only on mount would attach to nothing and leave the
+  // page stuck at the initial default width. Measuring immediately (not just on
+  // resize) makes the first render fill the frame.
   useEffect(() => {
     const el = frameRef.current;
     if (!el) return;
-    const obs = new ResizeObserver(() => {
-      setFrame({ w: el.clientWidth, h: el.clientHeight });
-    });
+    const measure = () => setFrame({ w: el.clientWidth, h: el.clientHeight });
+    measure();
+    const obs = new ResizeObserver(measure);
     obs.observe(el);
     return () => obs.disconnect();
-  }, []);
+  }, [numPages]);
 
   const go = useCallback(
     (next: number) => {
@@ -123,15 +129,18 @@ export function PdfViewer({
     setSearchMsg("No matches");
   }
 
-  // "Fit page": the largest width that keeps the whole page inside the frame,
-  // so a landscape deck fills the screen instead of sitting in a fixed 1100px
-  // column, and a portrait page shows in full. Zoom scales up from there.
+  // Fit to width: fill the frame horizontally (capped so an ultrawide monitor
+  // does not produce a blurry, oversized canvas). This fills the screen for a
+  // landscape deck AND a portrait document - the latter simply scrolls
+  // vertically, the standard reading experience. Zoom scales up from there.
   const H_PAD = 40; // horizontal breathing room
-  const V_PAD = 56; // vertical padding (matches py-6 plus a little)
-  const fitWidth = aspect
-    ? Math.min(frame.w - H_PAD, (frame.h - V_PAD) / aspect)
-    : Math.min(frame.w - H_PAD, 1100);
-  const renderWidth = Math.round(Math.max(320, fitWidth) * zoom);
+  const MAX_W = 1600;
+  const baseWidth = Math.min(frame.w - H_PAD, MAX_W);
+  const renderWidth = Math.round(Math.max(320, baseWidth) * zoom);
+  // Page height for the loading placeholder, so it holds the page's shape.
+  const placeholderHeight = aspect
+    ? Math.round(renderWidth * aspect)
+    : Math.round(renderWidth * 1.294);
 
   return (
     <div className="flex h-full flex-col">
@@ -276,6 +285,14 @@ export function PdfViewer({
                   width={renderWidth}
                   renderTextLayer={!protection}
                   renderAnnotationLayer={false}
+                  loading={
+                    <div
+                      style={{ width: renderWidth, height: placeholderHeight }}
+                      className="flex items-center justify-center bg-white"
+                    >
+                      <Loader2 className="size-6 animate-spin text-black/25" />
+                    </div>
+                  }
                   onLoadSuccess={(p) => {
                     const w = p.originalWidth || p.width;
                     const h = p.originalHeight || p.height;

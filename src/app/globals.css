@@ -158,6 +158,18 @@
   }
 }
 
+/*
+ * react-pdf wraps its loading/error/no-data content in a .react-pdf__message
+ * div. Because the PDF viewer's <Document> is a flex container, that wrapper
+ * would otherwise shrink to its content width, pinning the loading state to the
+ * left. Make it fill so the shared DocumentLoading centres.
+ */
+.react-pdf__Document > .react-pdf__message {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+}
+
 @media print {
   .no-print {
     display: none !important;

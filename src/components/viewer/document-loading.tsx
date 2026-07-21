@@ -6,7 +6,7 @@
  */
 export function DocumentLoading({ label = "Preparing document…" }: { label?: string }) {
   return (
-    <div className="flex h-full min-h-72 w-full flex-1 items-center justify-center p-8">
+    <div className="flex size-full min-h-72 items-center justify-center p-8">
       <div className="w-full max-w-sm">
         <div className="mx-auto aspect-[1/1.294] w-full max-w-[280px] animate-pulse space-y-3.5 rounded-lg border border-white/10 bg-white/[0.035] p-7 shadow-2xl">
           <div className="h-4 w-2/3 rounded bg-white/15" />
