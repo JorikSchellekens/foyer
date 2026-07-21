@@ -5,7 +5,6 @@ import { Document, Page, pdfjs } from "react-pdf";
 import {
   ChevronLeft,
   ChevronRight,
-  Loader2,
   ZoomIn,
   ZoomOut,
   PanelLeft,
@@ -14,6 +13,7 @@ import {
 } from "lucide-react";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
+import { DocumentLoading } from "./document-loading";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
@@ -124,8 +124,12 @@ export function PdfViewer({
 
   return (
     <div className="flex h-full flex-col">
-      {/* toolbar */}
-      <div className="flex items-center gap-1 border-b border-white/10 px-3 py-1.5 text-white/70">
+      {/* toolbar - hidden until the document is ready to avoid a dead bar over the loader */}
+      <div
+        className={`flex items-center gap-1 border-b border-white/10 px-3 py-1.5 text-white/70 ${
+          numPages > 0 ? "" : "hidden"
+        }`}
+      >
         <button
           onClick={() => setShowThumbs((s) => !s)}
           className={`rounded p-1.5 transition-colors hover:bg-white/10 ${showThumbs ? "text-white" : ""}`}
@@ -215,11 +219,7 @@ export function PdfViewer({
           setNumPages(pdf.numPages);
           onPageChange(1, pdf.numPages);
         }}
-        loading={
-          <div className="flex flex-1 items-center justify-center gap-2 py-24 text-sm text-white/60">
-            <Loader2 className="size-4 animate-spin" /> Preparing document…
-          </div>
-        }
+        loading={<DocumentLoading />}
         error={
           <p className="py-24 text-center text-sm text-white/60">
             This document could not be displayed.

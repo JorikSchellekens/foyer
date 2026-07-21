@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { DocumentLoading } from "./document-loading";
 
 export function ImageViewer({ fileUrl, name }: { fileUrl: string; name: string }) {
   return (
@@ -204,11 +204,7 @@ export function SheetViewer({ fileUrl }: { fileUrl: string }) {
 }
 
 function Spinner() {
-  return (
-    <div className="flex items-center justify-center gap-2 py-24 text-sm text-white/60">
-      <Loader2 className="size-4 animate-spin" /> Preparing document…
-    </div>
-  );
+  return <DocumentLoading />;
 }
 
 function Message({ text }: { text: string }) {

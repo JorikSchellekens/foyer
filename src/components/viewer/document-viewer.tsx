@@ -5,22 +5,18 @@ import Link from "next/link";
 import { ArrowLeft, ChevronLeft, ChevronRight, Download, ExternalLink } from "lucide-react";
 import type { ExtendedRecordMap } from "notion-types";
 import dynamic from "next/dynamic";
-import { Loader2 } from "lucide-react";
 import { useTracking } from "./use-tracking";
 import { Watermark } from "./watermark";
 import { NotionViewer } from "./notion-viewer";
 import { PreviewBanner } from "./preview-banner";
+import { DocumentLoading } from "./document-loading";
 
 // pdf.js touches DOM globals at module scope; only load it in the browser
 const PdfViewer = dynamic(
   () => import("./pdf-viewer").then((m) => m.PdfViewer),
   {
     ssr: false,
-    loading: () => (
-      <div className="flex items-center justify-center gap-2 py-24 text-sm text-white/60">
-        <Loader2 className="size-4 animate-spin" /> Preparing document…
-      </div>
-    ),
+    loading: () => <DocumentLoading />,
   }
 );
 import {
