@@ -1,0 +1,165 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-geist-sans);
+  --font-display: var(--font-newsreader);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/*
+ * Foyer: paper, ink, hairlines, one library-green accent.
+ * The reading room, not the office park.
+ */
+:root {
+  --background: #fafaf8;
+  --foreground: #16181d;
+  --card: #ffffff;
+  --card-foreground: #16181d;
+  --popover: #ffffff;
+  --popover-foreground: #16181d;
+  --primary: #175b47;
+  --primary-foreground: #f7f6f2;
+  --secondary: #f1f0ea;
+  --secondary-foreground: #2b2e33;
+  --muted: #f1f0ea;
+  --muted-foreground: #6b6f76;
+  --accent: #edf3ef;
+  --accent-foreground: #14332a;
+  --destructive: #93321f;
+  --border: #e7e6e0;
+  --input: #dddcd4;
+  --ring: color-mix(in oklab, #175b47 45%, transparent);
+  --chart-1: #175b47;
+  --chart-2: #4e8b74;
+  --chart-3: #a3c4b5;
+  --chart-4: #b7791f;
+  --chart-5: #16181d;
+  --radius: 0.5rem;
+  --sidebar: #f4f3ee;
+  --sidebar-foreground: #16181d;
+  --sidebar-primary: #175b47;
+  --sidebar-primary-foreground: #f7f6f2;
+  --sidebar-accent: #e9e8e1;
+  --sidebar-accent-foreground: #16181d;
+  --sidebar-border: #e7e6e0;
+  --sidebar-ring: color-mix(in oklab, #175b47 45%, transparent);
+}
+
+.dark {
+  --background: #101418;
+  --foreground: #f2f1ec;
+  --card: #161b20;
+  --card-foreground: #f2f1ec;
+  --popover: #161b20;
+  --popover-foreground: #f2f1ec;
+  --primary: #4caf8b;
+  --primary-foreground: #0b1310;
+  --secondary: #1d2228;
+  --secondary-foreground: #e5e4df;
+  --muted: #1d2228;
+  --muted-foreground: #9ba0a6;
+  --accent: #17251f;
+  --accent-foreground: #a9d4c2;
+  --destructive: #c4553f;
+  --border: rgb(255 255 255 / 0.09);
+  --input: rgb(255 255 255 / 0.14);
+  --ring: color-mix(in oklab, #4caf8b 50%, transparent);
+  --chart-1: #4caf8b;
+  --chart-2: #7cc4a8;
+  --chart-3: #35604f;
+  --chart-4: #d09a3e;
+  --chart-5: #f2f1ec;
+  --sidebar: #0c1013;
+  --sidebar-foreground: #f2f1ec;
+  --sidebar-primary: #4caf8b;
+  --sidebar-primary-foreground: #0b1310;
+  --sidebar-accent: #1a1f25;
+  --sidebar-accent-foreground: #f2f1ec;
+  --sidebar-border: rgb(255 255 255 / 0.08);
+  --sidebar-ring: color-mix(in oklab, #4caf8b 50%, transparent);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "ss01", "cv11";
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: var(--font-display), Georgia, serif;
+  }
+  /* Book-index dot leaders between a label and its value. */
+  .leader-dots {
+    flex: 1 1 2rem;
+    min-width: 2rem;
+    margin: 0 0.625rem;
+    border-bottom: 2px dotted color-mix(in oklab, currentColor 28%, transparent);
+    transform: translateY(-0.3em);
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  /* Screenshot deterrence: disable selection & long-press save. */
+  .protected-content {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}

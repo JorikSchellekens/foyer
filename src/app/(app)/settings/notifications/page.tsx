@@ -1,0 +1,52 @@
+import { requireTeam } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { NotificationsClient } from "./notifications-client";
+
+const KEYS = [
+  {
+    key: "document_viewed",
+    group: "Documents",
+    title: "Document viewed",
+    caption: "When someone views a document link",
+  },
+  {
+    key: "dataroom_visited",
+    group: "Data rooms",
+    title: "Data room visited",
+    caption: "When someone visits a data room link",
+  },
+  {
+    key: "file_uploaded",
+    group: "Data rooms",
+    title: "File uploaded",
+    caption: "When new files land in a data room",
+  },
+  {
+    key: "new_question",
+    group: "Data rooms",
+    title: "New question",
+    caption: "When a visitor posts a question in a data room",
+  },
+  {
+    key: "blocked_access",
+    group: "Security",
+    title: "Blocked access attempt",
+    caption: "When a visitor is denied access to a link",
+  },
+];
+
+export default async function NotificationsPage() {
+  const ctx = await requireTeam();
+  const prefs = await db.notificationPreference.findMany({
+    where: { userId: ctx.user.id, teamId: ctx.team.id },
+  });
+
+  return (
+    <NotificationsClient
+      items={KEYS.map((k) => ({
+        ...k,
+        enabled: prefs.find((p) => p.key === k.key)?.email ?? true,
+      }))}
+    />
+  );
+}

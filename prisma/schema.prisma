@@ -1,0 +1,667 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Identity ----------
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+
+  memberships      TeamMember[]
+  uploadedVersions DocumentVersion[]
+  notifications    NotificationPreference[]
+  apiTokens        ApiToken[]
+}
+
+enum TokenPurpose {
+  LOGIN
+  VIEWER_VERIFY
+  LINK_INVITE
+  TEAM_INVITE
+}
+
+model VerificationToken {
+  id        String       @id @default(cuid())
+  token     String       @unique
+  purpose   TokenPurpose
+  email     String
+  // context payload: linkId for viewer verify / invites, inviteId for team invites
+  context   Json?
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime     @default(now())
+
+  @@index([email, purpose])
+}
+
+// ---------- Teams ----------
+
+enum TeamRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+model Team {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+
+  members       TeamMember[]
+  invites       TeamInvite[]
+  folders       Folder[]
+  documents     Document[]
+  datarooms     Dataroom[]
+  links         Link[]
+  viewers       Viewer[]
+  agreements    Agreement[]
+  brandings     Branding[]
+  domains       Domain[]
+  presets       LinkPreset[]
+  previewPresets PreviewPreset[]
+  apiTokens     ApiToken[]
+  webhooks      Webhook[]
+  notifications Notification[]
+  notifPrefs    NotificationPreference[]
+}
+
+model TeamMember {
+  id        String   @id @default(cuid())
+  teamId    String
+  userId    String
+  role      TeamRole @default(MEMBER)
+  createdAt DateTime @default(now())
+
+  team        Team                 @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permissions ResourcePermission[]
+
+  @@unique([teamId, userId])
+}
+
+model TeamInvite {
+  id        String   @id @default(cuid())
+  teamId    String
+  email     String
+  role      TeamRole @default(MEMBER)
+  token     String   @unique
+  invitedBy String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, email])
+}
+
+// Granular member access to specific datarooms/documents.
+enum PermissionLevel {
+  VIEW
+  EDIT
+  MANAGE
+}
+
+enum ResourceType {
+  DATAROOM
+  DOCUMENT
+}
+
+model ResourcePermission {
+  id           String          @id @default(cuid())
+  memberId     String
+  resourceType ResourceType
+  resourceId   String
+  level        PermissionLevel @default(VIEW)
+
+  member TeamMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, resourceType, resourceId])
+}
+
+// ---------- Library ----------
+
+model Folder {
+  id        String   @id @default(cuid())
+  teamId    String
+  parentId  String?
+  name      String
+  createdAt DateTime @default(now())
+
+  team      Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  parent    Folder?    @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Folder[]   @relation("FolderTree")
+  documents Document[]
+
+  @@index([teamId, parentId])
+}
+
+enum DocumentType {
+  PDF
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCX
+  SHEET
+  TEXT
+  NOTION
+  OTHER
+}
+
+model Document {
+  id               String       @id @default(cuid())
+  teamId           String
+  folderId         String?
+  name             String
+  type             DocumentType @default(OTHER)
+  // for NOTION type: the external URL
+  externalUrl      String?
+  currentVersionId String?      @unique
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  team           Team               @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  folder         Folder?            @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  currentVersion DocumentVersion?   @relation("CurrentVersion", fields: [currentVersionId], references: [id])
+  versions       DocumentVersion[]
+  links          Link[]
+  dataroomDocs   DataroomDocument[]
+  views          View[]
+
+  @@index([teamId, folderId])
+}
+
+model DocumentVersion {
+  id            String   @id @default(cuid())
+  documentId    String
+  versionNumber Int
+  fileKey       String?
+  fileName      String
+  fileSize      Int      @default(0)
+  contentType   String   @default("application/octet-stream")
+  numPages      Int?
+  uploadedById  String?
+  note          String?
+  createdAt     DateTime @default(now())
+
+  document   Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  currentOf  Document? @relation("CurrentVersion")
+  uploadedBy User?     @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  pageViews  PageView[]
+
+  @@unique([documentId, versionNumber])
+}
+
+// ---------- Datarooms ----------
+
+model Dataroom {
+  id          String   @id @default(cuid())
+  teamId      String
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  team      Team               @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  folders   DataroomFolder[]
+  documents DataroomDocument[]
+  links     Link[]
+  groups    ViewerGroup[]
+  branding  Branding?
+  questions DataroomQuestion[]
+  views     View[]
+}
+
+model DataroomFolder {
+  id         String   @id @default(cuid())
+  dataroomId String
+  parentId   String?
+  name       String
+  orderIndex Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  dataroom  Dataroom           @relation(fields: [dataroomId], references: [id], onDelete: Cascade)
+  parent    DataroomFolder?    @relation("DrFolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  DataroomFolder[]   @relation("DrFolderTree")
+  documents DataroomDocument[]
+
+  @@index([dataroomId, parentId])
+}
+
+model DataroomDocument {
+  id         String   @id @default(cuid())
+  dataroomId String
+  documentId String
+  folderId   String?
+  orderIndex Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  dataroom Dataroom        @relation(fields: [dataroomId], references: [id], onDelete: Cascade)
+  document Document        @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  folder   DataroomFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+
+  @@unique([dataroomId, documentId])
+  @@index([dataroomId, folderId])
+}
+
+// Dataroom viewer groups: named audiences with their own permissions.
+model ViewerGroup {
+  id           String   @id @default(cuid())
+  dataroomId   String
+  name         String
+  // when false, group members only see items granted via GroupPermission
+  fullAccess   Boolean  @default(true)
+  allowDownload Boolean @default(true)
+  createdAt    DateTime @default(now())
+
+  dataroom    Dataroom            @relation(fields: [dataroomId], references: [id], onDelete: Cascade)
+  members     ViewerGroupMember[]
+  permissions GroupPermission[]
+  links       Link[]
+}
+
+model ViewerGroupMember {
+  id      String @id @default(cuid())
+  groupId String
+  email   String
+
+  group ViewerGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, email])
+}
+
+enum ItemType {
+  DATAROOM_DOCUMENT
+  DATAROOM_FOLDER
+}
+
+model GroupPermission {
+  id          String   @id @default(cuid())
+  groupId     String
+  itemType    ItemType
+  itemId      String
+  canView     Boolean  @default(true)
+  canDownload Boolean  @default(false)
+
+  group ViewerGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, itemType, itemId])
+}
+
+// ---------- Links ----------
+
+enum LinkTarget {
+  DOCUMENT
+  DATAROOM
+}
+
+enum AccessMode {
+  PUBLIC
+  EMAIL
+  EMAIL_VERIFIED
+}
+
+model Link {
+  id         String     @id @default(cuid())
+  teamId     String
+  target     LinkTarget
+  documentId String?
+  dataroomId String?
+  groupId    String?
+  name       String
+  slug       String
+  domainId   String?
+
+  accessMode           AccessMode @default(PUBLIC)
+  passwordHash         String?
+  expiresAt            DateTime?
+  allowDownload        Boolean    @default(true)
+  allowList            String[]   @default([])
+  blockList            String[]   @default([])
+  screenshotProtection Boolean    @default(false)
+  watermark            Boolean    @default(false)
+  agreementId          String?
+  notifyOnAccess       Boolean    @default(true)
+  enableIndexFile      Boolean    @default(false)
+  enableQA             Boolean    @default(false)
+  // when false, viewers see only items granted via LinkPermission
+  fullAccess           Boolean    @default(true)
+
+  welcomeMessage  String?
+  previewPresetId String?
+  metaTitle       String?
+  metaDescription String?
+  metaImageKey    String?
+
+  isArchived Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  team        Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  document    Document?        @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  dataroom    Dataroom?        @relation(fields: [dataroomId], references: [id], onDelete: Cascade)
+  group       ViewerGroup?     @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  domain      Domain?          @relation(fields: [domainId], references: [id], onDelete: SetNull)
+  agreement   Agreement?       @relation(fields: [agreementId], references: [id], onDelete: SetNull)
+  previewPreset PreviewPreset? @relation(fields: [previewPresetId], references: [id], onDelete: SetNull)
+  permissions LinkPermission[]
+  recipients  LinkRecipient[]
+  views       View[]
+
+  @@unique([domainId, slug])
+  @@index([teamId])
+  @@index([slug])
+}
+
+model LinkPermission {
+  id          String   @id @default(cuid())
+  linkId      String
+  itemType    ItemType
+  itemId      String
+  canView     Boolean  @default(true)
+  canDownload Boolean  @default(false)
+
+  link Link @relation(fields: [linkId], references: [id], onDelete: Cascade)
+
+  @@unique([linkId, itemType, itemId])
+}
+
+// Direct email invitations to a link, each with its own expiring token.
+model LinkRecipient {
+  id         String    @id @default(cuid())
+  linkId     String
+  email      String
+  token      String    @unique
+  expiresAt  DateTime?
+  invitedAt  DateTime  @default(now())
+  lastSentAt DateTime  @default(now())
+
+  link Link @relation(fields: [linkId], references: [id], onDelete: Cascade)
+
+  @@unique([linkId, email])
+}
+
+// ---------- Visitors & analytics ----------
+
+model Viewer {
+  id        String   @id @default(cuid())
+  teamId    String
+  email     String
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  team  Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  views View[]
+
+  @@unique([teamId, email])
+}
+
+model View {
+  id            String    @id @default(cuid())
+  linkId        String
+  viewerId      String?
+  documentId    String?
+  dataroomId    String?
+  viewerEmail   String?
+  verified      Boolean   @default(false)
+  agreementDone Boolean   @default(false)
+  startedAt     DateTime  @default(now())
+  lastActiveAt  DateTime  @default(now())
+  totalDuration Int       @default(0) // seconds
+  completedPct  Int       @default(0)
+  downloadedAt  DateTime?
+  ip            String?
+  country       String?
+  city          String?
+  browser       String?
+  os            String?
+  device        String?
+
+  link        Link                @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  viewer      Viewer?             @relation(fields: [viewerId], references: [id], onDelete: SetNull)
+  document    Document?           @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  dataroom    Dataroom?           @relation(fields: [dataroomId], references: [id], onDelete: Cascade)
+  pageViews   PageView[]
+  mouseBatches MouseBatch[]
+  agreementResponses AgreementResponse[]
+
+  @@index([linkId, startedAt])
+  @@index([viewerId])
+  @@index([documentId])
+  @@index([dataroomId])
+}
+
+model PageView {
+  id         String  @id @default(cuid())
+  viewId     String
+  versionId  String?
+  pageNumber Int
+  duration   Int     @default(0) // seconds
+
+  view    View             @relation(fields: [viewId], references: [id], onDelete: Cascade)
+  version DocumentVersion? @relation(fields: [versionId], references: [id], onDelete: SetNull)
+
+  @@unique([viewId, pageNumber])
+}
+
+// Sampled mouse paths for heatmaps: samples = [[tMs, xPct, yPct], ...]
+model MouseBatch {
+  id         String   @id @default(cuid())
+  viewId     String
+  pageNumber Int
+  samples    Json
+  createdAt  DateTime @default(now())
+
+  view View @relation(fields: [viewId], references: [id], onDelete: Cascade)
+
+  @@index([viewId, pageNumber])
+}
+
+// ---------- Agreements (NDA) ----------
+
+enum AgreementType {
+  EMBEDDED
+  LINK
+  TEXT
+}
+
+model Agreement {
+  id          String        @id @default(cuid())
+  teamId      String
+  name        String
+  requireName Boolean       @default(true)
+  type        AgreementType @default(EMBEDDED)
+  fileKey     String?
+  numPages    Int?
+  externalUrl String?
+  content     String?
+  // placed fields: [{kind: signature|name|date, page, xPct, yPct, wPct, hPct}]
+  fields      Json?
+  createdAt   DateTime      @default(now())
+
+  team      Team                @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  links     Link[]
+  responses AgreementResponse[]
+}
+
+model AgreementResponse {
+  id            String   @id @default(cuid())
+  agreementId   String
+  viewId        String
+  name          String?
+  email         String?
+  // data-URL PNG of the drawn signature
+  signatureData String?
+  signedFileKey String?
+  ip            String?
+  signedAt      DateTime @default(now())
+
+  agreement Agreement @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+  view      View      @relation(fields: [viewId], references: [id], onDelete: Cascade)
+}
+
+// ---------- Branding / domains / presets ----------
+
+model Branding {
+  id                 String   @id @default(cuid())
+  teamId             String
+  dataroomId         String?  @unique
+  logoKey            String?
+  bannerKey          String?
+  brandColor         String   @default("#175B47")
+  backgroundColor    String   @default("#101418")
+  applyBgToDataroom  Boolean  @default(false)
+  welcomeMessage     String?
+  ctaLabel           String?
+  ctaUrl             String?
+  metaTitle          String?
+  metaDescription    String?
+  metaImageKey       String?
+  updatedAt          DateTime @updatedAt
+
+  team     Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  dataroom Dataroom? @relation(fields: [dataroomId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, dataroomId])
+}
+
+enum DomainStatus {
+  PENDING
+  VERIFIED
+  ERROR
+}
+
+model Domain {
+  id                    String       @id @default(cuid())
+  teamId                String
+  domain                String       @unique
+  status                DomainStatus @default(PENDING)
+  verificationToken     String       @default(cuid())
+  cloudflareRecordId    String?
+  cloudflareZoneId      String?
+  lastCheckedAt         DateTime?
+  createdAt             DateTime     @default(now())
+
+  team  Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  links Link[]
+}
+
+// Reusable social-card definitions: what a shared link looks like in
+// Slack, iMessage, LinkedIn etc. The default applies when a link has none.
+model PreviewPreset {
+  id              String   @id @default(cuid())
+  teamId          String
+  name            String
+  isDefault       Boolean  @default(false)
+  metaTitle       String?
+  metaDescription String?
+  metaImageKey    String?
+  createdAt       DateTime @default(now())
+
+  team  Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  links Link[]
+}
+
+model LinkPreset {
+  id        String   @id @default(cuid())
+  teamId    String
+  name      String
+  isDefault Boolean  @default(false)
+  // subset of Link fields applied on creation
+  config    Json
+  createdAt DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+}
+
+// ---------- Notifications / API / webhooks / Q&A ----------
+
+model NotificationPreference {
+  id     String  @id @default(cuid())
+  userId String
+  teamId String
+  key    String // document_viewed | dataroom_visited | file_uploaded | new_question | blocked_access
+  email  Boolean @default(true)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, teamId, key])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  teamId    String
+  type      String
+  payload   Json
+  createdAt DateTime  @default(now())
+  readAt    DateTime?
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId, createdAt])
+}
+
+model ApiToken {
+  id         String    @id @default(cuid())
+  teamId     String
+  userId     String
+  name       String
+  hashedKey  String    @unique
+  partialKey String
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Webhook {
+  id        String   @id @default(cuid())
+  teamId    String
+  url       String
+  secret    String
+  events    String[] @default([])
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  team       Team              @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
+}
+
+model WebhookDelivery {
+  id         String   @id @default(cuid())
+  webhookId  String
+  event      String
+  payload    Json
+  statusCode Int?
+  error      String?
+  createdAt  DateTime @default(now())
+
+  webhook Webhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  @@index([webhookId, createdAt])
+}
+
+model DataroomQuestion {
+  id         String    @id @default(cuid())
+  dataroomId String
+  viewerEmail String?
+  body       String
+  answer     String?
+  answeredBy String?
+  answeredAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  dataroom Dataroom @relation(fields: [dataroomId], references: [id], onDelete: Cascade)
+
+  @@index([dataroomId, createdAt])
+}

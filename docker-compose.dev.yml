@@ -1,0 +1,48 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: foyer
+      POSTGRES_PASSWORD: foyer
+      POSTGRES_DB: foyer
+    ports:
+      - "5433:5432"
+    volumes:
+      - foyer_dev_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U foyer"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9003"
+    environment:
+      MINIO_ROOT_USER: foyer
+      MINIO_ROOT_PASSWORD: foyer-secret
+    ports:
+      - "9002:9000"
+      - "9003:9003"
+    volumes:
+      - foyer_dev_minio:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 foyer foyer-secret &&
+      mc mb -p local/foyer || true
+      "
+
+volumes:
+  foyer_dev_pg:
+  foyer_dev_minio:
