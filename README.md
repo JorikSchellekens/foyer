@@ -123,3 +123,7 @@ HMAC-SHA256 in `x-foyer-signature`.
 
 See `.env.example`. Everything not marked required has a sensible default in
 docker-compose.
+
+## Deployment
+
+Live at https://foyer.boop.it (Coolify on boop-dev, autodeploys from `main`).
