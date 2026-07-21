@@ -28,9 +28,9 @@ COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
 COPY --from=build /app/public ./public
 COPY --from=build /app/prisma ./prisma
-COPY --from=build /app/node_modules/prisma ./node_modules/prisma
-COPY --from=build /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=build /app/node_modules/.bin/prisma ./node_modules/.bin/prisma
+# Full node_modules so the Prisma CLI has all its transitive deps at runtime
+# for `migrate deploy`; the standalone server ignores what it doesn't use.
+COPY --from=build /app/node_modules ./node_modules
 COPY docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
 
