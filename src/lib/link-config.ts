@@ -27,7 +27,6 @@ export const linkConfigSchema = z.object({
   metaTitle: z.string().max(200).nullable().optional(),
   metaDescription: z.string().max(500).nullable().optional(),
   metaImageKey: z.string().nullable().optional(),
-  groupId: z.string().nullable().optional(),
   fullAccess: z.boolean().default(true),
   permissions: z
     .array(
@@ -48,7 +47,6 @@ export const presetConfigSchema = linkConfigSchema.omit({
   name: true,
   slug: true,
   permissions: true,
-  groupId: true,
   fullAccess: true,
 });
 

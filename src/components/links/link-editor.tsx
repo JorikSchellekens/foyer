@@ -63,7 +63,6 @@ export function LinkEditor({
   agreements,
   presets,
   previewPresets = [],
-  groups = [],
   tree = [],
   appHost,
   trigger,
@@ -75,7 +74,6 @@ export function LinkEditor({
   agreements: { id: string; name: string }[];
   presets: { id: string; name: string; isDefault: boolean; config: Partial<LinkConfig> }[];
   previewPresets?: { id: string; name: string; isDefault: boolean }[];
-  groups?: { id: string; name: string }[];
   tree?: TreeItem[];
   appHost: string;
   trigger: React.ReactNode;
@@ -112,7 +110,6 @@ export function LinkEditor({
       metaTitle: link?.metaTitle ?? null,
       metaDescription: link?.metaDescription ?? null,
       metaImageKey: link?.metaImageKey ?? null,
-      groupId: link?.groupId ?? null,
       fullAccess: link?.fullAccess ?? true,
       permissions: link?.permissions ?? [],
       ...(mode === "create" && defaultPreset ? defaultPreset.config : {}),
@@ -492,32 +489,6 @@ export function LinkEditor({
               {target.type === "DATAROOM" && (
                 <>
                   <Separator />
-                  {groups.length > 0 && (
-                    <Field
-                      label="Audience group"
-                      hint="Only group members can enter, and group permissions apply"
-                    >
-                      <Select
-                        value={cfg.groupId ?? "none"}
-                        onValueChange={(v) =>
-                          set("groupId", v === "none" ? null : v)
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">No group</SelectItem>
-                          {groups.map((g) => (
-                            <SelectItem key={g.id} value={g.id}>
-                              {g.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                  )}
-
                   <SwitchRow
                     title="Share entire data room"
                     caption="Turn off to choose exactly which files and folders this link can access"

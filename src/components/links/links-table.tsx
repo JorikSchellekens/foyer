@@ -68,7 +68,6 @@ export type LinkRowData = {
   isArchived: boolean;
   editor: EditorLink;
   tree: TreeItem[];
-  groups: { id: string; name: string }[];
   recipients: RecipientRow[];
 };
 
@@ -189,7 +188,6 @@ function LinkRow({
             agreements={ctx.agreements}
             presets={ctx.presets}
             previewPresets={ctx.previewPresets}
-            groups={row.groups}
             tree={row.tree}
             appHost={ctx.appHost}
             trigger={

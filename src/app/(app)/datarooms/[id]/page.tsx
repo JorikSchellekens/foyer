@@ -34,14 +34,14 @@ import {
   DrFolderRow,
   NewDrFolderButton,
 } from "./contents-client";
-import { GroupsTab } from "./groups-client";
+import { AccessTab, type MemberAccess } from "./access-client";
 import { QaTab } from "./qa-client";
 import { FolderLock } from "lucide-react";
 
 const TABS = [
   { key: "contents", label: "Contents" },
   { key: "links", label: "Access links" },
-  { key: "groups", label: "Groups" },
+  { key: "access", label: "Access" },
   { key: "qa", label: "Q&A" },
   { key: "branding", label: "Branding" },
   { key: "analytics", label: "Analytics" },
@@ -68,13 +68,6 @@ export default async function DataroomPage({
       documents: {
         include: { document: { include: { currentVersion: true } } },
         orderBy: [{ orderIndex: "asc" }, { createdAt: "asc" }],
-      },
-      groups: {
-        include: {
-          members: true,
-          permissions: true,
-          _count: { select: { links: true } },
-        },
       },
       branding: true,
       questions: { orderBy: { createdAt: "desc" } },
@@ -107,7 +100,25 @@ export default async function DataroomPage({
 
   const editorCtx = await getEditorContext(ctx.team.id);
   const tree = buildTree(dataroom.folders, dataroom.documents);
-  const groupOptions = dataroom.groups.map((g) => ({ id: g.id, name: g.name }));
+
+  const canManageAccess = ctx.role === "OWNER" || ctx.role === "ADMIN";
+  const teamMembers = await db.teamMember.findMany({
+    where: { teamId: ctx.team.id },
+    include: {
+      user: true,
+      permissions: { where: { resourceType: "DATAROOM" } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+  const memberAccess: MemberAccess[] = teamMembers.map((m) => ({
+    id: m.id,
+    email: m.user.email,
+    name: m.user.name,
+    role: m.role,
+    level:
+      m.permissions.find((p) => p.resourceId === dataroom.id)?.level ?? "NONE",
+    restricted: m.permissions.length > 0,
+  }));
 
   const createLinkButton = (
     <LinkEditor
@@ -117,7 +128,6 @@ export default async function DataroomPage({
       agreements={editorCtx.agreements}
       presets={editorCtx.presets}
       previewPresets={editorCtx.previewPresets}
-      groups={groupOptions}
       tree={tree}
       appHost={editorCtx.appHost}
       trigger={
@@ -223,7 +233,6 @@ export default async function DataroomPage({
                     isArchived: link.isArchived,
                     editor: toEditorLink(link),
                     tree,
-                    groups: groupOptions,
                     recipients: link.recipients.map((r) => ({
                       id: r.id,
                       email: r.email,
@@ -237,24 +246,11 @@ export default async function DataroomPage({
           </div>
         )}
 
-        {tab === "groups" && (
-          <GroupsTab
+        {tab === "access" && (
+          <AccessTab
             dataroomId={dataroom.id}
-            tree={tree}
-            groups={dataroom.groups.map((g) => ({
-              id: g.id,
-              name: g.name,
-              emails: g.members.map((m) => m.email),
-              fullAccess: g.fullAccess,
-              allowDownload: g.allowDownload,
-              linkCount: g._count.links,
-              permissions: g.permissions.map((p) => ({
-                itemType: p.itemType,
-                itemId: p.itemId,
-                canView: p.canView,
-                canDownload: p.canDownload,
-              })),
-            }))}
+            members={memberAccess}
+            canManage={canManageAccess}
           />
         )}
 

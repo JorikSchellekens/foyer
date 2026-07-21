@@ -27,7 +27,6 @@ export default async function LinksPage() {
           include: {
             folders: true,
             documents: { include: { document: true } },
-            groups: true,
           },
         },
         views: {
@@ -62,10 +61,6 @@ export default async function LinksPage() {
       tree: link.dataroom
         ? buildTree(link.dataroom.folders, link.dataroom.documents)
         : [],
-      groups: (link.dataroom?.groups ?? []).map((g) => ({
-        id: g.id,
-        name: g.name,
-      })),
       recipients: link.recipients.map((r) => ({
         id: r.id,
         email: r.email,

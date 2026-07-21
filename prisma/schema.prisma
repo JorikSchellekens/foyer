@@ -214,7 +214,6 @@ model Dataroom {
   folders   DataroomFolder[]
   documents DataroomDocument[]
   links     Link[]
-  groups    ViewerGroup[]
   branding  Branding?
   questions DataroomQuestion[]
   views     View[]
@@ -252,48 +251,9 @@ model DataroomDocument {
   @@index([dataroomId, folderId])
 }
 
-// Dataroom viewer groups: named audiences with their own permissions.
-model ViewerGroup {
-  id           String   @id @default(cuid())
-  dataroomId   String
-  name         String
-  // when false, group members only see items granted via GroupPermission
-  fullAccess   Boolean  @default(true)
-  allowDownload Boolean @default(true)
-  createdAt    DateTime @default(now())
-
-  dataroom    Dataroom            @relation(fields: [dataroomId], references: [id], onDelete: Cascade)
-  members     ViewerGroupMember[]
-  permissions GroupPermission[]
-  links       Link[]
-}
-
-model ViewerGroupMember {
-  id      String @id @default(cuid())
-  groupId String
-  email   String
-
-  group ViewerGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
-
-  @@unique([groupId, email])
-}
-
 enum ItemType {
   DATAROOM_DOCUMENT
   DATAROOM_FOLDER
-}
-
-model GroupPermission {
-  id          String   @id @default(cuid())
-  groupId     String
-  itemType    ItemType
-  itemId      String
-  canView     Boolean  @default(true)
-  canDownload Boolean  @default(false)
-
-  group ViewerGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
-
-  @@unique([groupId, itemType, itemId])
 }
 
 // ---------- Links ----------
@@ -315,7 +275,6 @@ model Link {
   target     LinkTarget
   documentId String?
   dataroomId String?
-  groupId    String?
   name       String
   slug       String
   domainId   String?
@@ -348,7 +307,6 @@ model Link {
   team        Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
   document    Document?        @relation(fields: [documentId], references: [id], onDelete: Cascade)
   dataroom    Dataroom?        @relation(fields: [dataroomId], references: [id], onDelete: Cascade)
-  group       ViewerGroup?     @relation(fields: [groupId], references: [id], onDelete: SetNull)
   domain      Domain?          @relation(fields: [domainId], references: [id], onDelete: SetNull)
   agreement   Agreement?       @relation(fields: [agreementId], references: [id], onDelete: SetNull)
   previewPreset PreviewPreset? @relation(fields: [previewPresetId], references: [id], onDelete: SetNull)

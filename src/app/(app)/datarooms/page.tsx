@@ -28,7 +28,7 @@ export default async function DataroomsPage() {
     <div>
       <PageHeader
         title="Data rooms"
-        description="Curated collections with their own audiences, permissions and branding."
+        description="Curated collections with their own access links, permissions and branding."
       >
         <NewDataroomDialog />
       </PageHeader>

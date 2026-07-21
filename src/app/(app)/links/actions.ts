@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireTeam } from "@/lib/auth";
+import { canAccessDataroom } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { generateSlug } from "@/lib/slug";
 import { hashPassword, randomToken } from "@/lib/tokens";
@@ -42,7 +43,6 @@ async function buildData(teamId: string, config: LinkConfig) {
     metaTitle: parsed.metaTitle ?? null,
     metaDescription: parsed.metaDescription ?? null,
     metaImageKey: parsed.metaImageKey ?? null,
-    groupId: parsed.groupId ?? null,
     fullAccess: parsed.fullAccess,
   };
 }
@@ -76,6 +76,8 @@ export async function createLink(
       where: { id: target.id, teamId: ctx.team.id },
     });
     if (!dr) return { error: "Data room not found." };
+    if (!(await canAccessDataroom(ctx, target.id, "EDIT")))
+      return { error: "You do not have permission to share this data room." };
   }
 
   const data = await buildData(ctx.team.id, config);
@@ -115,6 +117,11 @@ export async function updateLink(linkId: string, config: LinkConfig) {
     where: { id: linkId, teamId: ctx.team.id },
   });
   if (!existing) return { error: "Link not found." };
+  if (
+    existing.dataroomId &&
+    !(await canAccessDataroom(ctx, existing.dataroomId, "EDIT"))
+  )
+    return { error: "You do not have permission to edit this link." };
 
   const data = await buildData(ctx.team.id, config);
   const slug = await resolveSlug(

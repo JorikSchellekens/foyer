@@ -8,7 +8,6 @@ import {
   getViewerSession,
   setViewerSession,
   isEmailAllowed,
-  isInGroup,
   resolveLink,
 } from "@/lib/access";
 import { verifyPassword, createVerificationToken } from "@/lib/tokens";
@@ -48,14 +47,6 @@ export async function submitEmail(
   if (!allowed.allowed) {
     await recordBlockedAttempt(link, email, allowed.reason!);
     return { error: allowed.reason };
-  }
-  if (!isInGroup(link, email)) {
-    await recordBlockedAttempt(
-      link,
-      email,
-      "Not a member of the audience group"
-    );
-    return { error: "This email address does not have access to this link." };
   }
 
   const session = await getViewerSession(link.id);

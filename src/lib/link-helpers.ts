@@ -53,7 +53,6 @@ export function toEditorLink(
     metaTitle: link.metaTitle,
     metaDescription: link.metaDescription,
     metaImageKey: link.metaImageKey,
-    groupId: link.groupId,
     fullAccess: link.fullAccess,
     permissions: (link.permissions ?? []).map((p) => ({
       itemType: p.itemType,

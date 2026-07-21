@@ -1,10 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireTeam } from "@/lib/auth";
+import { requireRole, requireTeam } from "@/lib/auth";
+import { canAccessDataroom } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { docTypeFromName } from "@/lib/doc-types";
 import { notifyTeam } from "@/lib/notify";
+import type { PermissionLevel } from "@prisma/client";
 import type { UploadedFile } from "@/app/(app)/documents/actions";
 
 function bust(id?: string) {
@@ -12,12 +14,19 @@ function bust(id?: string) {
   if (id) revalidatePath(`/datarooms/${id}`);
 }
 
-async function ownDataroom(id: string) {
+/**
+ * Resolve a team-owned data room, requiring the caller to hold at least
+ * `level` on it. OWNER/ADMIN always pass; a MEMBER passes if unrestricted or
+ * explicitly granted the level. Returns null when missing or not permitted.
+ */
+async function ownDataroom(id: string, level: PermissionLevel = "EDIT") {
   const ctx = await requireTeam();
   const dataroom = await db.dataroom.findFirst({
     where: { id, teamId: ctx.team.id },
   });
-  return dataroom ? { ctx, dataroom } : null;
+  if (!dataroom) return null;
+  if (!(await canAccessDataroom(ctx, id, level))) return null;
+  return { ctx, dataroom };
 }
 
 export async function createDataroom(name: string, description?: string) {
@@ -34,18 +43,22 @@ export async function updateDataroom(
   id: string,
   data: { name?: string; description?: string | null }
 ) {
-  const ctx = await requireTeam();
-  await db.dataroom.updateMany({
-    where: { id, teamId: ctx.team.id },
+  const owned = await ownDataroom(id, "EDIT");
+  if (!owned) return { error: "Data room not found." };
+  await db.dataroom.update({
+    where: { id },
     data: { name: data.name?.trim() || undefined, description: data.description },
   });
   bust(id);
+  return { ok: true };
 }
 
 export async function deleteDataroom(id: string) {
-  const ctx = await requireTeam();
-  await db.dataroom.deleteMany({ where: { id, teamId: ctx.team.id } });
+  const owned = await ownDataroom(id, "MANAGE");
+  if (!owned) return { error: "Data room not found." };
+  await db.dataroom.delete({ where: { id } });
   bust();
+  return { ok: true };
 }
 
 export async function createDataroomFolder(
@@ -215,78 +228,57 @@ export async function moveDataroomItem(
   bust(dataroomId);
 }
 
-// ---------- groups ----------
+// ---------- member access ----------
 
-export async function saveGroup(
+/**
+ * Grant a team member a level of access to this data room (or revoke it with
+ * NONE). Only OWNER/ADMIN may manage access. A MEMBER with no grants on any
+ * room sees every room; setting a level here restricts them to the rooms they
+ * are explicitly granted. OWNER/ADMIN always have full access, so scoping them
+ * is a no-op we reject.
+ */
+export async function setDataroomMemberAccess(
   dataroomId: string,
-  group: {
-    id?: string;
-    name: string;
-    emails: string[];
-    fullAccess: boolean;
-    allowDownload: boolean;
-    permissions: {
-      itemType: "DATAROOM_DOCUMENT" | "DATAROOM_FOLDER";
-      itemId: string;
-      canView: boolean;
-      canDownload: boolean;
-    }[];
-  }
+  memberId: string,
+  level: PermissionLevel | "NONE"
 ) {
-  const owned = await ownDataroom(dataroomId);
-  if (!owned) return { error: "Data room not found." };
-  if (!group.name.trim()) return { error: "Group name is required." };
+  const ctx = await requireRole(); // OWNER/ADMIN only
+  const dataroom = await db.dataroom.findFirst({
+    where: { id: dataroomId, teamId: ctx.team.id },
+  });
+  if (!dataroom) return { error: "Data room not found." };
 
-  const emails = [
-    ...new Set(
-      group.emails.map((e) => e.trim().toLowerCase()).filter((e) => e.includes("@"))
-    ),
-  ];
+  const member = await db.teamMember.findFirst({
+    where: { id: memberId, teamId: ctx.team.id },
+  });
+  if (!member) return { error: "Member not found." };
+  if (member.role !== "MEMBER")
+    return { error: "Admins and owners already have access to every room." };
 
-  const data = {
-    name: group.name.trim(),
-    fullAccess: group.fullAccess,
-    allowDownload: group.allowDownload,
-  };
-
-  if (group.id) {
-    const existing = await db.viewerGroup.findFirst({
-      where: { id: group.id, dataroomId },
-    });
-    if (!existing) return { error: "Group not found." };
-    await db.viewerGroup.update({
-      where: { id: group.id },
-      data: {
-        ...data,
-        members: {
-          deleteMany: {},
-          create: emails.map((email) => ({ email })),
-        },
-        permissions: {
-          deleteMany: {},
-          create: group.permissions,
-        },
-      },
+  if (level === "NONE") {
+    await db.resourcePermission.deleteMany({
+      where: { memberId, resourceType: "DATAROOM", resourceId: dataroomId },
     });
   } else {
-    await db.viewerGroup.create({
-      data: {
-        ...data,
-        dataroomId,
-        members: { create: emails.map((email) => ({ email })) },
-        permissions: { create: group.permissions },
+    await db.resourcePermission.upsert({
+      where: {
+        memberId_resourceType_resourceId: {
+          memberId,
+          resourceType: "DATAROOM",
+          resourceId: dataroomId,
+        },
+      },
+      update: { level },
+      create: {
+        memberId,
+        resourceType: "DATAROOM",
+        resourceId: dataroomId,
+        level,
       },
     });
   }
   bust(dataroomId);
   return { ok: true };
-}
-
-export async function deleteGroup(dataroomId: string, groupId: string) {
-  const owned = await ownDataroom(dataroomId);
-  if (!owned) return;
-  await db.viewerGroup.deleteMany({ where: { id: groupId, dataroomId } });
-  bust(dataroomId);
 }
 
 // ---------- Q&A ----------
@@ -311,7 +303,7 @@ export async function answerQuestion(
 }
 
 export async function askQuestionAsTeam(dataroomId: string, body: string) {
-  const owned = await ownDataroom(dataroomId);
+  const owned = await ownDataroom(dataroomId, "VIEW");
   if (!owned) return { error: "Data room not found." };
   await db.dataroomQuestion.create({
     data: { dataroomId, body: body.trim(), viewerEmail: owned.ctx.user.email },

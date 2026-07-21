@@ -23,7 +23,6 @@ export const linkInclude = {
       branding: true,
     },
   },
-  group: { include: { members: true, permissions: true } },
   permissions: true,
 } satisfies Prisma.LinkInclude;
 
@@ -127,18 +126,6 @@ export function isEmailAllowed(
   return { allowed: true };
 }
 
-/** Group-restricted links only admit member emails. */
-export function isInGroup(
-  link: FullLink,
-  email: string | undefined
-): boolean {
-  if (!link.group) return true;
-  if (!email) return false;
-  return link.group.members.some(
-    (m) => m.email.toLowerCase() === email.toLowerCase()
-  );
-}
-
 export function evaluateAccess(
   link: FullLink,
   session: ViewerSession
@@ -149,9 +136,7 @@ export function evaluateAccess(
   if (link.passwordHash && !session.pwOk) return { kind: "password" };
 
   const needsEmail =
-    link.accessMode !== "PUBLIC" ||
-    link.allowList.length > 0 ||
-    !!link.group;
+    link.accessMode !== "PUBLIC" || link.allowList.length > 0;
   const needsVerified = link.accessMode === "EMAIL_VERIFIED";
 
   if (needsEmail && !session.email)
@@ -161,11 +146,6 @@ export function evaluateAccess(
     const check = isEmailAllowed(link, session.email);
     if (!check.allowed)
       return { kind: "blocked", reason: check.reason! };
-    if (!isInGroup(link, session.email))
-      return {
-        kind: "blocked",
-        reason: "This email address does not have access to this link.",
-      };
   }
 
   if (needsVerified && !session.verified) return { kind: "verify-sent" };
@@ -184,41 +164,22 @@ export function evaluateAccess(
 export type ItemGrant = { canView: boolean; canDownload: boolean };
 
 /**
- * Effective permission for a dataroom item under a link (+optional group).
- * The link scope and the group scope each grant or withhold access; the
- * result is their intersection, so neither can widen the other.
+ * Effective permission for a dataroom item under a link. A full-access link
+ * grants every item (download still gated by allowDownload); otherwise only
+ * items with a matching LinkPermission row are granted.
  */
 export function itemGrant(
   link: FullLink,
   itemType: "DATAROOM_DOCUMENT" | "DATAROOM_FOLDER",
   itemId: string
 ): ItemGrant {
-  let linkGrant: ItemGrant;
   if (link.fullAccess) {
-    linkGrant = { canView: true, canDownload: link.allowDownload };
-  } else {
-    const p = link.permissions.find(
-      (x) => x.itemType === itemType && x.itemId === itemId
-    );
-    linkGrant = p
-      ? { canView: p.canView, canDownload: p.canDownload && link.allowDownload }
-      : { canView: false, canDownload: false };
+    return { canView: true, canDownload: link.allowDownload };
   }
-  if (!link.group) return linkGrant;
-
-  let groupGrant: ItemGrant;
-  if (link.group.fullAccess) {
-    groupGrant = { canView: true, canDownload: link.group.allowDownload };
-  } else {
-    const g = link.group.permissions.find(
-      (p) => p.itemType === itemType && p.itemId === itemId
-    );
-    groupGrant = g
-      ? { canView: g.canView, canDownload: g.canDownload }
-      : { canView: false, canDownload: false };
-  }
-  return {
-    canView: linkGrant.canView && groupGrant.canView,
-    canDownload: linkGrant.canDownload && groupGrant.canDownload,
-  };
+  const p = link.permissions.find(
+    (x) => x.itemType === itemType && x.itemId === itemId
+  );
+  return p
+    ? { canView: p.canView, canDownload: p.canDownload && link.allowDownload }
+    : { canView: false, canDownload: false };
 }
