@@ -33,7 +33,7 @@ import {
   AddFromLibraryDialog,
   AddNotionToDataroomDialog,
   DataroomUploadButtons,
-  DrDocumentRow,
+  ReorderableDocRows,
   DrFolderRow,
   NewDrFolderButton,
 } from "./contents-client";
@@ -465,20 +465,21 @@ async function ContentsTabInner({
                   folder={{ id: f.id, name: f.name, itemCount: countIn(f.id) }}
                 />
               ))}
-              {docsHere.map((d) => (
-                <DrDocumentRow
-                  key={d.id}
-                  dataroomId={dataroom.id}
-                  item={{
-                    id: d.id,
-                    documentId: d.document.id,
-                    name: d.document.name,
-                    type: d.document.type,
-                    size: d.document.currentVersion?.fileSize ?? 0,
-                    addedAt: d.createdAt.toISOString(),
-                  }}
-                />
-              ))}
+              <ReorderableDocRows
+                key={docsHere
+                  .map((d) => d.id)
+                  .sort()
+                  .join(",")}
+                dataroomId={dataroom.id}
+                items={docsHere.map((d) => ({
+                  id: d.id,
+                  documentId: d.document.id,
+                  name: d.document.name,
+                  type: d.document.type,
+                  size: d.document.currentVersion?.fileSize ?? 0,
+                  addedAt: d.createdAt.toISOString(),
+                }))}
+              />
             </TableBody>
           </Table>
         </div>

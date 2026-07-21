@@ -9,12 +9,14 @@ import {
   Folder,
   FolderPlus,
   FolderUp,
+  GripVertical,
   Library,
   Loader2,
   Trash2,
   MoreHorizontal,
   Pencil,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { DocumentType } from "@prisma/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,6 +49,7 @@ import {
   deleteDataroomFolder,
   renameDataroomFolder,
   removeFromDataroom,
+  reorderDataroomDocuments,
   uploadIntoDataroom,
 } from "../actions";
 
@@ -485,54 +488,109 @@ export function DrFolderRow({
   );
 }
 
-export function DrDocumentRow({
+export type DrDocItem = {
+  id: string; // DataroomDocument id
+  documentId: string;
+  name: string;
+  type: DocumentType;
+  size: number;
+  addedAt: string;
+};
+
+/**
+ * Documents in the current folder, drag-reorderable. Position becomes the
+ * visitor-facing index order (orderIndex), persisted on drop. Keyed by the id
+ * set from the server so add/remove remounts with fresh data while a reorder
+ * keeps local state.
+ */
+export function ReorderableDocRows({
   dataroomId,
-  item,
+  items,
 }: {
   dataroomId: string;
-  item: {
-    id: string; // DataroomDocument id
-    documentId: string;
-    name: string;
-    type: DocumentType;
-    size: number;
-    addedAt: string;
-  };
+  items: DrDocItem[];
 }) {
   const router = useRouter();
+  const [order, setOrder] = useState(items);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+
+  function drop(targetId: string) {
+    setOverId(null);
+    if (!dragId || dragId === targetId) return;
+    const from = order.findIndex((o) => o.id === dragId);
+    const to = order.findIndex((o) => o.id === targetId);
+    if (from < 0 || to < 0) return;
+    const next = [...order];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setOrder(next);
+    setDragId(null);
+    reorderDataroomDocuments(
+      dataroomId,
+      next.map((o) => o.id)
+    ).then(() => router.refresh());
+  }
+
   return (
-    <TableRow
-      className="cursor-pointer"
-      onClick={() => router.push(`/documents/${item.documentId}`)}
-    >
-      <TableCell>
-        <div className="flex items-center gap-2.5">
-          <FileIcon type={item.type} />
-          <span className="font-medium">{item.name}</span>
-        </div>
-      </TableCell>
-      <TableCell className="text-muted-foreground">
-        {item.type === "NOTION" ? "Notion" : formatBytes(item.size)}
-      </TableCell>
-      <TableCell className="text-xs text-muted-foreground">
-        added {timeAgo(item.addedAt)}
-      </TableCell>
-      <TableCell className="text-right">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-7"
-          title="Remove from data room"
-          onClick={async (e) => {
-            e.stopPropagation();
-            await removeFromDataroom(dataroomId, item.id);
-            toast.success("Removed from data room");
-            router.refresh();
+    <>
+      {order.map((item) => (
+        <TableRow
+          key={item.id}
+          draggable
+          onDragStart={() => setDragId(item.id)}
+          onDragEnd={() => {
+            setDragId(null);
+            setOverId(null);
           }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            if (overId !== item.id) setOverId(item.id);
+          }}
+          onDrop={() => drop(item.id)}
+          className={cn(
+            "group cursor-pointer transition-colors",
+            dragId === item.id && "opacity-40",
+            overId === item.id && dragId && dragId !== item.id
+              ? "border-t-2 border-primary"
+              : ""
+          )}
+          onClick={() => router.push(`/documents/${item.documentId}`)}
         >
-          <Trash2 className="size-3.5" />
-        </Button>
-      </TableCell>
-    </TableRow>
+          <TableCell>
+            <div className="flex items-center gap-2.5">
+              <GripVertical
+                className="size-4 shrink-0 cursor-grab text-muted-foreground/40 transition-colors group-hover:text-muted-foreground active:cursor-grabbing"
+                onClick={(e) => e.stopPropagation()}
+              />
+              <FileIcon type={item.type} />
+              <span className="font-medium">{item.name}</span>
+            </div>
+          </TableCell>
+          <TableCell className="text-muted-foreground">
+            {item.type === "NOTION" ? "Notion" : formatBytes(item.size)}
+          </TableCell>
+          <TableCell className="text-xs text-muted-foreground">
+            added {timeAgo(item.addedAt)}
+          </TableCell>
+          <TableCell className="text-right">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7"
+              title="Remove from data room"
+              onClick={async (e) => {
+                e.stopPropagation();
+                await removeFromDataroom(dataroomId, item.id);
+                toast.success("Removed from data room");
+                router.refresh();
+              }}
+            >
+              <Trash2 className="size-3.5" />
+            </Button>
+          </TableCell>
+        </TableRow>
+      ))}
+    </>
   );
 }

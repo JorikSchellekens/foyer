@@ -282,6 +282,27 @@ export async function moveDataroomItem(
   bust(dataroomId);
 }
 
+/**
+ * Persist a new visitor-facing order for the documents in one folder. Ids must
+ * all belong to the data room; their position in the array becomes orderIndex.
+ */
+export async function reorderDataroomDocuments(
+  dataroomId: string,
+  orderedIds: string[]
+) {
+  const owned = await ownDataroom(dataroomId);
+  if (!owned) return;
+  await db.$transaction(
+    orderedIds.map((id, index) =>
+      db.dataroomDocument.updateMany({
+        where: { id, dataroomId },
+        data: { orderIndex: index },
+      })
+    )
+  );
+  bust(dataroomId);
+}
+
 // ---------- member access ----------
 
 /**
