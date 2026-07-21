@@ -7,6 +7,8 @@ import { Stat } from "@/components/shell/stat";
 import { linkUrl } from "@/lib/link-helpers";
 import { VisitsChart } from "@/components/analytics/visits-chart";
 import { ViewsTable } from "@/components/analytics/views-table";
+import { HotLeads } from "@/components/analytics/hot-leads";
+import { hotLeads } from "@/lib/analytics";
 import { formatDuration } from "@/lib/format";
 
 export const metadata = { title: "Overview" };
@@ -49,6 +51,7 @@ export default async function DashboardPage() {
   const totalTime30 = views30.reduce((s, v) => s + v.totalDuration, 0);
 
   const isEmpty = docCount === 0 && dataroomCount === 0;
+  const leads = isEmpty ? [] : await hotLeads(teamId);
 
   return (
     <div>
@@ -124,6 +127,8 @@ export default async function DashboardPage() {
                 value={formatDuration(totalTime30)}
               />
             </div>
+
+            <HotLeads leads={leads} />
 
             <div className="rounded-lg border bg-card p-5">
               <div className="mb-3 flex items-center justify-between">
