@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Newsreader } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
@@ -22,6 +22,13 @@ const newsreader = Newsreader({
 export const metadata: Metadata = {
   title: { default: "Foyer", template: "%s · Foyer" },
   description: "Share documents and data rooms. See everything.",
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#fafaf8" },
+    { media: "(prefers-color-scheme: dark)", color: "#101418" },
+  ],
 };
 
 export default function RootLayout({

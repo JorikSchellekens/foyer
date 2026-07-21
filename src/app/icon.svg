@@ -1,0 +1,9 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="32" height="32" rx="7.5" fill="#175B47"/>
+  <!-- floor the visitor is received on -->
+  <rect x="8.2" y="24" width="15.6" height="1.9" rx="0.95" fill="#FAFAF8"/>
+  <!-- archway: the foyer, a doorway you are received into -->
+  <path fill-rule="evenodd" clip-rule="evenodd"
+    d="M10 24.3 V14.6 A6 6 0 0 1 22 14.6 V24.3 H19.5 V15.2 A3.5 3.5 0 0 0 12.5 15.2 V24.3 Z"
+    fill="#FAFAF8"/>
+</svg>

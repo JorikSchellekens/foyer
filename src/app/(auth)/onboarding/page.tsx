@@ -5,6 +5,7 @@ import { slugify } from "@/lib/slug";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FoyerLogo } from "@/components/brand/logo";
 
 export default async function OnboardingPage() {
   const user = await requireUser();
@@ -33,9 +34,7 @@ export default async function OnboardingPage() {
   return (
     <main className="flex min-h-screen flex-col bg-background">
       <header className="px-8 py-6">
-        <span className="font-display italic text-2xl tracking-tight">
-          Foyer
-        </span>
+        <FoyerLogo size="lg" />
       </header>
       <div className="flex flex-1 items-center justify-center px-6 pb-24">
         <div className="w-full max-w-sm">

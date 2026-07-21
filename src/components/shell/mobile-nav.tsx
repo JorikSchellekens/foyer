@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/sheet";
 import { initials } from "@/lib/format";
 import { switchTeam } from "@/app/(app)/actions";
+import { FoyerLogo } from "@/components/brand/logo";
 import { NAV } from "./sidebar";
 
 export function MobileNav({
@@ -40,8 +41,8 @@ export function MobileNav({
         </SheetTrigger>
         <SheetContent side="left" className="w-72 gap-0 p-0">
           <SheetHeader className="border-b px-5 py-4">
-            <SheetTitle className="text-left font-display text-xl font-normal italic">
-              Foyer
+            <SheetTitle className="text-left font-normal">
+              <FoyerLogo size="md" />
             </SheetTitle>
           </SheetHeader>
 
@@ -126,8 +127,8 @@ export function MobileNav({
         </SheetContent>
       </Sheet>
 
-      <Link href="/dashboard" className="font-display italic text-lg">
-        Foyer
+      <Link href="/dashboard" aria-label="Foyer">
+        <FoyerLogo size="sm" />
       </Link>
       <span className="ml-auto truncate text-xs text-muted-foreground">
         {active.name}

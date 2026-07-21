@@ -4,6 +4,7 @@ import type { Branding } from "@prisma/client";
 import { itemGrant, type FullLink, type ViewerSession } from "@/lib/access";
 import type { GateBrand } from "@/components/viewer/gates";
 import { Watermark } from "@/components/viewer/watermark";
+import { FoyerMark } from "@/components/brand/logo";
 import { formatBytes } from "@/lib/format";
 import { db } from "@/lib/db";
 import { IndexTracker } from "./index-tracker";
@@ -270,9 +271,10 @@ export async function DataroomIndex({
           )}
 
           <footer
-            className="mt-20 border-t pt-6 text-center text-xs"
+            className="mt-20 flex items-center justify-center gap-1.5 border-t pt-6 text-xs"
             style={{ borderColor: hairline, color: subtle }}
           >
+            <FoyerMark className="size-3" />
             Secured by Foyer
           </footer>
         </div>

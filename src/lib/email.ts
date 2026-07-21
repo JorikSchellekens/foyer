@@ -21,7 +21,12 @@ function shell(opts: { heading: string; body: string; footer?: string }) {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fafaf8;padding:48px 16px;">
 <tr><td align="center">
 <table role="presentation" width="440" cellpadding="0" cellspacing="0" style="max-width:440px;width:100%;">
-<tr><td style="font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:22px;color:#16181d;padding-bottom:28px;">Foyer</td></tr>
+<tr><td style="padding-bottom:28px;">
+<table role="presentation" cellpadding="0" cellspacing="0"><tr>
+<td style="width:26px;height:26px;background:#175b47;border-radius:6px;text-align:center;vertical-align:middle;font-family:Georgia,'Times New Roman',serif;font-size:17px;color:#fafaf8;line-height:26px;">&#8745;</td>
+<td style="padding-left:9px;font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:22px;color:#16181d;">Foyer</td>
+</tr></table>
+</td></tr>
 <tr><td style="background:#ffffff;border:1px solid #e7e6e0;border-radius:10px;padding:36px;">
 <div style="font-family:Georgia,'Times New Roman',serif;font-size:21px;line-height:1.35;color:#16181d;padding-bottom:14px;">${opts.heading}</div>
 <div style="font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;line-height:1.6;color:#454a51;">${opts.body}</div>

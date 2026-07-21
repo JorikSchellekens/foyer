@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SignaturePad } from "./signature-pad";
+import { FoyerMark } from "@/components/brand/logo";
 import {
   submitPassword,
   submitEmail,
@@ -90,7 +91,8 @@ export function GateShell({
           {children}
         </div>
       </div>
-      <footer className="pb-6 text-center text-xs opacity-40">
+      <footer className="flex items-center justify-center gap-1.5 pb-6 text-xs opacity-40">
+        <FoyerMark className="size-3" />
         Secured by Foyer
       </footer>
     </main>
