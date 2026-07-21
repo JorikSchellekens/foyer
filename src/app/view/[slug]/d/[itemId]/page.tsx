@@ -8,6 +8,7 @@ import {
   verifyPreviewToken,
 } from "@/lib/access";
 import { ensureView } from "@/lib/view-session";
+import { viewableDocOrder } from "@/lib/dataroom-nav";
 import { resolveBranding, gateBrand } from "@/lib/viewer-brand";
 import { fetchNotionPage } from "@/lib/notion";
 import { db } from "@/lib/db";
@@ -59,6 +60,19 @@ export default async function DataroomDocumentPage({
     ? { viewId: "", trackToken: "" }
     : await ensureView(link, session, { documentId: doc.id });
 
+  // Prev/next within the visitor-visible document order, so readers move
+  // through the data room without returning to the index each time.
+  const order = viewableDocOrder(link);
+  const pos = order.findIndex((o) => o.itemId === itemId);
+  const docHref = (id: string) =>
+    isPreview
+      ? `/view/${slug}/d/${id}?preview=${encodeURIComponent(preview!)}`
+      : `/view/${slug}/d/${id}`;
+  const prevHref = pos > 0 ? docHref(order[pos - 1].itemId) : null;
+  const nextHref =
+    pos >= 0 && pos < order.length - 1 ? docHref(order[pos + 1].itemId) : null;
+  const position = pos >= 0 ? `${pos + 1} / ${order.length}` : null;
+
   const branding = await resolveBranding(link);
   const brand = gateBrand(link, branding);
   const version = doc.currentVersion;
@@ -98,6 +112,9 @@ export default async function DataroomDocumentPage({
       watermarkText={link.watermark ? (session.email ?? "confidential") : null}
       protection={link.screenshotProtection}
       backHref={backHref}
+      prevHref={prevHref}
+      nextHref={nextHref}
+      position={position}
     />
   );
 }

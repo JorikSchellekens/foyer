@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft, Download, ExternalLink } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Download, ExternalLink } from "lucide-react";
 import type { ExtendedRecordMap } from "notion-types";
 import dynamic from "next/dynamic";
 import { Loader2 } from "lucide-react";
@@ -69,6 +69,9 @@ export function DocumentViewer({
   backHref,
   claimSession = false,
   preview = false,
+  prevHref = null,
+  nextHref = null,
+  position = null,
 }: {
   doc: ViewerDoc;
   viewId: string;
@@ -79,6 +82,9 @@ export function DocumentViewer({
   backHref: string | null;
   claimSession?: boolean;
   preview?: boolean;
+  prevHref?: string | null;
+  nextHref?: string | null;
+  position?: string | null;
 }) {
   const { setPage, containerRef, notifyDownload } = useTracking({
     viewId,
@@ -149,6 +155,39 @@ export function DocumentViewer({
             {brand.teamName}
           </p>
         </div>
+        {position && (
+          <div className="flex items-center gap-1 text-white/70">
+            {prevHref ? (
+              <Link
+                href={prevHref}
+                className="rounded-md p-1.5 hover:bg-white/10 hover:text-white"
+                title="Previous document"
+              >
+                <ChevronLeft className="size-4" />
+              </Link>
+            ) : (
+              <span className="p-1.5 opacity-30">
+                <ChevronLeft className="size-4" />
+              </span>
+            )}
+            <span className="min-w-14 text-center font-mono text-[11px] tabular">
+              {position}
+            </span>
+            {nextHref ? (
+              <Link
+                href={nextHref}
+                className="rounded-md p-1.5 hover:bg-white/10 hover:text-white"
+                title="Next document"
+              >
+                <ChevronRight className="size-4" />
+              </Link>
+            ) : (
+              <span className="p-1.5 opacity-30">
+                <ChevronRight className="size-4" />
+              </span>
+            )}
+          </div>
+        )}
         {brand.ctaUrl && brand.ctaLabel && (
           <a
             href={brand.ctaUrl}
