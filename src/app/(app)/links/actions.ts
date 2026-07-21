@@ -9,6 +9,7 @@ import { hashPassword, randomToken } from "@/lib/tokens";
 import { sendLinkInvite } from "@/lib/email";
 import { requestOrigin } from "@/lib/origin";
 import { linkConfigSchema, type LinkConfig } from "@/lib/link-config";
+import { linkUrl } from "@/lib/link-helpers";
 import { dispatchWebhooks } from "@/lib/notify";
 
 function revalidateLinkPages() {
@@ -109,6 +110,73 @@ export async function createLink(
   });
   revalidateLinkPages();
   return { id: link.id, slug: link.slug };
+}
+
+/** Sensible zero-config link for one-click sharing: public, downloadable, no gates. */
+function defaultShareConfig(name: string): LinkConfig {
+  return {
+    name,
+    accessMode: "PUBLIC",
+    allowDownload: true,
+    allowList: [],
+    blockList: [],
+    screenshotProtection: false,
+    watermark: false,
+    notifyOnAccess: true,
+    enableIndexFile: false,
+    enableQA: false,
+    fullAccess: true,
+    permissions: [],
+  };
+}
+
+/**
+ * One-click share: return the URL of an existing active link for the target,
+ * or mint a default public link on the spot. Used by the "Copy link" row action.
+ */
+export async function quickShareLink(target: {
+  type: "DOCUMENT" | "DATAROOM";
+  id: string;
+}): Promise<{ url: string; created: boolean } | { error: string }> {
+  const ctx = await requireTeam();
+
+  let name: string;
+  if (target.type === "DOCUMENT") {
+    const doc = await db.document.findFirst({
+      where: { id: target.id, teamId: ctx.team.id },
+      select: { name: true },
+    });
+    if (!doc) return { error: "Document not found." };
+    name = doc.name;
+  } else {
+    const dr = await db.dataroom.findFirst({
+      where: { id: target.id, teamId: ctx.team.id },
+      select: { name: true },
+    });
+    if (!dr) return { error: "Data room not found." };
+    name = dr.name;
+  }
+
+  // Reuse the newest active link rather than piling up duplicates.
+  const existing = await db.link.findFirst({
+    where: {
+      teamId: ctx.team.id,
+      isArchived: false,
+      ...(target.type === "DOCUMENT"
+        ? { documentId: target.id }
+        : { dataroomId: target.id }),
+    },
+    include: { domain: true },
+    orderBy: { createdAt: "desc" },
+  });
+  if (existing) return { url: await linkUrl(existing), created: false };
+
+  const result = await createLink(target, defaultShareConfig(name));
+  if ("slug" in result && result.slug)
+    return { url: await linkUrl({ slug: result.slug }), created: true };
+  return {
+    error: ("error" in result && result.error) || "Could not create link.",
+  };
 }
 
 export async function updateLink(linkId: string, config: LinkConfig) {

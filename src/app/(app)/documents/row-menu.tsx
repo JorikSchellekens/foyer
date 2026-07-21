@@ -62,7 +62,12 @@ export function RowMenu({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-          {extraItems}
+          {extraItems && (
+            <>
+              {extraItems}
+              <DropdownMenuSeparator />
+            </>
+          )}
           <DropdownMenuItem onClick={() => setRenameOpen(true)}>
             <Pencil className="size-4" /> Rename
           </DropdownMenuItem>

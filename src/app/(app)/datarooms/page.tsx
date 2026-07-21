@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/shell/page-header";
 import { EmptyState } from "@/components/shell/empty-state";
 import { timeAgo, pluralize } from "@/lib/format";
 import { teamMemberEmails, externalViews } from "@/lib/internal-views";
+import { ShareButton } from "@/components/links/quick-share";
 import { NewDataroomDialog } from "./new-dataroom";
 
 export const metadata = { title: "Data rooms" };
@@ -56,16 +57,22 @@ export default async function DataroomsPage() {
               <Link
                 key={dr.id}
                 href={`/datarooms/${dr.id}`}
-                className="group rounded-lg border bg-card p-5 transition-colors hover:border-primary/40"
+                className="group relative rounded-lg border bg-card p-5 transition-colors hover:border-primary/40"
               >
                 <div className="flex items-start justify-between">
                   <FolderLock
                     className="size-5 text-primary"
                     strokeWidth={1.5}
                   />
-                  <span className="text-xs text-muted-foreground">
-                    {timeAgo(dr.updatedAt)}
-                  </span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground">
+                      {timeAgo(dr.updatedAt)}
+                    </span>
+                    <ShareButton
+                      target={{ type: "DATAROOM", id: dr.id }}
+                      className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                    />
+                  </div>
                 </div>
                 <h2 className="mt-3 font-display text-xl leading-snug group-hover:underline group-hover:decoration-primary/40 group-hover:underline-offset-4">
                   {dr.name}

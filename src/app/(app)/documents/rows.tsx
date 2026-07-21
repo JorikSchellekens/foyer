@@ -8,6 +8,7 @@ import { FileIcon } from "@/components/shell/file-icon";
 import { formatBytes, timeAgo, pluralize } from "@/lib/format";
 import { docTypeLabel } from "@/lib/doc-types";
 import { RowMenu } from "./row-menu";
+import { ShareMenuItem } from "@/components/links/quick-share";
 import {
   renameDocument,
   deleteDocument,
@@ -103,6 +104,9 @@ export function DocumentRow({
               await deleteDocument(doc.id);
             }}
             deleteWarning="All versions, links and analytics for this document will be permanently removed."
+            extraItems={
+              <ShareMenuItem target={{ type: "DOCUMENT", id: doc.id }} />
+            }
           />
         </div>
       </TableCell>
