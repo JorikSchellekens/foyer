@@ -5,7 +5,7 @@ import { requireTeam } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { docTypeFromName } from "@/lib/doc-types";
 import { parseNotionUrl } from "@/lib/notion";
-import { getObjectBuffer } from "@/lib/storage";
+import { getObjectBuffer, isTeamKey } from "@/lib/storage";
 
 async function countPdfPages(fileKey: string): Promise<number | null> {
   try {
@@ -57,6 +57,9 @@ export async function createUploadedDocuments(
   const ctx = await requireTeam();
   const created: string[] = [];
   for (const up of uploads.slice(0, 500)) {
+    // A key is only trusted if it lives under this team's prefix; otherwise a
+    // member could reference (and later view) another team's stored object.
+    if (!isTeamKey(up.key, ctx.team.id)) continue;
     const targetFolder = up.relativeDir
       ? await ensureFolderPath(ctx.team.id, folderId, up.relativeDir)
       : folderId;
@@ -137,6 +140,8 @@ export async function uploadNewVersion(
     include: { versions: { orderBy: { versionNumber: "desc" }, take: 1 } },
   });
   if (!doc) return { error: "Document not found." };
+  if (!isTeamKey(upload.key, ctx.team.id))
+    return { error: "Invalid upload." };
   const nextNumber = (doc.versions[0]?.versionNumber ?? 0) + 1;
   const type = docTypeFromName(upload.name);
   const numPages = type === "PDF" ? await countPdfPages(upload.key) : null;

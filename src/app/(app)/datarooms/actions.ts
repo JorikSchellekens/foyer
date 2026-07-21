@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { docTypeFromName } from "@/lib/doc-types";
 import { parseNotionUrl } from "@/lib/notion";
 import { notifyTeam } from "@/lib/notify";
+import { isTeamKey } from "@/lib/storage";
 import type { PermissionLevel } from "@prisma/client";
 import type { UploadedFile } from "@/app/(app)/documents/actions";
 
@@ -163,6 +164,8 @@ export async function uploadIntoDataroom(
   let order = (max._max.orderIndex ?? 0) + 1;
 
   for (const up of uploads.slice(0, 500)) {
+    // Only trust keys under this team's prefix (see isTeamKey).
+    if (!isTeamKey(up.key, ctx.team.id)) continue;
     const type = docTypeFromName(up.name);
     const doc = await db.document.create({
       data: {

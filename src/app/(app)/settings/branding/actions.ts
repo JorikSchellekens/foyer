@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireTeam } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { isTeamKey } from "@/lib/storage";
 
 export type BrandingInput = {
   dataroomId?: string | null;
@@ -34,9 +35,14 @@ export async function saveBranding(input: BrandingInput) {
     if (!dr) return { error: "Data room not found." };
   }
 
+  // Drop any image key that is not under this team's storage prefix so a
+  // crafted request cannot publish another team's object as a brand asset.
+  const teamKey = (k?: string | null) =>
+    isTeamKey(k, ctx.team.id) ? k : null;
+
   const data = {
-    logoKey: input.logoKey ?? null,
-    bannerKey: input.bannerKey ?? null,
+    logoKey: teamKey(input.logoKey),
+    bannerKey: teamKey(input.bannerKey),
     brandColor: input.brandColor,
     backgroundColor: input.backgroundColor,
     applyBgToDataroom: input.applyBgToDataroom,
@@ -45,7 +51,7 @@ export async function saveBranding(input: BrandingInput) {
     ctaUrl: input.ctaUrl ?? null,
     metaTitle: input.metaTitle ?? null,
     metaDescription: input.metaDescription ?? null,
-    metaImageKey: input.metaImageKey ?? null,
+    metaImageKey: teamKey(input.metaImageKey),
   };
 
   const existing = await db.branding.findFirst({

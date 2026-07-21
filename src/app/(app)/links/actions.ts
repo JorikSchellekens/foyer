@@ -11,6 +11,7 @@ import { requestOrigin } from "@/lib/origin";
 import { linkConfigSchema, type LinkConfig } from "@/lib/link-config";
 import { linkUrl } from "@/lib/link-helpers";
 import { dispatchWebhooks } from "@/lib/notify";
+import { isTeamKey } from "@/lib/storage";
 
 function revalidateLinkPages() {
   revalidatePath("/links");
@@ -43,7 +44,9 @@ async function buildData(teamId: string, config: LinkConfig) {
     previewPresetId: parsed.previewPresetId ?? null,
     metaTitle: parsed.metaTitle ?? null,
     metaDescription: parsed.metaDescription ?? null,
-    metaImageKey: parsed.metaImageKey ?? null,
+    metaImageKey: isTeamKey(parsed.metaImageKey, teamId)
+      ? parsed.metaImageKey
+      : null,
     fullAccess: parsed.fullAccess,
   };
 }

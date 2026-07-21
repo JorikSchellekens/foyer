@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireTeam } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { isTeamKey } from "@/lib/storage";
 
 export async function savePreviewPreset(preset: {
   id?: string;
@@ -25,7 +26,9 @@ export async function savePreviewPreset(preset: {
     isDefault: preset.isDefault,
     metaTitle: preset.metaTitle,
     metaDescription: preset.metaDescription,
-    metaImageKey: preset.metaImageKey,
+    metaImageKey: isTeamKey(preset.metaImageKey, ctx.team.id)
+      ? preset.metaImageKey
+      : null,
   };
   if (preset.id) {
     await db.previewPreset.updateMany({

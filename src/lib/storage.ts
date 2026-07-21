@@ -30,6 +30,20 @@ export function newFileKey(teamId: string, fileName: string) {
   return `${teamId}/${randomBytes(8).toString("hex")}/${safe}`;
 }
 
+/**
+ * Guard for client-supplied storage keys. Every object a team owns lives under
+ * its `${teamId}/` prefix (see newFileKey). A member must never be able to
+ * persist a key pointing at another team's object, so any key that arrives from
+ * the client - as a document fileKey or a brand/preview image - is validated
+ * against the caller's team before it is stored.
+ */
+export function isTeamKey(
+  key: string | null | undefined,
+  teamId: string
+): key is string {
+  return typeof key === "string" && key.startsWith(`${teamId}/`);
+}
+
 export async function putObject(
   key: string,
   body: Buffer | Uint8Array,
