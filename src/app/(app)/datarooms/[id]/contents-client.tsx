@@ -41,6 +41,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { FileIcon } from "@/components/shell/file-icon";
+import {
+  putWithProgress,
+  useLeaveGuard,
+  UploadingOverlay,
+  type UploadProgress,
+} from "@/components/upload/uploader";
 import { formatBytes, timeAgo, pluralize } from "@/lib/format";
 import {
   addDocumentsToDataroom,
@@ -52,6 +58,7 @@ import {
   reorderDataroomDocuments,
   uploadIntoDataroom,
 } from "../actions";
+import type { UploadedFile } from "@/app/(app)/documents/actions";
 
 // ---------- toolbar ----------
 
@@ -191,7 +198,8 @@ export function DataroomUploadButtons({
   folderId: string | null;
 }) {
   const router = useRouter();
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [progress, setProgress] = useState<UploadProgress>(null);
+  useLeaveGuard(progress !== null);
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
 
@@ -200,7 +208,7 @@ export function DataroomUploadButtons({
       (f) => f.size > 0 && !f.name.startsWith(".")
     );
     if (!files.length) return;
-    setProgress({ done: 0, total: files.length });
+    setProgress({ done: 0, total: files.length, pct: 0 });
     try {
       const res = await fetch("/api/upload/presign", {
         method: "POST",
@@ -214,29 +222,43 @@ export function DataroomUploadButtons({
       });
       if (!res.ok) throw new Error("Could not prepare the upload.");
       const { files: signed } = await res.json();
+
+      const totalBytes = files.reduce((s, f) => s + f.size, 0) || 1;
+      const loaded = new Array(files.length).fill(0);
+      const uploads: UploadedFile[] = [];
       let done = 0;
-      const uploads = [];
-      for (let i = 0; i < files.length; i++) {
-        const put = await fetch(signed[i].url, {
-          method: "PUT",
-          headers: {
-            "content-type": files[i].type || "application/octet-stream",
-          },
-          body: files[i],
+      const report = () => {
+        const sum = loaded.reduce((s: number, n: number) => s + n, 0);
+        setProgress({
+          done,
+          total: files.length,
+          pct: Math.min(100, Math.round((sum / totalBytes) * 100)),
         });
-        if (!put.ok) throw new Error(`Upload failed for ${files[i].name}`);
-        const rel = (files[i] as File & { webkitRelativePath?: string })
-          .webkitRelativePath;
-        const relDir = rel ? rel.split("/").slice(0, -1).join("/") : "";
-        uploads.push({
-          key: signed[i].key,
-          name: files[i].name,
-          size: files[i].size,
-          contentType: files[i].type || "application/octet-stream",
-          relativeDir: relDir,
-        });
-        setProgress({ done: ++done, total: files.length });
-      }
+      };
+      let next = 0;
+      const runOne = async () => {
+        while (next < files.length) {
+          const i = next++;
+          await putWithProgress(signed[i].url, files[i], (b) => {
+            loaded[i] = b;
+            report();
+          });
+          const rel = (files[i] as File & { webkitRelativePath?: string })
+            .webkitRelativePath;
+          const relDir = rel ? rel.split("/").slice(0, -1).join("/") : "";
+          uploads.push({
+            key: signed[i].key,
+            name: files[i].name,
+            size: files[i].size,
+            contentType: files[i].type || "application/octet-stream",
+            relativeDir: relDir,
+          });
+          done++;
+          report();
+        }
+      };
+      await Promise.all(Array.from({ length: 4 }, runOne));
+
       const result = await uploadIntoDataroom(dataroomId, uploads, folderId);
       if (result && "error" in result && result.error)
         throw new Error(result.error);
@@ -276,8 +298,7 @@ export function DataroomUploadButtons({
       <Button onClick={() => fileInput.current?.click()} disabled={!!progress}>
         {progress ? (
           <>
-            <Loader2 className="size-4 animate-spin" /> {progress.done}/
-            {progress.total}
+            <Loader2 className="size-4 animate-spin" /> {progress.pct}%
           </>
         ) : (
           <>
@@ -285,6 +306,7 @@ export function DataroomUploadButtons({
           </>
         )}
       </Button>
+      <UploadingOverlay progress={progress} />
     </>
   );
 }

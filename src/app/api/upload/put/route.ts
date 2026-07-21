@@ -35,9 +35,27 @@ export async function PUT(req: NextRequest) {
   if (declared > MAX_BYTES)
     return NextResponse.json({ error: "File too large" }, { status: 413 });
 
-  const body = Buffer.from(await req.arrayBuffer());
+  let body: Buffer;
+  try {
+    body = Buffer.from(await req.arrayBuffer());
+  } catch {
+    return NextResponse.json(
+      { error: "Upload interrupted. Please try again." },
+      { status: 400 }
+    );
+  }
   if (body.length > MAX_BYTES)
     return NextResponse.json({ error: "File too large" }, { status: 413 });
+  // Never persist a partial upload: if fewer bytes arrived than the client
+  // declared, the object would be a silently-corrupt file. Fail loudly so the
+  // client can retry instead of storing a truncated document.
+  if (declared > 0 && body.length !== declared)
+    return NextResponse.json(
+      {
+        error: `Upload incomplete: received ${body.length} of ${declared} bytes. Please try again.`,
+      },
+      { status: 400 }
+    );
 
   const contentType =
     req.headers.get("content-type") ||
