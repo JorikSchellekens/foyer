@@ -1,0 +1,99 @@
+# Coolify deployment of Foyer. The generic self-host stack is
+# docker-compose.yml; this variant uses Coolify's magic env vars so the
+# domain, database password, object-store password and auth secret are all
+# provisioned and injected automatically.
+#
+# Set in the Coolify UI (optional): RESEND_API_KEY, EMAIL_FROM,
+# CLOUDFLARE_API_TOKEN. Without a Resend key, magic-link URLs are printed to
+# the app container logs.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      # Coolify generates the domain and routes it to this service's port 3000
+      - SERVICE_FQDN_APP_3000
+      - NEXT_PUBLIC_APP_URL=${SERVICE_FQDN_APP}
+      - AUTH_SECRET=${SERVICE_BASE64_64_AUTHSECRET}
+      - DATABASE_URL=postgresql://foyer:${SERVICE_PASSWORD_POSTGRES}@db:5432/foyer
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - EMAIL_FROM=${EMAIL_FROM:-Foyer <onboarding@resend.dev>}
+      - S3_ENDPOINT=http://minio:9000
+      - S3_REGION=us-east-1
+      - S3_ACCESS_KEY_ID=foyer
+      - S3_SECRET_ACCESS_KEY=${SERVICE_PASSWORD_MINIO}
+      - S3_BUCKET=foyer
+      - S3_FORCE_PATH_STYLE=true
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "node -e \"fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=foyer
+      - POSTGRES_PASSWORD=${SERVICE_PASSWORD_POSTGRES}
+      - POSTGRES_DB=foyer
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U foyer"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data
+    environment:
+      - MINIO_ROOT_USER=foyer
+      - MINIO_ROOT_PASSWORD=${SERVICE_PASSWORD_MINIO}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -c
+      - "mc alias set local http://minio:9000 foyer ${SERVICE_PASSWORD_MINIO} && mc mb -p local/foyer || true"
+
+  backup:
+    image: postgres:16-alpine
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - PGPASSWORD=${SERVICE_PASSWORD_POSTGRES}
+    volumes:
+      - backups:/backups
+    entrypoint:
+      - /bin/sh
+      - -c
+      - "while true; do pg_dump -h db -U foyer foyer | gzip > /backups/foyer-$$(date +%Y%m%d-%H%M).sql.gz && find /backups -name '*.sql.gz' -mtime +14 -delete; sleep 86400; done"
+
+volumes:
+  pg-data:
+  minio-data:
+  backups:
