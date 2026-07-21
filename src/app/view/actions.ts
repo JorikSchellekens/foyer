@@ -14,6 +14,7 @@ import { verifyPassword, createVerificationToken } from "@/lib/tokens";
 import { sendViewerVerification } from "@/lib/email";
 import { recordBlockedAttempt } from "@/lib/view-session";
 import { notifyTeam } from "@/lib/notify";
+import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 async function loadLink(slug: string) {
   const h = await headers();
@@ -21,9 +22,18 @@ async function loadLink(slug: string) {
   return resolveLink(host, slug);
 }
 
+// Generic message for every "your email is not permitted" case, so the gate
+// cannot be used to enumerate a link's allow/block list.
+const NO_ACCESS_MESSAGE =
+  "This email does not have access. You can request access below.";
+
 export async function submitPassword(slug: string, password: string) {
   const link = await loadLink(slug);
   if (!link || !link.passwordHash) return { error: "Link unavailable." };
+  // Throttle passcode attempts per IP+link to blunt brute forcing.
+  const ip = await clientIp();
+  if (!rateLimit(`pw:${ip}:${link.id}`, 10, 10 * 60_000).ok)
+    return { error: "Too many attempts. Please try again in a few minutes." };
   if (!verifyPassword(password, link.passwordHash))
     return { error: "That password is not correct." };
   const session = await getViewerSession(link.id);
@@ -43,10 +53,19 @@ export async function submitEmail(
   if (!parsed.success) return { error: "Enter a valid email address." };
   const email = parsed.data;
 
+  // Throttle so this endpoint cannot mailbomb an inbox (EMAIL_VERIFIED sends a
+  // verification email) or be scripted to spam blocked-attempt notifications.
+  const ip = await clientIp();
+  if (
+    !rateLimit(`email:ip:${ip}`, 15, 10 * 60_000).ok ||
+    !rateLimit(`email:target:${email}`, 5, 10 * 60_000).ok
+  )
+    return { error: "Too many attempts. Please try again in a few minutes." };
+
   const allowed = isEmailAllowed(link, email);
   if (!allowed.allowed) {
     await recordBlockedAttempt(link, email, allowed.reason!);
-    return { error: allowed.reason };
+    return { error: NO_ACCESS_MESSAGE };
   }
 
   const session = await getViewerSession(link.id);
@@ -154,6 +173,15 @@ export async function requestAccess(
   if (!parsed.success) return { error: "Enter a valid email address." };
   const email = parsed.data;
   const trimmedNote = note?.trim().slice(0, 500) || null;
+
+  // Throttle: each distinct email fans out to a DB row + team-wide email, so an
+  // unthrottled loop over varying addresses is a spam/flood amplifier.
+  const ip = await clientIp();
+  if (
+    !rateLimit(`req:ip:${ip}`, 10, 10 * 60_000).ok ||
+    !rateLimit(`req:link:${link.id}`, 30, 60 * 60_000).ok
+  )
+    return { ok: true };
 
   // Collapse repeat requests from the same email on the same link.
   const existing = await db.accessRequest.findFirst({

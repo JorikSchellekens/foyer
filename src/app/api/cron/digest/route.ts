@@ -1,5 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createHash, timingSafeEqual } from "crypto";
 import { sendWeeklyDigests } from "@/lib/digest";
+
+// Constant-time compare of two strings via fixed-length digests, so an
+// attacker cannot learn the secret from response timing.
+function safeEqual(a: string, b: string): boolean {
+  const ha = createHash("sha256").update(a).digest();
+  const hb = createHash("sha256").update(b).digest();
+  return timingSafeEqual(ha, hb);
+}
 
 /**
  * Weekly engagement digest. Meant to be hit by a scheduler (Coolify cron,
@@ -18,8 +27,8 @@ export async function GET(req: NextRequest) {
       { status: 503 }
     );
   }
-  const auth = req.headers.get("authorization");
-  if (auth !== `Bearer ${secret}`) {
+  const auth = req.headers.get("authorization") ?? "";
+  if (!safeEqual(auth, `Bearer ${secret}`)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const result = await sendWeeklyDigests();

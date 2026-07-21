@@ -54,6 +54,16 @@ export async function sendEmail(opts: {
 }) {
   const resend = client();
   if (!resend) {
+    // In production a missing RESEND_API_KEY must fail loudly: emails carry
+    // sign-in and access-grant links, so silently "succeeding" would both drop
+    // real mail and write those links to stdout. Only fall back to logging in
+    // development.
+    if (process.env.NODE_ENV === "production") {
+      console.error(
+        `email not sent: RESEND_API_KEY is not configured (to=${opts.to})`
+      );
+      return { ok: false as const, error: "Email delivery is not configured." };
+    }
     console.log(`[email:dev] to=${opts.to} subject="${opts.subject}"`);
     const m = opts.html.match(/href="([^"]+)"/);
     if (m) console.log(`[email:dev] link: ${m[1]}`);

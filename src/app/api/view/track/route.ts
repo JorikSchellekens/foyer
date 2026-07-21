@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { verifyPayload } from "@/lib/auth";
+import { rateLimit } from "@/lib/rate-limit";
 
 const bodySchema = z.object({
   token: z.string(),
@@ -50,6 +51,16 @@ export async function POST(req: NextRequest) {
   const payload = await verifyPayload<{ vid?: string }>(body.token);
   if (!payload?.vid || payload.vid !== body.viewId)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // A valid track token lives 24h and is handed to every viewer; cap the write
+  // rate per view so a replayed beacon cannot flood analytics rows/storage.
+  // The client beacons at most every few seconds, so this is generous headroom.
+  const limited = rateLimit(`track:${body.viewId}`, 40, 60_000);
+  if (!limited.ok)
+    return NextResponse.json(
+      { error: "Slow down" },
+      { status: 429, headers: { "retry-after": String(limited.retryAfter) } }
+    );
 
   const view = await db.view.findUnique({ where: { id: body.viewId } });
   if (!view) return NextResponse.json({ error: "Gone" }, { status: 410 });

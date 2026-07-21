@@ -29,6 +29,10 @@ export async function GET(
     const viewers = await db.viewer.findMany({
       where: { teamId: ctx.team.id },
       include: { views: { select: { totalDuration: true, startedAt: true, documentId: true } } },
+      // Bound the export so it cannot buffer an unbounded viewer set in memory
+      // (matches the 5000-row cap on the document/dataroom branch below).
+      orderBy: { createdAt: "desc" },
+      take: 5000,
     });
     const rows = viewers
       .filter((v) => !members.has(v.email.toLowerCase()))
