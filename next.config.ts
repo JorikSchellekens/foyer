@@ -2,7 +2,13 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  serverExternalPackages: ["archiver", "@prisma/client", "prisma"],
+  serverExternalPackages: [
+    "archiver",
+    "@prisma/client",
+    "prisma",
+    "@hyzyla/pdfium",
+    "sharp",
+  ],
   experimental: {
     serverActions: {
       bodySizeLimit: "10mb",

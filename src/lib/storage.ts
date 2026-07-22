@@ -4,6 +4,7 @@ import {
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
+  HeadObjectCommand,
 } from "@aws-sdk/client-s3";
 import { randomBytes } from "crypto";
 
@@ -78,4 +79,14 @@ export async function getObjectBuffer(key: string): Promise<Buffer> {
 
 export async function deleteObject(key: string) {
   await s3().send(new DeleteObjectCommand({ Bucket: BUCKET(), Key: key }));
+}
+
+/** Cheap existence check (HEAD, no body) - used to skip already-built thumbs. */
+export async function objectExists(key: string): Promise<boolean> {
+  try {
+    await s3().send(new HeadObjectCommand({ Bucket: BUCKET(), Key: key }));
+    return true;
+  } catch {
+    return false;
+  }
 }

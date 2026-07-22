@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { docTypeFromName } from "@/lib/doc-types";
 import { parseNotionUrl } from "@/lib/notion";
 import { getObjectBuffer, isTeamKey } from "@/lib/storage";
+import { generateVersionThumbnails } from "@/lib/thumbnails";
 
 async function countPdfPages(fileKey: string): Promise<number | null> {
   try {
@@ -89,6 +90,9 @@ export async function createUploadedDocuments(
       where: { id: doc.id },
       data: { currentVersionId: doc.versions[0].id },
     });
+    // Warm page thumbnails in the background; the viewer analytics use them.
+    if (type === "PDF")
+      void generateVersionThumbnails(doc.versions[0].id).catch(() => {});
     created.push(doc.id);
   }
   revalidatePath("/documents");
@@ -162,6 +166,8 @@ export async function uploadNewVersion(
     where: { id: documentId },
     data: { currentVersionId: version.id, type },
   });
+  if (type === "PDF")
+    void generateVersionThumbnails(version.id).catch(() => {});
   revalidatePath(`/documents/${documentId}`);
   return { ok: true };
 }
