@@ -142,6 +142,20 @@ export function PdfViewer({
     ? Math.round(renderWidth * aspect)
     : Math.round(renderWidth * 1.294);
 
+  // Keep a small window of pages mounted - previous, current, next - so a page
+  // turn reveals an already-rasterised canvas instead of re-rendering (and
+  // often re-fetching bytes) from scratch. Reading is mostly forward, so
+  // pre-rendering the next page removes the wait for the common case, and
+  // holding the previous page keeps back-navigation instant. Neighbours render
+  // off to the side (still painted by pdf.js) while the reader is on the
+  // current page; only the active page carries the text layer and tracking.
+  const windowPages: number[] = [];
+  if (numPages > 0) {
+    for (let p = page - 1; p <= page + 1; p++) {
+      if (p >= 1 && p <= numPages) windowPages.push(p);
+    }
+  }
+
   return (
     <div className="flex h-full flex-col">
       {/* toolbar - hidden until the document is ready to avoid a dead bar over the loader */}
@@ -276,29 +290,62 @@ export function PdfViewer({
             </div>
           )}
 
-          {/* main page */}
+          {/* main page - the current page plus pre-rendered neighbours */}
           <div ref={frameRef} className="relative min-w-0 flex-1 overflow-auto">
             <div className="flex min-h-full min-w-max justify-center py-6">
-              <div className="m-auto shadow-2xl" data-track-page>
-                <Page
-                  pageNumber={page}
-                  width={renderWidth}
-                  renderTextLayer={!protection}
-                  renderAnnotationLayer={false}
-                  loading={
+              <div className="relative m-auto">
+                {windowPages.map((p) => {
+                  const active = p === page;
+                  return (
                     <div
-                      style={{ width: renderWidth, height: placeholderHeight }}
-                      className="flex items-center justify-center bg-white"
+                      key={p}
+                      // Only the visible page carries the tracking hook so the
+                      // heatmap's querySelector matches the page in view.
+                      data-track-page={active ? "" : undefined}
+                      aria-hidden={active ? undefined : true}
+                      className={active ? "shadow-2xl" : ""}
+                      style={
+                        active
+                          ? undefined
+                          : {
+                              position: "absolute",
+                              top: 0,
+                              left: 0,
+                              opacity: 0,
+                              pointerEvents: "none",
+                            }
+                      }
                     >
-                      <Loader2 className="size-6 animate-spin text-black/25" />
+                      <Page
+                        pageNumber={p}
+                        width={renderWidth}
+                        renderTextLayer={active && !protection}
+                        renderAnnotationLayer={false}
+                        loading={
+                          active ? (
+                            <div
+                              style={{ width: renderWidth, height: placeholderHeight }}
+                              className="flex items-center justify-center bg-white"
+                            >
+                              <Loader2 className="size-6 animate-spin text-black/25" />
+                            </div>
+                          ) : (
+                            ""
+                          )
+                        }
+                        onLoadSuccess={
+                          active
+                            ? (pg) => {
+                                const w = pg.originalWidth || pg.width;
+                                const h = pg.originalHeight || pg.height;
+                                if (w && h) setAspect(h / w);
+                              }
+                            : undefined
+                        }
+                      />
                     </div>
-                  }
-                  onLoadSuccess={(p) => {
-                    const w = p.originalWidth || p.width;
-                    const h = p.originalHeight || p.height;
-                    if (w && h) setAspect(h / w);
-                  }}
-                />
+                  );
+                })}
               </div>
             </div>
 
