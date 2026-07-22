@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import { Loader2 } from "lucide-react";
 
@@ -10,6 +16,8 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 ).toString();
 
 export type TrailSeg = { p: number; t: number; d: number }; // page, enterMs, durMs
+
+const PREVIEW_W = 152; // hover-card page render, high-res at its real size
 
 // Fit a page of aspect A (= w/h) into a maxW x maxH box, preserving shape.
 function fit(a: number, maxW: number, maxH: number) {
@@ -21,7 +29,8 @@ function fit(a: number, maxW: number, maxH: number) {
  * The reading trajectory: page (rows) against cumulative reading time (x).
  * Dwell segments are packed contiguously, so the line has no idle gaps and
  * always fills the width; a step to a lower page is a backtrack / re-read.
- * Each page carries a thumbnail of the real page, sized to its true aspect.
+ * The rail thumbnails size to the real page aspect; hovering a page draws a
+ * high-res preview of it. The line draws itself in on load.
  */
 export function ReadingTrajectory({
   trail,
@@ -38,12 +47,20 @@ export function ReadingTrajectory({
   const [plotW, setPlotW] = useState(640);
   const [hover, setHover] = useState<number | null>(null);
   const [aspect, setAspect] = useState<number | null>(null); // page w/h
+  const [ready, setReady] = useState(false); // gate the draw-in until measured
 
-  // thumbnail + layout dimensions derived from the real page aspect
+  const reduce = useMemo(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    []
+  );
+
   const A = aspect ?? 8.5 / 11; // US Letter portrait until the first page loads
   const thumb = fit(A, 48, 44);
   const ROW = thumb.h + 12;
   const RAIL = thumb.w + 26; // page number + gaps
+  const preview = fit(A, PREVIEW_W, 210);
 
   const segs = useMemo(
     () => [...trail].filter((s) => s.d >= 0).sort((a, b) => a.t - b.t),
@@ -81,6 +98,11 @@ export function ReadingTrajectory({
   }, [segs]);
   const visited = agg;
 
+  // measure before paint so the draw-in runs at the right width
+  useLayoutEffect(() => {
+    const el = gridRef.current;
+    if (el) setPlotW(Math.max(120, el.clientWidth - RAIL));
+  }, [RAIL]);
   useEffect(() => {
     const el = gridRef.current;
     if (!el) return;
@@ -90,6 +112,16 @@ export function ReadingTrajectory({
     obs.observe(el);
     return () => obs.disconnect();
   }, [RAIL]);
+  // Reveal once we know the page aspect (PDF) or on the next frame. Never
+  // block the line forever if a PDF stalls: fall back after a short wait.
+  useEffect(() => {
+    if (isPdf && aspect == null) {
+      const id = setTimeout(() => setReady(true), 1500);
+      return () => clearTimeout(id);
+    }
+    const id = requestAnimationFrame(() => setReady(true));
+    return () => cancelAnimationFrame(id);
+  }, [isPdf, aspect]);
 
   const x = (ms: number) => (ms / T) * plotW;
   const yRow = (p: number) => (p - 1) * ROW + ROW / 2;
@@ -104,6 +136,7 @@ export function ReadingTrajectory({
     const s = Math.round(ms / 1000);
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
   };
+  const delay = (i: number) => (0.12 + i * 0.035).toFixed(3);
 
   const seenBefore = new Set<number>();
   const drawn = placed.map((s, i) => {
@@ -112,9 +145,11 @@ export function ReadingTrajectory({
     const prev = placed[i - 1];
     const back = prev && s.p < prev.p;
     const width = 3 + Math.sqrt(s.d / 1000) * 1.6;
-    return { s, i, repeat, prev, back, width };
+    const len = Math.max(1, Math.abs(x(s.x1) - x(s.x0)));
+    return { s, i, repeat, prev, back, width, len };
   });
   const last = placed[placed.length - 1];
+  const animate = ready && !reduce;
 
   const grid = (
     <div
@@ -145,44 +180,43 @@ export function ReadingTrajectory({
               >
                 {p}
               </span>
-              <div style={{ width: thumb.w, height: thumb.h }}>
-                <div
-                  className="overflow-hidden rounded-sm border transition-transform duration-150"
-                  style={{
-                    width: thumb.w,
-                    height: thumb.h,
-                    transform: active ? "scale(2.2)" : "scale(1)",
-                    transformOrigin: "left center",
-                    zIndex: active ? 20 : 1,
-                    position: "relative",
-                    boxShadow: active ? "0 6px 22px rgba(0,0,0,.3)" : "none",
-                    opacity: v ? 1 : 0.45,
-                    background: "var(--card)",
-                  }}
-                >
-                  {v && isPdf ? (
-                    <Page
-                      pageNumber={p}
-                      width={thumb.w}
-                      renderTextLayer={false}
-                      renderAnnotationLayer={false}
-                      onLoadSuccess={(pg) => {
-                        if (aspect == null && pg.originalWidth && pg.originalHeight)
-                          setAspect(pg.originalWidth / pg.originalHeight);
-                      }}
-                      loading={
-                        <div style={{ width: thumb.w, height: thumb.h }} />
-                      }
-                    />
-                  ) : (
-                    <div
-                      className="flex h-full items-center justify-center font-mono text-[9px]"
-                      style={{ width: thumb.w, color: "var(--muted-foreground)" }}
-                    >
-                      {p}
-                    </div>
-                  )}
-                </div>
+              <div
+                className="overflow-hidden rounded-sm border transition-shadow"
+                style={{
+                  width: thumb.w,
+                  height: thumb.h,
+                  opacity: v ? 1 : 0.4,
+                  background: "var(--card)",
+                  borderColor: active ? "var(--primary)" : undefined,
+                  boxShadow: active
+                    ? "0 0 0 1px var(--primary)"
+                    : undefined,
+                }}
+              >
+                {v && isPdf ? (
+                  <Page
+                    pageNumber={p}
+                    width={thumb.w}
+                    renderTextLayer={false}
+                    renderAnnotationLayer={false}
+                    onLoadSuccess={(pg) => {
+                      if (
+                        aspect == null &&
+                        pg.originalWidth &&
+                        pg.originalHeight
+                      )
+                        setAspect(pg.originalWidth / pg.originalHeight);
+                    }}
+                    loading={<div style={{ width: thumb.w, height: thumb.h }} />}
+                  />
+                ) : (
+                  <div
+                    className="flex h-full items-center justify-center font-mono text-[9px]"
+                    style={{ width: thumb.w, color: "var(--muted-foreground)" }}
+                  >
+                    {p}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -205,68 +239,88 @@ export function ReadingTrajectory({
             style={{ stroke: "var(--border)", strokeWidth: 1, opacity: 0.5 }}
           />
         ))}
-        {drawn.map(({ s, i, prev, back }) =>
-          prev ? (
-            <line
-              key={`c${i}`}
-              x1={x(prev.x1)}
-              y1={yRow(prev.p)}
-              x2={x(s.x0)}
-              y2={yRow(s.p)}
-              style={{
-                stroke: back ? "var(--chart-4)" : "var(--muted-foreground)",
-                strokeWidth: back ? 1.6 : 1.3,
-                opacity: back ? 0.9 : 0.5,
-                strokeDasharray: back ? "3 3" : undefined,
-              }}
-            />
-          ) : null
-        )}
-        {drawn.map(({ s, i, width, repeat }) => {
-          const active = hover === s.p;
-          return (
-            <g key={`s${i}`}>
+        {ready &&
+          drawn.map(({ s, i, prev, back }) =>
+            prev ? (
               <line
-                x1={x(s.x0)}
-                y1={yRow(s.p)}
-                x2={x(s.x1)}
+                key={`c${i}`}
+                x1={x(prev.x1)}
+                y1={yRow(prev.p)}
+                x2={x(s.x0)}
                 y2={yRow(s.p)}
-                strokeLinecap="round"
                 style={{
-                  stroke: "var(--primary)",
-                  strokeWidth: width,
-                  filter: active
-                    ? "drop-shadow(0 0 5px color-mix(in oklab, var(--primary) 60%, transparent))"
+                  stroke: back ? "var(--chart-4)" : "var(--muted-foreground)",
+                  strokeWidth: back ? 1.6 : 1.3,
+                  opacity: back ? 0.9 : 0.5,
+                  strokeDasharray: back ? "3 3" : undefined,
+                  animation: animate
+                    ? `traj-fade .35s ease ${delay(i)}s both`
                     : undefined,
                 }}
               />
-              <circle
-                cx={x(s.x0)}
-                cy={yRow(s.p)}
-                r={active ? 5 : 3}
-                style={{
-                  fill: "var(--card)",
-                  stroke: repeat ? "var(--chart-4)" : "var(--primary)",
-                  strokeWidth: 1.6,
-                }}
-              />
-            </g>
-          );
-        })}
-        {last && (
+            ) : null
+          )}
+        {ready &&
+          drawn.map(({ s, i, width, repeat, len }) => {
+            const active = hover === s.p;
+            return (
+              <g key={`s${i}`}>
+                <line
+                  x1={x(s.x0)}
+                  y1={yRow(s.p)}
+                  x2={x(s.x1)}
+                  y2={yRow(s.p)}
+                  strokeLinecap="round"
+                  style={{
+                    stroke: "var(--primary)",
+                    strokeWidth: width,
+                    strokeDasharray: animate ? len : undefined,
+                    strokeDashoffset: animate ? len : undefined,
+                    animation: animate
+                      ? `traj-draw .5s ease ${delay(i)}s forwards`
+                      : undefined,
+                    filter: active
+                      ? "drop-shadow(0 0 5px color-mix(in oklab, var(--primary) 60%, transparent))"
+                      : undefined,
+                  }}
+                />
+                <circle
+                  cx={x(s.x0)}
+                  cy={yRow(s.p)}
+                  r={active ? 5 : 3}
+                  style={{
+                    fill: "var(--card)",
+                    stroke: repeat ? "var(--chart-4)" : "var(--primary)",
+                    strokeWidth: 1.6,
+                    animation: animate
+                      ? `traj-fade .3s ease ${delay(i)}s both`
+                      : undefined,
+                  }}
+                />
+              </g>
+            );
+          })}
+        {ready && last && (
           <circle
             cx={x(last.x1)}
             cy={yRow(last.p)}
             r={6}
-            style={{ fill: "none", stroke: "var(--chart-4)", strokeWidth: 1.6 }}
+            style={{
+              fill: "none",
+              stroke: "var(--chart-4)",
+              strokeWidth: 1.6,
+              animation: animate
+                ? `traj-fade .4s ease ${delay(drawn.length)}s both`
+                : undefined,
+            }}
           />
         )}
-        {drawn.map(({ s, i }) => (
+        {drawn.map(({ s, i, len }) => (
           <line
             key={`h${i}`}
             x1={x(s.x0)}
             y1={yRow(s.p)}
-            x2={Math.max(x(s.x1), x(s.x0) + 6)}
+            x2={x(s.x0) + Math.max(len, 6)}
             y2={yRow(s.p)}
             stroke="transparent"
             strokeWidth={ROW}
@@ -276,22 +330,56 @@ export function ReadingTrajectory({
         ))}
       </svg>
 
+      {/* high-res hover preview */}
       {hover != null && visited.get(hover) && (
         <div
-          className="pointer-events-none absolute z-30 rounded-md border bg-card px-2.5 py-1.5 text-xs shadow-lg"
-          style={{ left: RAIL + thumb.w + 14, top: Math.max(0, yRow(hover) - 22) }}
+          className="pointer-events-none absolute z-40 rounded-lg border bg-card p-2 shadow-xl"
+          style={{
+            left: Math.min(RAIL + thumb.w + 16, RAIL + plotW - preview.w - 24),
+            top: Math.min(
+              Math.max(yRow(hover) - preview.h / 2 - 12, 2),
+              Math.max(totalH - preview.h - 52, 2)
+            ),
+            animation: reduce ? undefined : "traj-pop .14s ease both",
+          }}
         >
-          <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-            Page {hover}
-          </span>
-          <div className="mt-0.5 font-mono tabular-nums text-primary">
-            {fmt(visited.get(hover)!.dwell)}
-            {visited.get(hover)!.visits > 1 && (
-              <span style={{ color: "var(--chart-4)" }}>
-                {" "}
-                · {visited.get(hover)!.visits} visits
-              </span>
+          <div
+            className="overflow-hidden rounded border bg-card"
+            style={{ width: preview.w, height: preview.h }}
+          >
+            {isPdf ? (
+              <Page
+                key={hover}
+                pageNumber={hover}
+                width={preview.w}
+                renderTextLayer={false}
+                renderAnnotationLayer={false}
+                loading={
+                  <div style={{ width: preview.w, height: preview.h }} />
+                }
+              />
+            ) : (
+              <div
+                className="flex h-full items-center justify-center font-mono text-lg text-muted-foreground"
+                style={{ width: preview.w }}
+              >
+                {hover}
+              </div>
             )}
+          </div>
+          <div className="mt-1.5 flex items-baseline justify-between gap-3 px-0.5">
+            <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+              Page {hover}
+            </span>
+            <span className="font-mono text-sm tabular-nums text-primary">
+              {fmt(visited.get(hover)!.dwell)}
+              {visited.get(hover)!.visits > 1 && (
+                <span style={{ color: "var(--chart-4)" }}>
+                  {" "}
+                  · {visited.get(hover)!.visits}×
+                </span>
+              )}
+            </span>
           </div>
         </div>
       )}
