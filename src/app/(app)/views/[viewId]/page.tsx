@@ -7,6 +7,8 @@ import { Stat } from "@/components/shell/stat";
 import { PageDwell } from "@/components/analytics/page-dwell";
 import { MouseHeatmap } from "@/components/analytics/mouse-heatmap";
 import { PageHeatmapGridLazy } from "@/components/analytics/page-heatmap-lazy";
+import { ReadingTrajectoryLazy } from "@/components/analytics/reading-trajectory-lazy";
+import type { TrailSeg } from "@/components/analytics/reading-trajectory";
 import { ImageHeatmap } from "@/components/analytics/image-heatmap";
 import { ContentHeatmap } from "@/components/analytics/content-heatmap";
 import { linkUrl } from "@/lib/link-helpers";
@@ -64,6 +66,26 @@ export default async function ViewDetailPage({
   const canRenderContent =
     (view.document?.type === "DOCX" || view.document?.type === "TEXT") &&
     !!viewedVersionId;
+
+  // Ordered page trail (new views only) drives the reading trajectory.
+  const trailData = (
+    Array.isArray(view.pageTrail)
+      ? (view.pageTrail as unknown as TrailSeg[])
+      : []
+  ).filter(
+    (s) =>
+      s &&
+      typeof s.p === "number" &&
+      typeof s.t === "number" &&
+      typeof s.d === "number"
+  );
+  const pageCount =
+    view.document?.currentVersion?.numPages ??
+    Math.max(
+      1,
+      ...view.pageViews.map((p) => p.pageNumber),
+      ...trailData.map((s) => s.p)
+    );
 
   return (
     <div>
@@ -126,7 +148,26 @@ export default async function ViewDetailPage({
           <Stat label="Downloaded" value={view.downloadedAt ? "Yes" : "No"} />
         </div>
 
-        {view.pageViews.length > 0 && (
+        {trailData.length > 0 ? (
+          <section className="rounded-lg border bg-card p-5">
+            <h2 className="mb-1 font-display text-xl">Reading trajectory</h2>
+            <p className="mb-5 text-sm text-muted-foreground">
+              How this visitor moved through the document over time. Flat runs
+              are dwell; a step back to an earlier page is a re-read. Hover a
+              page for its thumbnail and time.
+            </p>
+            <ReadingTrajectoryLazy
+              trail={trailData}
+              numPages={pageCount}
+              isPdf={view.document?.type === "PDF"}
+              fileUrl={
+                canRenderPages
+                  ? `/api/documents/file/${viewedVersionId}`
+                  : null
+              }
+            />
+          </section>
+        ) : view.pageViews.length > 0 ? (
           <section className="max-w-2xl rounded-lg border bg-card p-5">
             <h2 className="mb-4 font-display text-xl">Time on each page</h2>
             <PageDwell
@@ -137,7 +178,7 @@ export default async function ViewDetailPage({
               }))}
             />
           </section>
-        )}
+        ) : null}
 
         {heatPages.length > 0 && (
           <section>
