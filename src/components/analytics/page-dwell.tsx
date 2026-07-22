@@ -31,6 +31,24 @@ export function PageDwell({
     return () => cancelAnimationFrame(id);
   }, []);
 
+  const hasThumbs = isPdf && !!versionId;
+  const firstThumbPage = pages[0]?.pageNumber ?? null;
+  // Measure page aspect from a thumbnail via a fresh Image (onload set before
+  // src) so it fires even when the image is served from cache on a soft
+  // refresh, where an <img>'s onLoad may not.
+  useEffect(() => {
+    if (!hasThumbs || aspect != null || firstThumbPage == null) return;
+    const img = new Image();
+    img.onload = () => {
+      if (img.naturalWidth && img.naturalHeight)
+        setAspect(img.naturalWidth / img.naturalHeight);
+    };
+    img.src = `/api/view/thumb/${versionId}/${firstThumbPage}`;
+    return () => {
+      img.onload = null;
+    };
+  }, [hasThumbs, aspect, versionId, firstThumbPage]);
+
   if (pages.length === 0)
     return (
       <p className="px-1 py-6 text-sm text-muted-foreground">
@@ -40,7 +58,6 @@ export function PageDwell({
 
   const max = Math.max(...pages.map((p) => p.avgSeconds), 1);
   const topPage = pages.reduce((a, b) => (b.avgSeconds > a.avgSeconds ? b : a));
-  const hasThumbs = isPdf && !!versionId;
   const A = aspect ?? 8.5 / 11; // US Letter portrait until the first loads
   const H = 54;
   const W = Math.round(H * A);
@@ -76,11 +93,6 @@ export function PageDwell({
                     height: H,
                     objectFit: "cover",
                     display: "block",
-                  }}
-                  onLoad={(e) => {
-                    const im = e.currentTarget;
-                    if (aspect == null && im.naturalWidth && im.naturalHeight)
-                      setAspect(im.naturalWidth / im.naturalHeight);
                   }}
                 />
               ) : (

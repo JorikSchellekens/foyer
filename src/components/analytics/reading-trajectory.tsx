@@ -116,6 +116,10 @@ export function ReadingTrajectory({
     return m;
   }, [segs]);
   const visited = agg;
+  const firstThumbPage = useMemo(() => {
+    const ks = [...agg.keys()].sort((a, b) => a - b);
+    return ks.length ? ks[0] : null;
+  }, [agg]);
 
   // measure before paint so the draw-in runs at the right width
   useLayoutEffect(() => {
@@ -141,6 +145,21 @@ export function ReadingTrajectory({
     const id = requestAnimationFrame(() => setReady(true));
     return () => cancelAnimationFrame(id);
   }, [hasThumbs, aspect]);
+  // Measure the page aspect from a thumbnail. A fresh Image with onload set
+  // before src fires reliably even when the browser serves the image from
+  // cache, where an <img>'s onLoad may not fire on a soft refresh.
+  useEffect(() => {
+    if (!hasThumbs || aspect != null || firstThumbPage == null) return;
+    const img = new Image();
+    img.onload = () => {
+      if (img.naturalWidth && img.naturalHeight)
+        setAspect(img.naturalWidth / img.naturalHeight);
+    };
+    img.src = `/api/view/thumb/${versionId}/${firstThumbPage}`;
+    return () => {
+      img.onload = null;
+    };
+  }, [hasThumbs, aspect, versionId, firstThumbPage]);
 
   const x = (ms: number) => (ms / T) * plotW;
   const yRow = (p: number) => (p - 1) * ROW + ROW / 2;
@@ -244,11 +263,6 @@ export function ReadingTrajectory({
                       height: thumb.h,
                       objectFit: "cover",
                       display: "block",
-                    }}
-                    onLoad={(e) => {
-                      const im = e.currentTarget;
-                      if (aspect == null && im.naturalWidth && im.naturalHeight)
-                        setAspect(im.naturalWidth / im.naturalHeight);
                     }}
                     onError={() =>
                       setFailed((prev) => new Set(prev).add(p))
