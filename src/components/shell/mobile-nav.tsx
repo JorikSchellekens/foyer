@@ -15,6 +15,7 @@ import {
 import { initials } from "@/lib/format";
 import { switchTeam } from "@/app/(app)/actions";
 import { FoyerLogo } from "@/components/brand/logo";
+import { ThemeToggle } from "@/components/shell/theme-toggle";
 import { NAV } from "./sidebar";
 
 export function MobileNav({
@@ -133,6 +134,7 @@ export function MobileNav({
       <span className="ml-auto truncate text-xs text-muted-foreground">
         {active.name}
       </span>
+      <ThemeToggle className="rounded-md p-1.5 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground" />
     </header>
   );
 }

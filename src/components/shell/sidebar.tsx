@@ -27,6 +27,7 @@ import { initials } from "@/lib/format";
 import { switchTeam } from "@/app/(app)/actions";
 import { FoyerLogo } from "@/components/brand/logo";
 import { NotificationBell } from "@/components/shell/notification-bell";
+import { ThemeToggle } from "@/components/shell/theme-toggle";
 
 export const NAV = [
   { href: "/dashboard", label: "Overview", icon: LayoutGrid },
@@ -136,15 +137,18 @@ export function Sidebar({
           <span className="truncate text-xs text-muted-foreground">
             {userEmail}
           </span>
-          <form action="/api/auth/logout" method="post">
-            <button
-              type="submit"
-              title="Sign out"
-              className="rounded p-1 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
-            >
-              <LogOut className="size-3.5" />
-            </button>
-          </form>
+          <div className="flex items-center gap-0.5">
+            <ThemeToggle />
+            <form action="/api/auth/logout" method="post">
+              <button
+                type="submit"
+                title="Sign out"
+                className="rounded p-1 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+              >
+                <LogOut className="size-3.5" />
+              </button>
+            </form>
+          </div>
         </div>
       </div>
     </aside>
