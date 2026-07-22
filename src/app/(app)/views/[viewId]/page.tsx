@@ -160,11 +160,7 @@ export default async function ViewDetailPage({
               trail={trailData}
               numPages={pageCount}
               isPdf={view.document?.type === "PDF"}
-              fileUrl={
-                canRenderPages
-                  ? `/api/documents/file/${viewedVersionId}`
-                  : null
-              }
+              versionId={viewedVersionId}
             />
           </section>
         ) : view.pageViews.length > 0 ? (

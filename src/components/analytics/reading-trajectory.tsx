@@ -7,13 +7,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { Document, Page, pdfjs } from "react-pdf";
-import { Loader2 } from "lucide-react";
-
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  "pdfjs-dist/build/pdf.worker.min.mjs",
-  import.meta.url
-).toString();
 
 export type TrailSeg = { p: number; t: number; d: number }; // page, enterMs, durMs
 
@@ -54,12 +47,12 @@ function placeCard(
 export function ReadingTrajectory({
   trail,
   numPages,
-  fileUrl,
+  versionId,
   isPdf,
 }: {
   trail: TrailSeg[];
   numPages: number;
-  fileUrl?: string | null;
+  versionId?: string | null;
   isPdf: boolean;
 }) {
   const gridRef = useRef<HTMLDivElement>(null);
@@ -69,6 +62,11 @@ export function ReadingTrajectory({
   const [hover, setHover] = useState<number | null>(null);
   const [aspect, setAspect] = useState<number | null>(null); // page w/h
   const [ready, setReady] = useState(false); // gate the draw-in until measured
+  const [failed, setFailed] = useState<Set<number>>(new Set());
+
+  // precomputed page thumbnails, served as plain images
+  const hasThumbs = isPdf && !!versionId;
+  const thumbUrl = (p: number) => `/api/view/thumb/${versionId}/${p}`;
 
   const reduce = useMemo(
     () =>
@@ -136,13 +134,13 @@ export function ReadingTrajectory({
   // Reveal once we know the page aspect (PDF) or on the next frame. Never
   // block the line forever if a PDF stalls: fall back after a short wait.
   useEffect(() => {
-    if (isPdf && aspect == null) {
+    if (hasThumbs && aspect == null) {
       const id = setTimeout(() => setReady(true), 1500);
       return () => clearTimeout(id);
     }
     const id = requestAnimationFrame(() => setReady(true));
     return () => cancelAnimationFrame(id);
-  }, [isPdf, aspect]);
+  }, [hasThumbs, aspect]);
 
   const x = (ms: number) => (ms / T) * plotW;
   const yRow = (p: number) => (p - 1) * ROW + ROW / 2;
@@ -234,21 +232,27 @@ export function ReadingTrajectory({
                     : undefined,
                 }}
               >
-                {v && isPdf ? (
-                  <Page
-                    pageNumber={p}
+                {v && hasThumbs && !failed.has(p) ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={thumbUrl(p)}
+                    alt=""
                     width={thumb.w}
-                    renderTextLayer={false}
-                    renderAnnotationLayer={false}
-                    onLoadSuccess={(pg) => {
-                      if (
-                        aspect == null &&
-                        pg.originalWidth &&
-                        pg.originalHeight
-                      )
-                        setAspect(pg.originalWidth / pg.originalHeight);
+                    height={thumb.h}
+                    style={{
+                      width: thumb.w,
+                      height: thumb.h,
+                      objectFit: "cover",
+                      display: "block",
                     }}
-                    loading={<div style={{ width: thumb.w, height: thumb.h }} />}
+                    onLoad={(e) => {
+                      const im = e.currentTarget;
+                      if (aspect == null && im.naturalWidth && im.naturalHeight)
+                        setAspect(im.naturalWidth / im.naturalHeight);
+                    }}
+                    onError={() =>
+                      setFailed((prev) => new Set(prev).add(p))
+                    }
                   />
                 ) : (
                   <div
@@ -385,16 +389,20 @@ export function ReadingTrajectory({
             className="overflow-hidden rounded border bg-card"
             style={{ width: preview.w, height: preview.h }}
           >
-            {isPdf ? (
-              <Page
-                key={hover}
-                pageNumber={hover}
+            {hasThumbs && !failed.has(hover) ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={thumbUrl(hover)}
+                alt=""
                 width={preview.w}
-                renderTextLayer={false}
-                renderAnnotationLayer={false}
-                loading={
-                  <div style={{ width: preview.w, height: preview.h }} />
-                }
+                height={preview.h}
+                style={{
+                  width: preview.w,
+                  height: preview.h,
+                  objectFit: "cover",
+                  display: "block",
+                }}
+                onError={() => setFailed((prev) => new Set(prev).add(hover))}
               />
             ) : (
               <div
@@ -446,7 +454,7 @@ export function ReadingTrajectory({
     </div>
   );
 
-  const body = (
+  return (
     <>
       {grid}
       {axis}
@@ -457,21 +465,4 @@ export function ReadingTrajectory({
       )}
     </>
   );
-
-  if (isPdf && fileUrl) {
-    return (
-      <Document
-        file={fileUrl}
-        loading={
-          <div className="flex items-center gap-2 py-12 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" /> Rendering pages&hellip;
-          </div>
-        }
-        error={<>{body}</>}
-      >
-        {body}
-      </Document>
-    );
-  }
-  return body;
 }
