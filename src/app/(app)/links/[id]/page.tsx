@@ -32,7 +32,7 @@ export default async function LinkAnalyticsPage({
     where: { id, teamId: ctx.team.id },
     include: {
       domain: true,
-      document: true,
+      document: { include: { currentVersion: true } },
       dataroom: true,
       views: {
         where: extFilter,
@@ -150,7 +150,11 @@ export default async function LinkAnalyticsPage({
         {pages.length > 0 && (
           <section className="max-w-2xl rounded-lg border bg-card p-5">
             <h2 className="mb-4 font-display text-xl">Reading time by page</h2>
-            <PageDwell pages={pages} />
+            <PageDwell
+              pages={pages}
+              versionId={link.document?.currentVersion?.id}
+              isPdf={link.document?.type === "PDF"}
+            />
           </section>
         )}
 

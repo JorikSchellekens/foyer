@@ -211,7 +211,11 @@ export default async function DocumentPage({
           <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <div className="rounded-lg border bg-card p-5">
               <h2 className="mb-4 font-display text-xl">Reading time by page</h2>
-              <PageDwell pages={pages} />
+              <PageDwell
+                pages={pages}
+                versionId={doc.currentVersion?.id}
+                isPdf={doc.type === "PDF"}
+              />
             </div>
             <div className="rounded-lg border bg-card p-5">
               <h2 className="mb-4 font-display text-xl">Version history</h2>

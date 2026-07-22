@@ -172,6 +172,8 @@ export default async function ViewDetailPage({
                 avgSeconds: p.duration,
                 views: 1,
               }))}
+              versionId={viewedVersionId}
+              isPdf={view.document?.type === "PDF"}
             />
           </section>
         ) : null}
