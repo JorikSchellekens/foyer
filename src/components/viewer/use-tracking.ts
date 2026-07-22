@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef } from "react";
 
 type MouseSample = [number, number, number]; // [tMs, xPct, yPct]
+type TrailSeg = { p: number; t: number; d: number }; // page, enterMs, durationMs
 
 /**
  * Viewer-side telemetry: active seconds, per-page dwell, sampled mouse paths.
@@ -31,16 +32,30 @@ export function useTracking({
   const dwellRef = useRef<Map<number, number>>(new Map());
   const mouseRef = useRef<Map<number, MouseSample[]>>(new Map());
   const startRef = useRef(Date.now());
+  const pageEnterRef = useRef(Date.now());
+  const trailRef = useRef<TrailSeg[]>([]);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const setPage = useCallback((page: number) => {
     // bank dwell on the page we are leaving
     const now = Date.now();
+    const prev = pageRef.current;
     if (document.visibilityState === "visible") {
-      const prev = pageRef.current;
       const secs = (now - lastBeatRef.current) / 1000;
       dwellRef.current.set(prev, (dwellRef.current.get(prev) ?? 0) + secs);
       lastBeatRef.current = now;
+    }
+    // close the ordered trajectory segment for the page being left
+    if (page !== prev) {
+      const dur = now - pageEnterRef.current;
+      if (dur > 200 && trailRef.current.length < 800) {
+        trailRef.current.push({
+          p: prev,
+          t: Math.round(pageEnterRef.current - startRef.current),
+          d: Math.round(dur),
+        });
+      }
+      pageEnterRef.current = now;
     }
     pageRef.current = page;
     maxPageRef.current = Math.max(maxPageRef.current, page);
@@ -73,6 +88,17 @@ export function useTracking({
       dwellRef.current = new Map();
       mouseRef.current = new Map();
 
+      // Full ordered trail, resent each beacon (server overwrites): completed
+      // segments plus the still-open current page closed at now.
+      const trail = [
+        ...trailRef.current,
+        {
+          p: pageRef.current,
+          t: Math.round(pageEnterRef.current - startRef.current),
+          d: Math.round(now - pageEnterRef.current),
+        },
+      ].slice(0, 800);
+
       const body = JSON.stringify({
         token,
         viewId,
@@ -84,6 +110,7 @@ export function useTracking({
           : undefined,
         dwell,
         mouse,
+        pageTrail: trail,
       });
 
       if (useBeacon && navigator.sendBeacon) {

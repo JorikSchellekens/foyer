@@ -399,6 +399,9 @@ model View {
   lastActiveAt  DateTime  @default(now())
   totalDuration Int       @default(0) // seconds
   completedPct  Int       @default(0)
+  // Ordered page-visit segments for the reading trajectory:
+  // [{ p: pageNumber, t: enterMsOffset, d: durationMs }, ...]
+  pageTrail     Json?
   downloadedAt  DateTime?
   ip            String?
   country       String?

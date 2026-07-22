@@ -33,6 +33,17 @@ const bodySchema = z.object({
     )
     .max(50)
     .optional(),
+  // ordered page-visit segments: { p: page, t: enterMs, d: durationMs }
+  pageTrail: z
+    .array(
+      z.object({
+        p: z.number().int().min(1).max(10_000),
+        t: z.number().min(0),
+        d: z.number().min(0),
+      })
+    )
+    .max(800)
+    .optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -76,6 +87,10 @@ export async function POST(req: NextRequest) {
         : {}),
       ...(body.downloaded && !view.downloadedAt
         ? { downloadedAt: new Date() }
+        : {}),
+      // Full trail resent each beacon; overwrite (never regresses client-side).
+      ...(body.pageTrail && body.pageTrail.length
+        ? { pageTrail: body.pageTrail }
         : {}),
     },
   });
