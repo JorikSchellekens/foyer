@@ -25,6 +25,25 @@ function fit(a: number, maxW: number, maxH: number) {
   return { w: Math.round(maxH * a), h: maxH };
 }
 
+// Place the hover card near the cursor (offset up-right, flipped at edges).
+function placeCard(
+  el: HTMLElement,
+  m: { x: number; y: number },
+  gw: number,
+  gh: number
+) {
+  const w = el.offsetWidth;
+  const h = el.offsetHeight;
+  let left = m.x + 18;
+  if (left + w > gw) left = m.x - w - 18;
+  left = Math.max(0, Math.min(left, Math.max(0, gw - w)));
+  let top = m.y - h - 12;
+  if (top < 0) top = m.y + 20;
+  top = Math.max(0, Math.min(top, Math.max(0, gh - h)));
+  el.style.left = `${left}px`;
+  el.style.top = `${top}px`;
+}
+
 /**
  * The reading trajectory: page (rows) against cumulative reading time (x).
  * Dwell segments are packed contiguously, so the line has no idle gaps and
@@ -44,6 +63,8 @@ export function ReadingTrajectory({
   isPdf: boolean;
 }) {
   const gridRef = useRef<HTMLDivElement>(null);
+  const peekRef = useRef<HTMLDivElement>(null);
+  const mouseRef = useRef({ x: 0, y: 0 });
   const [plotW, setPlotW] = useState(640);
   const [hover, setHover] = useState<number | null>(null);
   const [aspect, setAspect] = useState<number | null>(null); // page w/h
@@ -127,6 +148,12 @@ export function ReadingTrajectory({
   const yRow = (p: number) => (p - 1) * ROW + ROW / 2;
   const totalH = pages.length * ROW;
 
+  // place the card at the cursor when it appears / when layout changes
+  useLayoutEffect(() => {
+    if (hover != null && peekRef.current)
+      placeCard(peekRef.current, mouseRef.current, RAIL + plotW, totalH);
+  }, [hover, RAIL, plotW, totalH]);
+
   const fmt = (ms: number) => {
     const s = Math.round(ms / 1000);
     const m = Math.floor(s / 60);
@@ -151,11 +178,22 @@ export function ReadingTrajectory({
   const last = placed[placed.length - 1];
   const animate = ready && !reduce;
 
+  // the hover card follows the cursor; positioned in a handler / layout effect
+  // (never during render) so the SVG doesn't re-render on every mouse move
+  const track = (e: React.MouseEvent) => {
+    const rect = gridRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    mouseRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    if (peekRef.current)
+      placeCard(peekRef.current, mouseRef.current, RAIL + plotW, totalH);
+  };
+
   const grid = (
     <div
       ref={gridRef}
       className="relative"
       style={{ height: totalH }}
+      onMouseMove={track}
       onMouseLeave={() => setHover(null)}
     >
       {pages.map((p) => {
@@ -166,7 +204,10 @@ export function ReadingTrajectory({
             key={p}
             className="absolute inset-x-0 flex items-center"
             style={{ top: (p - 1) * ROW, height: ROW }}
-            onMouseEnter={() => setHover(p)}
+            onMouseEnter={(e) => {
+              track(e);
+              setHover(p);
+            }}
           >
             <div
               className="flex shrink-0 items-center gap-1.5"
@@ -325,23 +366,20 @@ export function ReadingTrajectory({
             stroke="transparent"
             strokeWidth={ROW}
             className="pointer-events-auto cursor-pointer"
-            onMouseEnter={() => setHover(s.p)}
+            onMouseEnter={(e) => {
+              track(e);
+              setHover(s.p);
+            }}
           />
         ))}
       </svg>
 
-      {/* high-res hover preview */}
+      {/* high-res hover preview, follows the cursor */}
       {hover != null && visited.get(hover) && (
         <div
-          className="pointer-events-none absolute z-40 rounded-lg border bg-card p-2 shadow-xl"
-          style={{
-            left: Math.min(RAIL + thumb.w + 16, RAIL + plotW - preview.w - 24),
-            top: Math.min(
-              Math.max(yRow(hover) - preview.h / 2 - 12, 2),
-              Math.max(totalH - preview.h - 52, 2)
-            ),
-            animation: reduce ? undefined : "traj-pop .14s ease both",
-          }}
+          ref={peekRef}
+          className="pointer-events-none absolute left-0 top-0 z-40 rounded-lg border bg-card p-2 shadow-xl"
+          style={{ animation: reduce ? undefined : "traj-pop .14s ease both" }}
         >
           <div
             className="overflow-hidden rounded border bg-card"
