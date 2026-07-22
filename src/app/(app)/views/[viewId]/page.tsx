@@ -152,9 +152,9 @@ export default async function ViewDetailPage({
           <section className="rounded-lg border bg-card p-5">
             <h2 className="mb-1 font-display text-xl">Reading trajectory</h2>
             <p className="mb-5 text-sm text-muted-foreground">
-              How this visitor moved through the document over time. Flat runs
-              are dwell; a step back to an earlier page is a re-read. Hover a
-              page for its thumbnail and time.
+              The path this visitor took through the document, laid out by
+              reading time. Longer flat runs are longer dwell; a step back to an
+              earlier page is a re-read. Hover a page for its thumbnail and time.
             </p>
             <ReadingTrajectoryLazy
               trail={trailData}

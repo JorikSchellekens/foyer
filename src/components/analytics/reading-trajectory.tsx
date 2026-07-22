@@ -11,12 +11,17 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 
 export type TrailSeg = { p: number; t: number; d: number }; // page, enterMs, durMs
 
+// Fit a page of aspect A (= w/h) into a maxW x maxH box, preserving shape.
+function fit(a: number, maxW: number, maxH: number) {
+  if (a >= maxW / maxH) return { w: maxW, h: Math.round(maxW / a) };
+  return { w: Math.round(maxH * a), h: maxH };
+}
+
 /**
- * The reading trajectory: page (rows) against time-in-session (x). Flat runs
- * are dwell; the line stepping to a lower page is a backtrack / re-read. Each
- * page carries a thumbnail of the real page so "page 4" reads as what it was.
- * Rows are HTML (thumbnails align for free); the connecting line is a pixel
- * SVG overlay measured to the lane width.
+ * The reading trajectory: page (rows) against cumulative reading time (x).
+ * Dwell segments are packed contiguously, so the line has no idle gaps and
+ * always fills the width; a step to a lower page is a backtrack / re-read.
+ * Each page carries a thumbnail of the real page, sized to its true aspect.
  */
 export function ReadingTrajectory({
   trail,
@@ -29,11 +34,16 @@ export function ReadingTrajectory({
   fileUrl?: string | null;
   isPdf: boolean;
 }) {
-  const RAIL = 56; // left gutter: page number + thumbnail
-  const ROW = 46; // row height, px
   const gridRef = useRef<HTMLDivElement>(null);
   const [plotW, setPlotW] = useState(640);
   const [hover, setHover] = useState<number | null>(null);
+  const [aspect, setAspect] = useState<number | null>(null); // page w/h
+
+  // thumbnail + layout dimensions derived from the real page aspect
+  const A = aspect ?? 8.5 / 11; // US Letter portrait until the first page loads
+  const thumb = fit(A, 48, 44);
+  const ROW = thumb.h + 12;
+  const RAIL = thumb.w + 26; // page number + gaps
 
   const segs = useMemo(
     () => [...trail].filter((s) => s.d >= 0).sort((a, b) => a.t - b.t),
@@ -43,16 +53,22 @@ export function ReadingTrajectory({
     () => segs.reduce((m, s) => Math.max(m, s.p), 1),
     [segs]
   );
-  const T = useMemo(
-    () => Math.max(1, ...segs.map((s) => s.t + s.d)),
-    [segs]
-  );
   const pages = useMemo(
     () => Array.from({ length: maxSeen }, (_, i) => i + 1),
     [maxSeen]
   );
 
-  // per-page aggregates for the rail + hover
+  // pack segments end-to-end by dwell -> cumulative-reading-time x axis
+  const placed = useMemo(() => {
+    const out: (TrailSeg & { x0: number; x1: number })[] = [];
+    segs.reduce((cum, s) => {
+      out.push({ ...s, x0: cum, x1: cum + s.d });
+      return cum + s.d;
+    }, 0);
+    return out;
+  }, [segs]);
+  const T = Math.max(1, placed.length ? placed[placed.length - 1].x1 : 1);
+
   const agg = useMemo(() => {
     const m = new Map<number, { dwell: number; visits: number }>();
     for (const s of segs) {
@@ -64,7 +80,6 @@ export function ReadingTrajectory({
     return m;
   }, [segs]);
   const visited = agg;
-  const lastSeg = segs[segs.length - 1];
 
   useEffect(() => {
     const el = gridRef.current;
@@ -74,7 +89,7 @@ export function ReadingTrajectory({
     );
     obs.observe(el);
     return () => obs.disconnect();
-  }, []);
+  }, [RAIL]);
 
   const x = (ms: number) => (ms / T) * plotW;
   const yRow = (p: number) => (p - 1) * ROW + ROW / 2;
@@ -83,25 +98,23 @@ export function ReadingTrajectory({
   const fmt = (ms: number) => {
     const s = Math.round(ms / 1000);
     const m = Math.floor(s / 60);
-    const r = s % 60;
-    return m > 0 ? `${m}m ${r}s` : `${r}s`;
+    return m > 0 ? `${m}m ${s % 60}s` : `${s}s`;
   };
   const fmtClock = (ms: number) => {
     const s = Math.round(ms / 1000);
-    const m = Math.floor(s / 60);
-    return `${m}:${String(s % 60).padStart(2, "0")}`;
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
   };
 
-  // dwell segments as thick strokes; connectors between them; dots + drop-off
   const seenBefore = new Set<number>();
-  const drawnSegs = segs.map((s, i) => {
+  const drawn = placed.map((s, i) => {
     const repeat = seenBefore.has(s.p);
     seenBefore.add(s.p);
-    const prev = segs[i - 1];
+    const prev = placed[i - 1];
     const back = prev && s.p < prev.p;
     const width = 3 + Math.sqrt(s.d / 1000) * 1.6;
     return { s, i, repeat, prev, back, width };
   });
+  const last = placed[placed.length - 1];
 
   const grid = (
     <div
@@ -110,7 +123,6 @@ export function ReadingTrajectory({
       style={{ height: totalH }}
       onMouseLeave={() => setHover(null)}
     >
-      {/* rows: page number + thumbnail + lane */}
       {pages.map((p) => {
         const v = visited.get(p);
         const active = hover === p;
@@ -127,39 +139,45 @@ export function ReadingTrajectory({
             >
               <span
                 className="w-4 text-right font-mono text-[10px] tabular-nums"
-                style={{ color: v ? "var(--muted-foreground)" : "var(--border)" }}
+                style={{
+                  color: v ? "var(--muted-foreground)" : "var(--border)",
+                }}
               >
                 {p}
               </span>
-              <div
-                className="relative overflow-visible rounded-sm"
-                style={{ width: 30 }}
-              >
+              <div style={{ width: thumb.w, height: thumb.h }}>
                 <div
                   className="overflow-hidden rounded-sm border transition-transform duration-150"
                   style={{
-                    height: ROW - 12,
-                    transform: active ? "scale(2.3)" : "scale(1)",
+                    width: thumb.w,
+                    height: thumb.h,
+                    transform: active ? "scale(2.2)" : "scale(1)",
                     transformOrigin: "left center",
                     zIndex: active ? 20 : 1,
                     position: "relative",
-                    boxShadow: active ? "var(--tw-shadow, 0 6px 20px rgba(0,0,0,.25))" : "none",
-                    opacity: v ? 1 : 0.5,
+                    boxShadow: active ? "0 6px 22px rgba(0,0,0,.3)" : "none",
+                    opacity: v ? 1 : 0.45,
                     background: "var(--card)",
                   }}
                 >
                   {v && isPdf ? (
                     <Page
                       pageNumber={p}
-                      width={30}
+                      width={thumb.w}
                       renderTextLayer={false}
                       renderAnnotationLayer={false}
-                      loading={<div style={{ width: 30, height: ROW - 12 }} />}
+                      onLoadSuccess={(pg) => {
+                        if (aspect == null && pg.originalWidth && pg.originalHeight)
+                          setAspect(pg.originalWidth / pg.originalHeight);
+                      }}
+                      loading={
+                        <div style={{ width: thumb.w, height: thumb.h }} />
+                      }
                     />
                   ) : (
                     <div
                       className="flex h-full items-center justify-center font-mono text-[9px]"
-                      style={{ width: 30, color: "var(--muted-foreground)" }}
+                      style={{ width: thumb.w, color: "var(--muted-foreground)" }}
                     >
                       {p}
                     </div>
@@ -171,14 +189,12 @@ export function ReadingTrajectory({
         );
       })}
 
-      {/* connecting-line overlay, pixel-aligned to the lane */}
       <svg
         className="pointer-events-none absolute top-0"
         style={{ left: RAIL, width: plotW, height: totalH }}
         width={plotW}
         height={totalH}
       >
-        {/* row grid lines */}
         {pages.map((p) => (
           <line
             key={p}
@@ -189,33 +205,31 @@ export function ReadingTrajectory({
             style={{ stroke: "var(--border)", strokeWidth: 1, opacity: 0.5 }}
           />
         ))}
-        {/* connectors */}
-        {drawnSegs.map(({ s, i, prev, back }) =>
+        {drawn.map(({ s, i, prev, back }) =>
           prev ? (
             <line
               key={`c${i}`}
-              x1={x(prev.t + prev.d)}
+              x1={x(prev.x1)}
               y1={yRow(prev.p)}
-              x2={x(s.t)}
+              x2={x(s.x0)}
               y2={yRow(s.p)}
               style={{
                 stroke: back ? "var(--chart-4)" : "var(--muted-foreground)",
                 strokeWidth: back ? 1.6 : 1.3,
-                opacity: back ? 0.9 : 0.45,
+                opacity: back ? 0.9 : 0.5,
                 strokeDasharray: back ? "3 3" : undefined,
               }}
             />
           ) : null
         )}
-        {/* dwell segments */}
-        {drawnSegs.map(({ s, i, width, repeat }) => {
+        {drawn.map(({ s, i, width, repeat }) => {
           const active = hover === s.p;
           return (
             <g key={`s${i}`}>
               <line
-                x1={x(s.t)}
+                x1={x(s.x0)}
                 y1={yRow(s.p)}
-                x2={x(s.t + s.d)}
+                x2={x(s.x1)}
                 y2={yRow(s.p)}
                 strokeLinecap="round"
                 style={{
@@ -227,7 +241,7 @@ export function ReadingTrajectory({
                 }}
               />
               <circle
-                cx={x(s.t)}
+                cx={x(s.x0)}
                 cy={yRow(s.p)}
                 r={active ? 5 : 3}
                 style={{
@@ -239,22 +253,20 @@ export function ReadingTrajectory({
             </g>
           );
         })}
-        {/* drop-off */}
-        {lastSeg && (
+        {last && (
           <circle
-            cx={x(lastSeg.t + lastSeg.d)}
-            cy={yRow(lastSeg.p)}
+            cx={x(last.x1)}
+            cy={yRow(last.p)}
             r={6}
             style={{ fill: "none", stroke: "var(--chart-4)", strokeWidth: 1.6 }}
           />
         )}
-        {/* invisible wide hit-targets per segment for hover */}
-        {drawnSegs.map(({ s, i }) => (
+        {drawn.map(({ s, i }) => (
           <line
             key={`h${i}`}
-            x1={x(s.t)}
+            x1={x(s.x0)}
             y1={yRow(s.p)}
-            x2={x(s.t + s.d)}
+            x2={Math.max(x(s.x1), x(s.x0) + 6)}
             y2={yRow(s.p)}
             stroke="transparent"
             strokeWidth={ROW}
@@ -264,11 +276,10 @@ export function ReadingTrajectory({
         ))}
       </svg>
 
-      {/* hover label */}
       {hover != null && visited.get(hover) && (
         <div
           className="pointer-events-none absolute z-30 rounded-md border bg-card px-2.5 py-1.5 text-xs shadow-lg"
-          style={{ left: RAIL + 8, top: Math.max(0, yRow(hover) - 44) }}
+          style={{ left: RAIL + thumb.w + 14, top: Math.max(0, yRow(hover) - 22) }}
         >
           <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
             Page {hover}
@@ -296,7 +307,11 @@ export function ReadingTrajectory({
           style={{
             left: `${f * 100}%`,
             transform:
-              f === 0 ? "none" : f === 1 ? "translateX(-100%)" : "translateX(-50%)",
+              f === 0
+                ? "none"
+                : f === 1
+                  ? "translateX(-100%)"
+                  : "translateX(-50%)",
           }}
         >
           {fmtClock(T * f)}
@@ -326,16 +341,11 @@ export function ReadingTrajectory({
             <Loader2 className="size-4 animate-spin" /> Rendering pages&hellip;
           </div>
         }
-        error={<TrajectoryFallback body={body} />}
+        error={<>{body}</>}
       >
         {body}
       </Document>
     );
   }
   return body;
-}
-
-function TrajectoryFallback({ body }: { body: React.ReactNode }) {
-  // Page thumbnails could not render; the trajectory itself still stands.
-  return <>{body}</>;
 }
