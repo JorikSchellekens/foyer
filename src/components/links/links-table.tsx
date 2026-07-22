@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
+  BarChart3,
   ExternalLink,
   Eye,
   FileText,
@@ -140,7 +141,12 @@ function LinkRow({
       <TableCell className="font-medium">
         <span className="flex items-center gap-2">
           <LiveDot linkId={row.id} />
-          {row.name}
+          <Link
+            href={`/links/${row.id}`}
+            className="hover:underline hover:decoration-primary/40 hover:underline-offset-4"
+          >
+            {row.name}
+          </Link>
         </span>
       </TableCell>
       <TableCell>
@@ -219,6 +225,11 @@ function LinkRow({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem asChild>
+                <Link href={`/links/${row.id}`}>
+                  <BarChart3 className="size-4" /> View analytics
+                </Link>
+              </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <a
                   href={`/api/links/${row.id}/preview`}
