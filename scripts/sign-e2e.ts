@@ -344,6 +344,45 @@ async function main() {
     `pages=${finalPdf.getPageCount()}`
   );
 
+  // ---- signed-documents portal ----
+  {
+    // Entry 1: a browser that used a signing token has a portal session.
+    const b2 = await chromium.launch();
+    const p2 = await (await b2.newContext()).newPage();
+    await p2.goto(linkFor(s1.token));
+    await p2.goto(`${BASE}/signed`);
+    await p2.waitForSelector("text=Your documents");
+    check(
+      "portal auto-session lists request",
+      (await p2.locator("text=Consulting Agreement").count()) > 0
+    );
+    const dl = await p2.request.get(
+      `${BASE}/api/sign/completed/${requestId}?download=1`
+    );
+    check("portal session downloads completed PDF", dl.ok());
+    await b2.close();
+
+    // Entry 2: fresh browser, magic-link recovery path.
+    const mark2 = logMark();
+    const b3 = await chromium.launch();
+    const p3 = await (await b3.newContext()).newPage();
+    await p3.goto(`${BASE}/signed`);
+    await p3.fill('input[type="email"]', "signer-one@example.com");
+    await p3.click('button:has-text("Send link")');
+    const [plink] = await waitForLinks(
+      /\[email:dev\] link: (\S+\/signed\/t\/\S+)/g,
+      1,
+      mark2
+    );
+    await p3.goto(plink);
+    await p3.waitForSelector("text=Your documents");
+    check(
+      "portal magic link lists request",
+      (await p3.locator("text=Consulting Agreement").count()) > 0
+    );
+    await b3.close();
+  }
+
   // ---- upload-first entry: PNG uploaded on /signatures, rendered to PDF ----
   const sharp = (await import("sharp")).default;
   const pngBytes = await sharp({

@@ -27,6 +27,7 @@ enum TokenPurpose {
   LINK_INVITE
   TEAM_INVITE
   SIGNER_VERIFY
+  SIGNED_PORTAL
 }
 
 model VerificationToken {

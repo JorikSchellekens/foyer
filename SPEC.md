@@ -127,7 +127,12 @@ Tools: list/search documents & datarooms, create/manage links, get analytics
       that is always clickable (guides to the blocking field, then opens a
       clickwrap consent dialog - "Agree and sign" is the recorded consent
       action), signer pages carry the team's Branding logo with a quiet
-      "via Foyer" mark.
+      "via Foyer" mark. Signed-documents portal at /signed: cross-team list
+      of everything sent to an email (download completed, resume pending),
+      keyed by email possession - session auto-established by any signing
+      token link, magic-link recovery form otherwise (SIGNED_PORTAL token
+      purpose, foyer_signed cookie); completion emails and post-sign screens
+      link to it. No guest accounts by design.
       E2E: scripts/sign-e2e.ts
 
 ## Known cut corners (candidates for later)

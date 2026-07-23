@@ -342,6 +342,7 @@ async function completeRequest(req: FullRequest, origin: string) {
         email: s.email,
         url: `${origin}/sign/t/${s.token}`,
         documentName: req.title,
+        portalUrl: `${origin}/signed`,
       })
     )
   );

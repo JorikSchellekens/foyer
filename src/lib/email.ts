@@ -213,7 +213,11 @@ export async function sendSignatureCompleted(opts: {
   email: string;
   url: string;
   documentName: string;
+  portalUrl?: string;
 }) {
+  const portal = opts.portalUrl
+    ? `<br/>You can retrieve this and everything else you have signed, at any time, from <a href="${opts.portalUrl}" style="color:#175b47;">your signed documents</a>.`
+    : "";
   return sendEmail({
     to: opts.email,
     subject: `Completed: "${opts.documentName}" has been signed by all parties`,
@@ -222,6 +226,20 @@ export async function sendSignatureCompleted(opts: {
       body: `<strong>${opts.documentName}</strong> is fully executed. The final document, with its certificate of completion, is available below.${button(
         opts.url,
         "Download signed document"
+      )}${portal}`,
+    }),
+  });
+}
+
+export async function sendSignedPortalLink(email: string, href: string) {
+  return sendEmail({
+    to: email,
+    subject: "Access your signed documents",
+    html: shell({
+      heading: "Your signed documents",
+      body: `Click below to open every document signed with this email address. This link expires in 30 minutes and can be used once.${button(
+        href,
+        "View my documents"
       )}`,
     }),
   });

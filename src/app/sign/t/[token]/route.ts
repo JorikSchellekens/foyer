@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { setSignerSession } from "@/lib/sign-session";
+import { setSignerSession, setPortalSession } from "@/lib/sign-session";
 import { originFromRequest } from "@/lib/origin";
 
 /**
@@ -22,5 +22,9 @@ export async function GET(
     return NextResponse.redirect(`${origin}/view/expired`);
 
   await setSignerSession({ requestId: signer.requestId, signerId: signer.id });
+  // Token possession proves inbox access - the same anchor the /signed
+  // portal's magic link uses - so open the portal session here too, making
+  // "everything I've signed" reachable with no extra verification step.
+  await setPortalSession(signer.email);
   return NextResponse.redirect(`${origin}/sign/${signer.requestId}`);
 }

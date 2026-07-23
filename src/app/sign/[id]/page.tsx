@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import Link from "next/link";
 import { Download, CheckCircle2, Clock } from "lucide-react";
 import { db } from "@/lib/db";
 import { getSignerSession } from "@/lib/sign-session";
@@ -86,6 +87,14 @@ export default async function SignPage({
     </Button>
   ) : null;
 
+  const portalLink = (
+    <p className="mt-4 text-xs text-muted-foreground">
+      <Link href="/signed" className="underline hover:text-foreground">
+        View everything you have signed
+      </Link>
+    </p>
+  );
+
   if (request.status === "COMPLETED")
     return (
       <Shell {...brand}>
@@ -96,6 +105,7 @@ export default async function SignPage({
           of completion on the final page.
         </p>
         {downloadButton}
+        {portalLink}
       </Shell>
     );
 
@@ -131,6 +141,7 @@ export default async function SignPage({
           We will email you the final copy of <strong>{request.title}</strong>{" "}
           once all parties have signed.
         </p>
+        {portalLink}
       </Shell>
     );
 
