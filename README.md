@@ -1,42 +1,69 @@
+<div align="center">
+
+<img src="public/icon-192.png" alt="Foyer" width="80" height="80" />
+
 # Foyer
 
 **The room where your documents are received.**
 
-Self-hosted document and data room sharing with serious analytics: magic-link
-auth, branded viewers, granular permissions, NDA gates, per-page reading time,
-mouse attention maps, custom domains with Cloudflare auto-configuration, MCP
-and REST APIs.
+Self-hosted document and data room sharing with serious analytics.
 
-Built with Next.js 16, Postgres (Prisma), any S3-compatible storage, and
-Resend for email.
+[![Next.js 16](https://img.shields.io/badge/Next.js-16-black?logo=next.js&logoColor=white)](https://nextjs.org)
+[![Postgres](https://img.shields.io/badge/Postgres-Prisma-336791?logo=postgresql&logoColor=white)](https://www.prisma.io)
+[![S3 compatible](https://img.shields.io/badge/Storage-S3%20compatible-569A31?logo=amazons3&logoColor=white)](#quick-start-self-hosted)
+[![Docker](https://img.shields.io/badge/Deploy-Docker%20Compose-2496ED?logo=docker&logoColor=white)](#quick-start-self-hosted)
+[![MCP](https://img.shields.io/badge/API-MCP%20%2B%20REST-175B47)](#mcp)
+
+</div>
 
 ---
 
+Foyer is a Papermark-class virtual data room you run yourself: magic-link
+auth, branded viewers, granular permissions, NDA gates, per-page reading
+time, mouse attention maps, custom domains with Cloudflare
+auto-configuration, and MCP and REST APIs. No plan gates, no seat pricing,
+no analytics retention limits: you own the database, so everything is
+unlimited.
+
 ## Features
 
-- **Documents**: upload files or whole folders, PDF/image/video/audio/Word/
-  spreadsheet/text previews, public Notion page embeds, versioning with
-  history, restore, and per-version uploader audit.
-- **Data rooms**: nested folders, bulk import from the library or straight
-  upload, viewer groups with per-item permissions, Q&A with email
-  notifications, generated table-of-contents PDF, full zip download.
-- **Links**: public / email / verified-email access, personal invite emails
-  with per-recipient expiry, passwords, expiration dates, allow & block
-  lists, download control, screenshot deterrence, dynamic watermarking,
-  NDA agreements with drawn signatures, per-link welcome message and social
+### Documents
+- Upload files or whole folders; previews for PDF, images, video, audio,
+  Word, spreadsheets, text and code; public Notion page embeds.
+- Versioning with history, restore, and per-version uploader audit.
+
+### Data rooms
+- Nested folders, bulk import from the library or straight upload.
+- Viewer groups with per-item permissions, Q&A with email notifications.
+- Generated table-of-contents PDF and full zip download.
+
+### Links
+- Public, email, or verified-email access; personal invite emails with
+  per-recipient expiry.
+- Passwords, expiration dates, allow and block lists, download control,
+  screenshot deterrence, dynamic watermarking.
+- NDA agreements with drawn signatures, per-link welcome message and social
   preview, link presets with a team default.
-- **Analytics**: per-visit duration, per-page dwell time, completion,
-  downloads, device and location, visitor profiles (the full reading
-  history of any email), and cursor attention heatmaps.
-- **Branding**: logo, banner, brand and background colors, call-to-action,
-  welcome message, custom link previews; per-data-room overrides; one-click
+
+### Analytics
+- Per-visit duration, per-page dwell time, completion, downloads, device
+  and location.
+- Visitor profiles: the full reading history of any email address.
+- Cursor attention heatmaps on every page.
+- Nothing is ever purged; long retention comes free with owning the data.
+
+### Branding and domains
+- Logo, banner, brand and background colors, call-to-action, welcome
+  message, custom link previews; per-data-room overrides; one-click
   auto-fill from any website URL.
-- **Teams**: multiple workspaces per account, magic-link login, member
-  invites with pending management, roles, per-member data room permissions.
-- **Custom domains**: serve links from dataroom.yourcompany.com; automatic
-  Cloudflare DNS configuration with an API token, or manual CNAME.
-- **Integrations**: MCP server for Claude and other agents, REST API,
-  HMAC-signed webhooks, email notification preferences per member.
+- Serve links from `dataroom.yourcompany.com`: automatic Cloudflare DNS
+  configuration with an API token, or a manual CNAME.
+
+### Teams and integrations
+- Multiple workspaces per account, magic-link login, member invites with
+  pending management, roles, per-member data room permissions.
+- MCP server for Claude and other agents, REST API, HMAC-signed webhooks,
+  per-member email notification preferences.
 
 ## Quick start (self-hosted)
 
@@ -63,6 +90,9 @@ docker compose -f docker-compose.dev.yml up -d   # Postgres :5433 + MinIO :9002
 bunx prisma migrate dev
 bun dev
 ```
+
+Built with Next.js 16, TypeScript, Tailwind v4, shadcn/ui, Postgres via
+Prisma, any S3-compatible object store, and Resend for email.
 
 ## Custom domains
 
@@ -99,31 +129,28 @@ Tools: `list_documents`, `list_datarooms`, `list_links`, `create_link`,
 
 Bearer-auth with the same keys:
 
-- `GET  /api/v1/documents?q=`
-- `GET  /api/v1/links` / `POST /api/v1/links`
-- `GET  /api/v1/views?limit=`
+| Method | Route | |
+| --- | --- | --- |
+| `GET` | `/api/v1/documents?q=` | search documents |
+| `GET` | `/api/v1/links` | list links |
+| `POST` | `/api/v1/links` | create a link |
+| `GET` | `/api/v1/views?limit=` | recent visits |
 
 Webhooks are configured in Settings → Webhooks; payloads are signed with
 HMAC-SHA256 in `x-foyer-signature`.
 
-## Uptime & data retention
+## Operations
 
-- `/api/health` reports app + database status; wire it into your uptime
-  monitor and the compose healthcheck restarts the app if it degrades.
+- `/api/health` reports app and database status; wire it into your uptime
+  monitor. The compose healthcheck restarts the app if it degrades.
 - Postgres is backed up nightly by the bundled `backup` service into
   `./backups` (14-day rotation). Ship that directory offsite.
-- Object storage holds original files only; enable versioning/replication on
-  your S3 provider (or `mc mirror` MinIO) for a second copy.
-- Analytics are never purged: view, page-dwell and attention data are kept
-  indefinitely (2-year+ retention comes free with owning the database).
-- Run two app replicas behind your proxy for zero-downtime deploys; the app
-  is stateless (sessions are cookie-signed, files in S3, state in Postgres).
+- Object storage holds original files only; enable versioning or
+  replication on your S3 provider (or `mc mirror` MinIO) for a second copy.
+- The app is stateless (cookie-signed sessions, files in S3, state in
+  Postgres): run two replicas behind your proxy for zero-downtime deploys.
 
 ## Environment reference
 
-See `.env.example`. Everything not marked required has a sensible default in
-docker-compose.
-
-## Deployment
-
-Live at https://foyer.boop.it (Coolify on boop-dev, autodeploys from `main`).
+See [`.env.example`](.env.example). Everything not marked required has a
+sensible default in docker-compose.
