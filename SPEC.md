@@ -122,8 +122,11 @@ Tools: list/search documents & datarooms, create/manage links, get analytics
       scripts/pad-probe.ts verifies), typed signatures sized from real font
       metrics (script ascenders no longer clip), Start/Next-field guided
       navigation with focus/highlight, auto-derived initials from the typed
-      signature name (no second dialog), signer pages carry the team's
-      Branding logo with a quiet "via Foyer" mark.
+      signature name (no second dialog), a field-index popover behind the
+      n/m counter (jump between fields, collapsed by default), Finish always
+      clickable (guides to the blocking field or consent instead of sitting
+      disabled), signer pages carry the team's Branding logo with a quiet
+      "via Foyer" mark.
       E2E: scripts/sign-e2e.ts
 
 ## Known cut corners (candidates for later)

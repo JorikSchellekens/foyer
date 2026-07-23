@@ -96,6 +96,15 @@ async function main() {
   page.on("pageerror", (e) => errors.push(String(e)));
   await page.goto(`${BASE}/sign/t/${token}`);
   await page.waitForSelector('button:has-text("Sign here")');
+
+  // Finish before anything is filled: must guide, not submit or sit dead.
+  await page.click('[data-testid="finish"]');
+  await page.waitForSelector("[data-sonner-toast]", { timeout: 5_000 });
+  console.log(
+    "premature finish guided:",
+    (await page.locator("[data-sonner-toast]").first().textContent())?.slice(0, 60)
+  );
+
   await page.click('button:has-text("Sign here")');
   await page.waitForSelector("text=Adopt your signature");
   await page.click('button[role="tab"]:has-text("Draw")');
@@ -175,6 +184,33 @@ async function main() {
   await page.screenshot({
     path: "/private/tmp/claude-501/-Users-jorikschellekens-dev-foyer/bd6d7a06-d752-4bf7-8699-6f36a34d39c7/scratchpad/pad-adopted.png",
   });
+
+  // The full path a human takes: consent, then Finish - assert it works.
+  console.log(
+    "fields counter:",
+    await page.locator("header .font-mono").first().textContent()
+  );
+  // field index popover: open, check the row, jump
+  await page.click("header .font-mono");
+  await page.waitForSelector("text=Your fields");
+  const indexRows = await page
+    .locator('[data-slot="popover-content"] button')
+    .count();
+  console.log("index rows:", indexRows);
+  await page.locator('[data-slot="popover-content"] button').first().click();
+  await page.keyboard.press("Escape");
+  await page.click("#esign-consent");
+  const finish = page.locator('[data-testid="finish"]');
+  console.log("finish disabled:", await finish.isDisabled());
+  await finish.click({ timeout: 5_000 });
+  await page.waitForSelector("text=/You have signed|Everyone has signed/", {
+    timeout: 20_000,
+  });
+  const signed = await db.signer.findFirst({
+    where: { request: { title: "Pad Probe" } },
+    orderBy: { signedAt: "desc" },
+  });
+  console.log("signer status after finish:", signed?.status);
 
   if (errors.length) console.log("page errors:", errors.slice(0, 5));
   await browser.close();

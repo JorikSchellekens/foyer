@@ -3,11 +3,16 @@
 import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { CheckCircle2, Circle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Dialog,
   DialogContent,
@@ -30,7 +35,7 @@ import {
   AdoptSignatureDialog,
   typedToPng,
 } from "@/components/signing/adopt-signature";
-import { missingRequiredFields } from "@/lib/sign-fields";
+import { missingRequiredFields, FIELD_LABELS } from "@/lib/sign-fields";
 import { submitSignature, declineToSign } from "@/app/sign/actions";
 
 function initialsOf(name: string): string {
@@ -71,6 +76,7 @@ export function SignerClient({
   const [declineReason, setDeclineReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [activeFieldId, setActiveFieldId] = useState<string | null>(null);
+  const [consentPulse, setConsentPulse] = useState(false);
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
@@ -116,6 +122,22 @@ export function SignerClient({
   const goNext = () => goToField(navTargets[0]);
 
   async function finish() {
+    // Never a dead button: explain and point at whatever still blocks.
+    if (navTargets.length > 0) {
+      toast.info(
+        navTargets.length === 1
+          ? "One required field still needs your attention."
+          : `${navTargets.length} required fields still need your attention.`
+      );
+      goNext();
+      return;
+    }
+    if (!consent) {
+      toast.info("Tick the agreement checkbox at the bottom to finish.");
+      setConsentPulse(true);
+      setTimeout(() => setConsentPulse(false), 2500);
+      return;
+    }
     setBusy(true);
     try {
       const res = await submitSignature(requestId, {
@@ -212,9 +234,63 @@ export function SignerClient({
           </p>
         </div>
         <div className="ml-auto flex items-center gap-3">
-          <span className="font-mono text-xs text-muted-foreground">
-            {done}/{fields.length} fields
-          </span>
+          <Popover>
+            <PopoverTrigger className="rounded-md border px-2 py-1 font-mono text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+              {done}/{fields.length} fields
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-64 p-1.5">
+              <p className="px-2 pb-1 pt-1.5 text-xs font-medium text-muted-foreground">
+                Your fields
+              </p>
+              {[...fields]
+                .sort(
+                  (a, b) =>
+                    a.page - b.page || a.yPct - b.yPct || a.xPct - b.xPct
+                )
+                .map((f) => {
+                  const filled =
+                    f.kind === "SIGNATURE"
+                      ? !!signature
+                      : f.kind === "INITIALS"
+                        ? !!initials
+                        : f.kind === "DATE_SIGNED"
+                          ? true
+                          : f.kind === "CHECKBOX"
+                            ? values[f.id] === "true"
+                            : !!(values[f.id] ?? "").trim();
+                  const optional =
+                    f.kind === "CHECKBOX" || f.kind === "DATE_SIGNED";
+                  return (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => goToField(f)}
+                      className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent ${
+                        f.id === activeFieldId ? "bg-accent" : ""
+                      }`}
+                    >
+                      {filled ? (
+                        <CheckCircle2 className="size-3.5 shrink-0 text-primary" />
+                      ) : (
+                        <Circle
+                          className={`size-3.5 shrink-0 ${
+                            optional
+                              ? "text-muted-foreground/50"
+                              : "text-amber-600"
+                          }`}
+                        />
+                      )}
+                      <span className="flex-1 truncate">
+                        {FIELD_LABELS[f.kind]}
+                      </span>
+                      <span className="font-mono text-[10px] text-muted-foreground">
+                        p.{f.page}
+                      </span>
+                    </button>
+                  );
+                })}
+            </PopoverContent>
+          </Popover>
           <Button
             variant="ghost"
             size="sm"
@@ -228,7 +304,12 @@ export function SignerClient({
               {done === 0 ? "Start" : "Next field"}
             </Button>
           )}
-          <Button onClick={finish} disabled={!ready || busy} data-testid="finish">
+          <Button
+            onClick={finish}
+            disabled={busy}
+            variant={ready ? "default" : "secondary"}
+            data-testid="finish"
+          >
             {busy && <Loader2 className="size-4 animate-spin" />}
             Finish
           </Button>
@@ -246,7 +327,11 @@ export function SignerClient({
         />
       </div>
 
-      <footer className="flex items-center gap-2 border-t bg-card px-4 py-3 sm:px-6">
+      <footer
+        className={`flex items-center gap-2 border-t bg-card px-4 py-3 transition-shadow sm:px-6 ${
+          consentPulse ? "animate-pulse ring-2 ring-inset ring-primary" : ""
+        }`}
+      >
         <Checkbox
           id="esign-consent"
           checked={consent}
