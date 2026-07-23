@@ -35,7 +35,7 @@ import {
   CrumbDropLink,
   DataroomUploadButtons,
   ReorderableDocRows,
-  DrFolderRow,
+  FolderRows,
   NewDrFolderButton,
 } from "./contents-client";
 import {
@@ -500,13 +500,18 @@ async function ContentsTabInner({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {foldersHere.map((f) => (
-                <DrFolderRow
-                  key={f.id}
-                  dataroomId={dataroom.id}
-                  folder={{ id: f.id, name: f.name, itemCount: countIn(f.id) }}
-                />
-              ))}
+              <FolderRows
+                key={`f-${foldersHere
+                  .map((f) => f.id)
+                  .sort()
+                  .join(",")}`}
+                dataroomId={dataroom.id}
+                folders={foldersHere.map((f) => ({
+                  id: f.id,
+                  name: f.name,
+                  itemCount: countIn(f.id),
+                }))}
+              />
               <ReorderableDocRows
                 key={docsHere
                   .map((d) => d.id)

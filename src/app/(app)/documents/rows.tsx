@@ -1,8 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Folder as FolderIcon } from "lucide-react";
+import { Eye, Folder as FolderIcon } from "lucide-react";
 import type { DocumentType } from "@prisma/client";
+import { Button } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { FileIcon } from "@/components/shell/file-icon";
 import { formatBytes, timeAgo, pluralize } from "@/lib/format";
@@ -71,7 +72,7 @@ export function DocumentRow({
   const router = useRouter();
   return (
     <TableRow
-      className="cursor-pointer"
+      className="group cursor-pointer"
       onClick={() => router.push(`/documents/${doc.id}`)}
     >
       <TableCell>
@@ -95,6 +96,18 @@ export function DocumentRow({
       <TableCell className="text-right text-muted-foreground">
         <div className="flex items-center justify-end gap-1">
           <span className="text-xs">{timeAgo(doc.updatedAt)}</span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 opacity-0 transition-opacity group-hover:opacity-100"
+            title="Preview"
+            onClick={(e) => {
+              e.stopPropagation();
+              router.push(`/documents/${doc.id}/preview`);
+            }}
+          >
+            <Eye className="size-3.5" />
+          </Button>
           <RowMenu
             name={doc.name}
             onRename={async (n) => {

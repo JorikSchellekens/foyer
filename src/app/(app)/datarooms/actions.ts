@@ -323,6 +323,24 @@ export async function moveDataroomFolder(
   return { ok: true };
 }
 
+/** Sibling-folder counterpart of reorderDataroomDocuments. */
+export async function reorderDataroomFolders(
+  dataroomId: string,
+  orderedIds: string[]
+) {
+  const owned = await ownDataroom(dataroomId);
+  if (!owned) return;
+  await db.$transaction(
+    orderedIds.map((id, index) =>
+      db.dataroomFolder.updateMany({
+        where: { id, dataroomId },
+        data: { orderIndex: index },
+      })
+    )
+  );
+  bust(dataroomId);
+}
+
 /**
  * Persist a new visitor-facing order for the documents in one folder. Ids must
  * all belong to the data room; their position in the array becomes orderIndex.

@@ -78,6 +78,7 @@ export function DocumentViewer({
   position = null,
   tree = null,
   currentItemId = null,
+  previewText,
 }: {
   doc: ViewerDoc;
   viewId: string;
@@ -93,6 +94,7 @@ export function DocumentViewer({
   position?: string | null;
   tree?: ViewerTreeNode[] | null;
   currentItemId?: string | null;
+  previewText?: string;
 }) {
   const hasTree = !!tree && tree.length > 0;
   // null = untouched: CSS opens it on large screens, keeps it closed on
@@ -139,7 +141,7 @@ export function DocumentViewer({
         protection ? "protected-content" : ""
       }`}
     >
-      {preview && <PreviewBanner />}
+      {preview && <PreviewBanner text={previewText} />}
       <header className="z-40 flex h-14 shrink-0 items-center gap-3 border-b border-white/10 bg-[#0c1013] px-4 text-white">
         {hasTree && (
           <button

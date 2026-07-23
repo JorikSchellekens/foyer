@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronRight, Link2, Plus } from "lucide-react";
+import { ChevronRight, Eye, Link2, Plus } from "lucide-react";
 import { requireTeam } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Button } from "@/components/ui/button";
@@ -144,6 +144,11 @@ export default async function DocumentPage({
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="outline" asChild>
+              <Link href={`/documents/${doc.id}/preview`}>
+                <Eye className="size-4" /> Preview
+              </Link>
+            </Button>
             {doc.type !== "NOTION" && (
               <VersionUploadButton documentId={doc.id} />
             )}
@@ -300,6 +305,13 @@ function VersionList({
               {v.note ? ` · ${v.note}` : ""}
             </p>
           </div>
+          <Link
+            href={`/documents/${doc.id}/preview?version=${v.id}`}
+            className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="Preview this version"
+          >
+            <Eye className="size-3.5" />
+          </Link>
           {v.id !== doc.currentVersionId && (
             <RestoreVersionButton documentId={doc.id} versionId={v.id} />
           )}

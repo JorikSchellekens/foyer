@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   BookOpen,
+  Eye,
   FileUp,
   Folder,
   FolderPlus,
@@ -56,10 +57,12 @@ import {
   renameDataroomFolder,
   removeFromDataroom,
   reorderDataroomDocuments,
+  reorderDataroomFolders,
   uploadIntoDataroom,
 } from "../actions";
 import type { UploadedFile } from "@/app/(app)/documents/actions";
 import {
+  DR_FOLDER_MIME,
   handleMoveDrop,
   hasMovePayload,
   startDocDrag,
@@ -477,37 +480,120 @@ export function AddFromLibraryDialog({
 
 // ---------- rows ----------
 
-export function DrFolderRow({
+export type DrFolderItem = { id: string; name: string; itemCount: number };
+
+type FolderDropZone = "before" | "into" | "after";
+
+/**
+ * Sibling folders of the current directory. A dragged folder dropped on the
+ * middle of a row nests inside it; dropped near a row's top or bottom edge
+ * it reorders among its siblings (the file-manager convention). Dragged
+ * documents always nest.
+ */
+export function FolderRows({
   dataroomId,
-  folder,
+  folders,
 }: {
   dataroomId: string;
-  folder: { id: string; name: string; itemCount: number };
+  folders: DrFolderItem[];
+}) {
+  const [order, setOrder] = useState(folders);
+  const [target, setTarget] = useState<{
+    id: string;
+    zone: FolderDropZone;
+  } | null>(null);
+  const router = useRouter();
+
+  function zoneOf(e: React.DragEvent): FolderDropZone {
+    // only sibling folders reorder; documents always file into the folder
+    if (!e.dataTransfer.types.includes(DR_FOLDER_MIME)) return "into";
+    const rect = e.currentTarget.getBoundingClientRect();
+    const y = (e.clientY - rect.top) / rect.height;
+    if (y < 0.25) return "before";
+    if (y > 0.75) return "after";
+    return "into";
+  }
+
+  async function onDrop(e: React.DragEvent, folder: DrFolderItem) {
+    e.preventDefault();
+    const zone = zoneOf(e);
+    setTarget(null);
+    if (zone === "into") {
+      if (await handleMoveDrop(e, dataroomId, folder.id)) router.refresh();
+      return;
+    }
+    const draggedId = e.dataTransfer.getData(DR_FOLDER_MIME);
+    if (!draggedId || draggedId === folder.id) return;
+    const from = order.findIndex((f) => f.id === draggedId);
+    if (from < 0) return; // dragged in from elsewhere; only edges of siblings reorder
+    const next = [...order];
+    const [moved] = next.splice(from, 1);
+    let to = next.findIndex((f) => f.id === folder.id);
+    if (zone === "after") to += 1;
+    next.splice(to, 0, moved);
+    setOrder(next);
+    reorderDataroomFolders(
+      dataroomId,
+      next.map((f) => f.id)
+    ).then(() => router.refresh());
+  }
+
+  return (
+    <>
+      {order.map((folder) => (
+        <DrFolderRow
+          key={folder.id}
+          dataroomId={dataroomId}
+          folder={folder}
+          dropZone={target?.id === folder.id ? target.zone : null}
+          onZone={(zone) =>
+            setTarget(zone === null ? null : { id: folder.id, zone })
+          }
+          zoneOf={zoneOf}
+          onDropRow={(e) => onDrop(e, folder)}
+        />
+      ))}
+    </>
+  );
+}
+
+function DrFolderRow({
+  dataroomId,
+  folder,
+  dropZone,
+  onZone,
+  zoneOf,
+  onDropRow,
+}: {
+  dataroomId: string;
+  folder: DrFolderItem;
+  dropZone: FolderDropZone | null;
+  onZone: (zone: FolderDropZone | null) => void;
+  zoneOf: (e: React.DragEvent) => FolderDropZone;
+  onDropRow: (e: React.DragEvent) => void;
 }) {
   const router = useRouter();
   const [renameOpen, setRenameOpen] = useState(false);
   const [name, setName] = useState(folder.name);
-  const [dropOver, setDropOver] = useState(false);
   return (
     <TableRow
       className={cn(
         "cursor-pointer",
-        dropOver && "bg-primary/5 ring-2 ring-inset ring-primary/60"
+        dropZone === "into" && "bg-primary/5 ring-2 ring-inset ring-primary/60",
+        dropZone === "before" && "border-t-2 border-t-primary",
+        dropZone === "after" && "border-b-2 border-b-primary"
       )}
       draggable
       onDragStart={(e) => startFolderDrag(e, folder.id)}
+      onDragEnd={() => onZone(null)}
       onDragOver={(e) => {
         if (!hasMovePayload(e)) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
-        setDropOver(true);
+        onZone(zoneOf(e));
       }}
-      onDragLeave={() => setDropOver(false)}
-      onDrop={async (e) => {
-        e.preventDefault();
-        setDropOver(false);
-        if (await handleMoveDrop(e, dataroomId, folder.id)) router.refresh();
-      }}
+      onDragLeave={() => onZone(null)}
+      onDrop={onDropRow}
       onClick={() =>
         router.push(`/datarooms/${dataroomId}?folder=${folder.id}`)
       }
@@ -674,6 +760,18 @@ export function ReorderableDocRows({
             added {timeAgo(item.addedAt)}
           </TableCell>
           <TableCell className="text-right">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7 opacity-0 transition-opacity group-hover:opacity-100"
+              title="Preview"
+              onClick={(e) => {
+                e.stopPropagation();
+                router.push(`/documents/${item.documentId}/preview`);
+              }}
+            >
+              <Eye className="size-3.5" />
+            </Button>
             <Button
               variant="ghost"
               size="icon"
