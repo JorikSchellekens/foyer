@@ -9,6 +9,11 @@ import { randomToken } from "@/lib/tokens";
 import { requestOrigin } from "@/lib/origin";
 import { placedFieldSchema } from "@/lib/sign-fields";
 import { sendRequest, remindPending, voidRequest } from "@/lib/signing";
+import { isSignable, signablePdfKey } from "@/lib/pdf-rendition";
+import { isTeamKey } from "@/lib/storage";
+import { docTypeFromName } from "@/lib/doc-types";
+import { generateVersionThumbnails } from "@/lib/thumbnails";
+import type { Document, DocumentVersion } from "@prisma/client";
 
 async function ownRequest(id: string) {
   const ctx = await requireTeam();
@@ -18,8 +23,32 @@ async function ownRequest(id: string) {
   return { ctx, request };
 }
 
-/** Form action: the button only renders for uploaded PDFs, so guard failures
- * (a stale page) just land back on the document. */
+async function draftFromDocument(
+  teamId: string,
+  userId: string,
+  doc: Document & { currentVersion: DocumentVersion | null }
+): Promise<string> {
+  // Non-PDFs get a one-off PDF rendition; the request pins those exact bytes.
+  const pdfKey = await signablePdfKey(
+    teamId,
+    doc.type,
+    doc.currentVersion!
+  );
+  const request = await db.signatureRequest.create({
+    data: {
+      teamId,
+      documentId: doc.id,
+      versionId: doc.currentVersion!.id,
+      pdfKey,
+      title: doc.name,
+      createdById: userId,
+    },
+  });
+  return request.id;
+}
+
+/** Form action: the button only renders for signable uploads, so guard
+ * failures (a stale page) just land back on the document. */
 export async function createSignatureDraft(documentId: string): Promise<void> {
   const ctx = await requireTeam();
   const doc = await db.document.findFirst({
@@ -27,19 +56,65 @@ export async function createSignatureDraft(documentId: string): Promise<void> {
     include: { currentVersion: true },
   });
   if (!doc) redirect("/documents");
-  if (doc.type !== "PDF" || !doc.currentVersion?.fileKey)
+  if (!isSignable(doc.type) || !doc.currentVersion?.fileKey)
     redirect(`/documents/${documentId}`);
 
-  const request = await db.signatureRequest.create({
+  const requestId = await draftFromDocument(ctx.team.id, ctx.user.id, doc);
+  redirect(`/signatures/${requestId}`);
+}
+
+/**
+ * Upload-first entry from /signatures: the file was already PUT to storage
+ * via the standard presign flow; create the library document, then the draft.
+ */
+export async function createSignatureRequestFromUpload(upload: {
+  key: string;
+  name: string;
+  size: number;
+  contentType: string;
+}) {
+  const ctx = await requireTeam();
+  if (!isTeamKey(upload.key, ctx.team.id)) return { error: "Invalid upload." };
+  const type = docTypeFromName(upload.name);
+  if (!isSignable(type))
+    return {
+      error:
+        "This file type cannot be signed. Use a PDF, image, Word document, spreadsheet or text file.",
+    };
+
+  const doc = await db.document.create({
     data: {
       teamId: ctx.team.id,
-      documentId: doc.id,
-      versionId: doc.currentVersion.id,
-      title: doc.name,
-      createdById: ctx.user.id,
+      name: upload.name.replace(/\.[^.]+$/, ""),
+      type,
+      versions: {
+        create: {
+          versionNumber: 1,
+          fileKey: upload.key,
+          fileName: upload.name,
+          fileSize: upload.size,
+          contentType: upload.contentType,
+          uploadedById: ctx.user.id,
+        },
+      },
     },
+    include: { versions: true },
   });
-  redirect(`/signatures/${request.id}`);
+  const withCurrent = await db.document.update({
+    where: { id: doc.id },
+    data: { currentVersionId: doc.versions[0].id },
+    include: { currentVersion: true },
+  });
+  if (type === "PDF")
+    void generateVersionThumbnails(doc.versions[0].id).catch(() => {});
+
+  const requestId = await draftFromDocument(
+    ctx.team.id,
+    ctx.user.id,
+    withCurrent
+  );
+  revalidatePath("/documents");
+  redirect(`/signatures/${requestId}`);
 }
 
 export async function updateSignatureRequest(

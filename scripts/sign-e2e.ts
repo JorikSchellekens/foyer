@@ -257,8 +257,12 @@ async function main() {
     (await page.locator("[data-sign-field]").count()) === 4,
     `got ${await page.locator("[data-sign-field]").count()}`
   );
-  await page.waitForTimeout(1500); // debounce flush
-  const fields = await db.signatureField.findMany({ where: { requestId } });
+  // Poll past the debounce + server roundtrip (slow on cold dev compiles).
+  let fields: Awaited<ReturnType<typeof db.signatureField.findMany>> = [];
+  for (let i = 0; i < 30 && fields.length !== 4; i++) {
+    await new Promise((r) => setTimeout(r, 500));
+    fields = await db.signatureField.findMany({ where: { requestId } });
+  }
   check("4 fields persisted", fields.length === 4, `got ${fields.length}`);
   check(
     "field pcts sane",
@@ -338,6 +342,96 @@ async function main() {
     finalPdf.getPageCount() >= 3,
     `pages=${finalPdf.getPageCount()}`
   );
+
+  // ---- upload-first entry: PNG uploaded on /signatures, rendered to PDF ----
+  const sharp = (await import("sharp")).default;
+  const pngBytes = await sharp({
+    create: {
+      width: 800,
+      height: 600,
+      channels: 3,
+      background: { r: 250, g: 250, b: 248 },
+    },
+  })
+    .png()
+    .toBuffer();
+  await page.goto(`${BASE}/signatures`);
+  await page.click('button:has-text("Upload & request signatures")');
+  await page.setInputFiles('input[type="file"][accept]', {
+    name: "site-photo.png",
+    mimeType: "image/png",
+    buffer: pngBytes,
+  });
+  await page.waitForURL(/\/signatures\/\w+$/, { timeout: 30_000 });
+  const imgRequestId = page.url().split("/signatures/")[1];
+  const imgRequest = await db.signatureRequest.findUnique({
+    where: { id: imgRequestId },
+    include: { version: true },
+  });
+  check(
+    "upload draft has PDF rendition",
+    !!imgRequest?.pdfKey && imgRequest.pdfKey !== imgRequest.version.fileKey
+  );
+
+  await addRecipient(page, "photo-signer@example.com");
+  await page.waitForSelector('[data-sign-page="1"]');
+  await placeField(page, "SIGNATURE", 1, 0.3, 0.6);
+  await page.waitForSelector("[data-sign-field]");
+  for (
+    let i = 0;
+    i < 30 &&
+    (await db.signatureField.count({ where: { requestId: imgRequestId } })) < 1;
+    i++
+  )
+    await new Promise((r) => setTimeout(r, 500));
+  const imgSendMark = logMark();
+  await page.click('button:has-text("Send for signature")');
+  await page.waitForSelector("text=Activity", { timeout: 20_000 });
+  const [imgLink] = await waitForLinks(
+    /\[email:dev\] link: (\S+\/sign\/t\/\S+)/g,
+    1,
+    imgSendMark
+  );
+  await signAs(imgLink, "Photo Signer", null);
+  const imgDone = await db.signatureRequest.findUnique({
+    where: { id: imgRequestId },
+  });
+  check("image request COMPLETED", imgDone?.status === "COMPLETED");
+  const imgRes = await page.request.get(
+    `${BASE}/api/sign/completed/${imgRequestId}?download=1`
+  );
+  const imgFinal = await PDFDocument.load(Buffer.from(await imgRes.body()));
+  check(
+    "image final = image page + certificate",
+    imgFinal.getPageCount() === 2,
+    `pages=${imgFinal.getPageCount()}`
+  );
+
+  // ---- text rendition to draft stage ----
+  await page.goto(`${BASE}/signatures`);
+  await page.click('button:has-text("Upload & request signatures")');
+  await page.setInputFiles('input[type="file"][accept]', {
+    name: "terms.md",
+    mimeType: "text/markdown",
+    buffer: Buffer.from(
+      `# Terms of Engagement\n\n${"These terms govern the engagement between the parties. ".repeat(40)}\n\nSigned below.`
+    ),
+  });
+  await page.waitForURL(/\/signatures\/\w+$/, { timeout: 30_000 });
+  const txtRequestId = page.url().split("/signatures/")[1];
+  const txtRequest = await db.signatureRequest.findUnique({
+    where: { id: txtRequestId },
+    include: { version: true },
+  });
+  check(
+    "text draft has PDF rendition",
+    !!txtRequest?.pdfKey && txtRequest.pdfKey !== txtRequest.version.fileKey
+  );
+  const txtFile = await page.request.get(
+    `${BASE}/api/signatures/file/${txtRequestId}`
+  );
+  const txtPdf = await PDFDocument.load(Buffer.from(await txtFile.body()));
+  check("text rendition is a valid PDF", txtPdf.getPageCount() >= 1);
 
   if (errors.length) console.log("page errors:", errors.slice(0, 5));
   await browser.close();

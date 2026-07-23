@@ -33,7 +33,7 @@ export default async function SignatureRequestPage({
     return (
       <FieldEditor
         requestId={request.id}
-        fileUrl={`/api/documents/file/${request.versionId}`}
+        fileUrl={`/api/signatures/file/${request.id}`}
         initialTitle={request.title}
         initialMessage={request.message}
         initialSequential={request.sequential}

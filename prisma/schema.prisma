@@ -535,6 +535,10 @@ model SignatureRequest {
   documentId String
   // Pinned so later uploads cannot change what recipients see or signed.
   versionId  String
+  // The exact PDF recipients see and that gets stamped. Equals the version's
+  // fileKey for PDF documents; a generated PDF rendition for other types.
+  // Null only on rows predating renditions - readers fall back to the version.
+  pdfKey     String?
   title      String
   message    String?
   status     SignatureRequestStatus @default(DRAFT)

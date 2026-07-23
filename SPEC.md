@@ -112,7 +112,11 @@ Tools: list/search documents & datarooms, create/manage links, get analytics
       stamps values via lib/stamp.ts (pdf-lib), appends a certificate of
       completion (signers, IP/UA, event trail), records SHA-256, emails all
       parties; signature.* webhooks + notifications; lib/stamp.ts sealPdf() is
-      the PAdES-sealing extension point. E2E: scripts/sign-e2e.ts
+      the PAdES-sealing extension point. Any signable file type: non-PDFs
+      (image/docx/sheet/text) get a browser-free PDF rendition at draft time
+      (lib/pdf-rendition.ts) pinned on SignatureRequest.pdfKey; upload-first
+      entry on /signatures ("Upload & request signatures") creates the library
+      doc + draft in one step. E2E: scripts/sign-e2e.ts
 
 ## Known cut corners (candidates for later)
 - Agreement "field placement on PDF" simplified to read-PDF + drawn signature
@@ -123,6 +127,10 @@ Tools: list/search documents & datarooms, create/manage links, get analytics
   + SIGNER_VERIFY), reminder/expiry UI toggles (cron endpoint ships), upload-
   signature tab, CC management UI, templates, bulk send, PAdES sealing via
   sealPdf() with a team cert, /api/v1 + MCP signature tools.
+- Signing renditions are content-faithful but formatting-lossy for docx/sheet
+  (text extraction, no chromium in the prod image); the sender previews the
+  rendition in the editor before sending. Full-fidelity docx would need a
+  headless-browser or LibreOffice conversion step.
 - pptx has no inline preview (download only).
 - Dataroom viewer renders full nested index on one page (no folder paging).
 - file_uploaded notification key exists but no viewer-upload/file-request flow.

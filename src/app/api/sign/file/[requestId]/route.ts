@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSignerSession } from "@/lib/sign-session";
+import { requestPdfKey } from "@/lib/signing";
 import { streamObject } from "@/lib/object-response";
 
 /**
@@ -21,10 +22,11 @@ export async function GET(
     where: { id: requestId },
     include: { version: true },
   });
-  if (!request || request.status === "DRAFT" || !request.version.fileKey)
+  const key = request && requestPdfKey(request);
+  if (!request || request.status === "DRAFT" || !key)
     return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  return streamObject(request.version.fileKey, "application/pdf", {
+  return streamObject(key, "application/pdf", {
     disposition: "inline",
     range: req.headers.get("range"),
   });

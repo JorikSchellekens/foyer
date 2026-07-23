@@ -26,6 +26,7 @@ import { VersionUploadButton, RestoreVersionButton } from "./version-upload";
 import { DocumentTitle } from "./title-editor";
 import { createSignatureDraft } from "@/app/(app)/signatures/actions";
 import { StatusBadge } from "@/app/(app)/signatures/status-badge";
+import { isSignable } from "@/lib/pdf-rendition";
 
 export default async function DocumentPage({
   params,
@@ -155,7 +156,7 @@ export default async function DocumentPage({
                 <Eye className="size-4" /> Preview
               </Link>
             </Button>
-            {doc.type === "PDF" && (
+            {isSignable(doc.type) && doc.currentVersion?.fileKey && (
               <form action={createSignatureDraft.bind(null, doc.id)}>
                 <Button variant="outline" type="submit">
                   <PenLine className="size-4" /> Request signatures

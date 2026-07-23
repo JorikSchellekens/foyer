@@ -316,4 +316,4 @@ export function DropZone({
   );
 }
 
-export { putWithProgress, useLeaveGuard };
+export { putWithProgress, useLeaveGuard, presignAndPut };

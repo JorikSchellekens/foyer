@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/shell/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { formatDateTime } from "@/lib/format";
 import { StatusBadge } from "./status-badge";
+import { SignatureUploadButton } from "./upload-button";
 
 export const metadata = { title: "Signatures" };
 
@@ -26,14 +27,18 @@ export default async function SignaturesPage() {
       <PageHeader
         title="Signatures"
         description="Send documents for e-signature and track every envelope to completion."
-      />
+      >
+        <SignatureUploadButton />
+      </PageHeader>
       <div className="px-4 sm:px-8 py-6">
         {requests.length === 0 ? (
           <EmptyState
             icon={PenLine}
             title="No signature requests yet"
-            description='Open any PDF in your library and choose "Request signatures" to prepare and send it.'
-          />
+            description="Upload a document here to prepare and send it, or use &quot;Request signatures&quot; on anything already in your library."
+          >
+            <SignatureUploadButton />
+          </EmptyState>
         ) : (
           <div className="space-y-1">
             {requests.map((r) => {

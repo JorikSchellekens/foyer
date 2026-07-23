@@ -65,6 +65,14 @@ function activeSigners(req: FullRequest): Signer[] {
   return req.signers.filter((s) => s.role === "SIGNER");
 }
 
+/** The pinned PDF being signed; pre-rendition rows fall back to the version. */
+export function requestPdfKey(req: {
+  pdfKey: string | null;
+  version: { fileKey: string | null };
+}): string | null {
+  return req.pdfKey ?? req.version.fileKey;
+}
+
 /** The routing round currently being signed (lowest order not fully signed). */
 function currentRound(req: FullRequest): number {
   const pending = activeSigners(req).filter((s) => s.status !== "SIGNED");
@@ -117,7 +125,7 @@ export async function sendRequest(
     if (!req.fields.some((f) => f.signerId === s.id && f.kind === "SIGNATURE"))
       return { error: `Place a signature field for ${s.email}.` };
   }
-  if (!req.version.fileKey) return { error: "Document file is missing." };
+  if (!requestPdfKey(req)) return { error: "Document file is missing." };
 
   // Mint fresh tokens at send time so drafts never leak usable links.
   for (const s of req.signers) {
@@ -253,7 +261,7 @@ async function advance(req: FullRequest, origin: string) {
 }
 
 async function completeRequest(req: FullRequest, origin: string) {
-  const original = await getObjectBuffer(req.version.fileKey!);
+  const original = await getObjectBuffer(requestPdfKey(req)!);
   const originalHash = sha256Hex(original);
 
   const signerById = new Map(req.signers.map((s) => [s.id, s]));
