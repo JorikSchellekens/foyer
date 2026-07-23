@@ -9,7 +9,10 @@ export type NotificationKey =
   | "file_uploaded"
   | "new_question"
   | "blocked_access"
-  | "access_requested";
+  | "access_requested"
+  | "signature_signed"
+  | "signature_completed"
+  | "signature_declined";
 
 const NOTIFICATION_META: Record<
   NotificationKey,
@@ -49,6 +52,24 @@ const NOTIFICATION_META: Record<
     heading: () => `Someone requested access`,
     body: (p) =>
       `<strong>${p.who ?? "A visitor"}</strong> asked for access to the link "${p.linkName}"${p.detail ? `:<br/><br/><em>${p.detail}</em>` : "."} Grant or dismiss it from your dashboard.`,
+  },
+  signature_signed: {
+    subject: (p) => `${p.who ?? "A signer"} signed ${p.itemName}`,
+    heading: () => `A signer has signed`,
+    body: (p) =>
+      `<strong>${p.who ?? "A signer"}</strong> signed <strong>${p.itemName}</strong>${p.detail ? ` (${p.detail})` : ""}.`,
+  },
+  signature_completed: {
+    subject: (p) => `Completed: ${p.itemName} is fully signed`,
+    heading: () => `A signature request completed`,
+    body: (p) =>
+      `All parties have signed <strong>${p.itemName}</strong>. The final document and its certificate of completion are ready.`,
+  },
+  signature_declined: {
+    subject: (p) => `${p.who ?? "A signer"} declined to sign ${p.itemName}`,
+    heading: () => `A signer declined`,
+    body: (p) =>
+      `<strong>${p.who ?? "A signer"}</strong> declined to sign <strong>${p.itemName}</strong>${p.detail ? `:<br/><br/><em>${p.detail}</em>` : "."}`,
   },
 };
 

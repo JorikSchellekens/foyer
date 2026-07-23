@@ -7,6 +7,7 @@ import {
   FileText,
   FolderLock,
   Link2,
+  PenLine,
   Users,
   Settings,
   ChevronsUpDown,
@@ -34,6 +35,7 @@ export const NAV = [
   { href: "/documents", label: "Documents", icon: FileText },
   { href: "/datarooms", label: "Data rooms", icon: FolderLock },
   { href: "/links", label: "Links", icon: Link2 },
+  { href: "/signatures", label: "Signatures", icon: PenLine },
   { href: "/visitors", label: "Visitors", icon: Users },
 ];
 

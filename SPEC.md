@@ -30,6 +30,10 @@ LinkRecipient (direct email invites w/ expiry tokens),
 Viewer (email identity per team), View (session), PageView (per-page duration),
 MouseBatch (sampled mouse paths per page, JSONB),
 Agreement (NDA: embedded field placement / link / text) + AgreementResponse (signature),
+SignatureRequest (e-sign envelope: pinned DocumentVersion, lifecycle draft/sent/completed/
+declined/voided/expired, serial routing, reminders/expiry) + Signer (tokenized links,
+adopted signature/initials PNGs) + SignatureField (pct-rect per signer:
+signature/initials/date/text/checkbox) + SigningEvent (append-only audit trail),
 Branding (team-level + per-dataroom override; auto-fill from website),
 Domain (custom domains, Cloudflare auto-config),
 LinkPreset (defaults for new links), NotificationPreference, Notification,
@@ -98,10 +102,27 @@ Tools: list/search documents & datarooms, create/manage links, get analytics
       files/folders into folders/crumbs/root, cycle-safe folder moves);
       viewer tree sidebar on the index page and collapsible in-document
       contents panel (grant-filtered via viewableTree)
+- [x] E-signing (DocuSign-style, phase 1): /signatures dashboard + per-document
+      "Request signatures"; field-placement editor (click-to-place, drag,
+      resize on a pct-rect overlay over react-pdf; per-recipient colors);
+      no-account signer flow via tokenized email links (/sign/t/<token> ->
+      fs_ session cookie), adopt-signature dialog (type in script face / draw),
+      ESIGN consent, decline; engine in lib/signing.ts (serial or parallel
+      routing, remind, void, expiry cron at /api/cron/signatures); completion
+      stamps values via lib/stamp.ts (pdf-lib), appends a certificate of
+      completion (signers, IP/UA, event trail), records SHA-256, emails all
+      parties; signature.* webhooks + notifications; lib/stamp.ts sealPdf() is
+      the PAdES-sealing extension point. E2E: scripts/sign-e2e.ts
 
 ## Known cut corners (candidates for later)
 - Agreement "field placement on PDF" simplified to read-PDF + drawn signature
   (no drag-drop field designer); signed copy not yet stamped into a PDF.
+  The signing engine (sign-fields/stamp/pdf-field-canvas/adopt-signature) now
+  exists - unifying the NDA gate onto it is signing phase 2.
+- Signing phase 2+: signer email OTP UI (schema ready: requireEmailVerification
+  + SIGNER_VERIFY), reminder/expiry UI toggles (cron endpoint ships), upload-
+  signature tab, CC management UI, templates, bulk send, PAdES sealing via
+  sealPdf() with a team cert, /api/v1 + MCP signature tools.
 - pptx has no inline preview (download only).
 - Dataroom viewer renders full nested index on one page (no folder paging).
 - file_uploaded notification key exists but no viewer-upload/file-request flow.

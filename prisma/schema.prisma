@@ -26,6 +26,7 @@ enum TokenPurpose {
   VIEWER_VERIFY
   LINK_INVITE
   TEAM_INVITE
+  SIGNER_VERIFY
 }
 
 model VerificationToken {
@@ -73,6 +74,7 @@ model Team {
   notifications Notification[]
   notifPrefs    NotificationPreference[]
   accessRequests AccessRequest[]
+  signatureRequests SignatureRequest[]
 }
 
 model TeamMember {
@@ -176,6 +178,7 @@ model Document {
   links          Link[]
   dataroomDocs   DataroomDocument[]
   views          View[]
+  signatureRequests SignatureRequest[]
 
   @@index([teamId, folderId])
 }
@@ -197,6 +200,7 @@ model DocumentVersion {
   currentOf  Document? @relation("CurrentVersion")
   uploadedBy User?     @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
   pageViews  PageView[]
+  signatureRequests SignatureRequest[]
 
   @@unique([documentId, versionNumber])
 }
@@ -491,6 +495,146 @@ model AgreementResponse {
 
   agreement Agreement @relation(fields: [agreementId], references: [id], onDelete: Cascade)
   view      View      @relation(fields: [viewId], references: [id], onDelete: Cascade)
+}
+
+// ---------- Signature requests (e-signing envelopes) ----------
+
+enum SignatureRequestStatus {
+  DRAFT
+  SENT
+  COMPLETED
+  DECLINED
+  VOIDED
+  EXPIRED
+}
+
+enum SignerRole {
+  SIGNER
+  CC
+}
+
+enum SignerStatus {
+  PENDING
+  SENT
+  VIEWED
+  SIGNED
+  DECLINED
+}
+
+enum SignFieldKind {
+  SIGNATURE
+  INITIALS
+  DATE_SIGNED
+  TEXT
+  CHECKBOX
+}
+
+model SignatureRequest {
+  id         String                 @id @default(cuid())
+  teamId     String
+  documentId String
+  // Pinned so later uploads cannot change what recipients see or signed.
+  versionId  String
+  title      String
+  message    String?
+  status     SignatureRequestStatus @default(DRAFT)
+  // true: signers are emailed round by round in Signer.order; false: all at once
+  sequential Boolean                @default(false)
+  requireEmailVerification Boolean  @default(false)
+  expiresAt         DateTime?
+  reminderEveryDays Int?
+  lastReminderAt    DateTime?
+  createdById String?
+  sentAt      DateTime?
+  completedAt DateTime?
+  voidReason  String?
+  // flattened PDF with all field values + certificate-of-completion page
+  signedFileKey String?
+  // sha256 hex of the final PDF bytes, also printed on the certificate
+  finalHash     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  team     Team            @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  document Document        @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  version  DocumentVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  signers  Signer[]
+  fields   SignatureField[]
+  events   SigningEvent[]
+
+  @@index([teamId, status])
+  @@index([documentId])
+}
+
+model Signer {
+  id        String       @id @default(cuid())
+  requestId String
+  email     String
+  name      String?
+  role      SignerRole   @default(SIGNER)
+  // routing round when the request is sequential; ties are emailed together
+  order     Int          @default(0)
+  // possession of this token proves the email invitation was received
+  token     String       @unique
+  status    SignerStatus @default(PENDING)
+  verified  Boolean      @default(false)
+  // adopted signature/initials as PNG data URLs, applied to all owned fields
+  signatureData String?
+  initialsData  String?
+  viewedAt      DateTime?
+  signedAt      DateTime?
+  declinedAt    DateTime?
+  declineReason String?
+  lastSentAt    DateTime?
+  ip            String?
+  userAgent     String?
+
+  request SignatureRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  fields  SignatureField[]
+  events  SigningEvent[]
+
+  @@unique([requestId, email])
+}
+
+model SignatureField {
+  id        String        @id @default(cuid())
+  requestId String
+  signerId  String
+  kind      SignFieldKind
+  page      Int
+  // fractions of page size (0..1), same shape as Agreement.fields
+  xPct Float
+  yPct Float
+  wPct Float
+  hPct Float
+  required Boolean @default(true)
+  // TEXT: entered text; CHECKBOX: "true"; DATE_SIGNED: ISO date.
+  // SIGNATURE/INITIALS read the signer's adopted PNG instead.
+  value    String?
+  filledAt DateTime?
+
+  request SignatureRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  signer  Signer           @relation(fields: [signerId], references: [id], onDelete: Cascade)
+
+  @@index([requestId, page])
+}
+
+// Append-only audit trail: rows are only ever inserted, never updated.
+model SigningEvent {
+  id        String   @id @default(cuid())
+  requestId String
+  signerId  String?
+  // created|sent|viewed|verified|consented|signed|declined|reminded|voided|expired|completed
+  type      String
+  meta      Json?
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  request SignatureRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  signer  Signer?          @relation(fields: [signerId], references: [id], onDelete: SetNull)
+
+  @@index([requestId, createdAt])
 }
 
 // ---------- Branding / domains / presets ----------

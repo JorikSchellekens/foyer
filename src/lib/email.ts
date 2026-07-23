@@ -160,6 +160,73 @@ export async function sendTeamInvite(opts: {
   });
 }
 
+export async function sendSignatureInvite(opts: {
+  email: string;
+  url: string;
+  documentName: string;
+  teamName: string;
+  message?: string | null;
+  expiresAt?: Date | null;
+}) {
+  const note = opts.message
+    ? `<br/><br/><em>&ldquo;${opts.message}&rdquo;</em>`
+    : "";
+  const expiry = opts.expiresAt
+    ? `<br/><br/>This request expires on ${opts.expiresAt.toLocaleDateString(
+        "en-GB",
+        { day: "numeric", month: "long", year: "numeric" }
+      )}.`
+    : "";
+  return sendEmail({
+    to: opts.email,
+    subject: `${opts.teamName} requests your signature on "${opts.documentName}"`,
+    html: shell({
+      heading: `Your signature is requested`,
+      body: `${opts.teamName} has asked you to review and sign <strong>${opts.documentName}</strong>.${note}${button(
+        opts.url,
+        "Review and sign"
+      )}No account is needed - the link above is unique to you.${expiry}`,
+    }),
+  });
+}
+
+export async function sendSignatureReminder(opts: {
+  email: string;
+  url: string;
+  documentName: string;
+  teamName: string;
+}) {
+  return sendEmail({
+    to: opts.email,
+    subject: `Reminder: "${opts.documentName}" is awaiting your signature`,
+    html: shell({
+      heading: `A document is waiting for you`,
+      body: `${opts.teamName} is still waiting for your signature on <strong>${opts.documentName}</strong>.${button(
+        opts.url,
+        "Review and sign"
+      )}`,
+    }),
+  });
+}
+
+export async function sendSignatureCompleted(opts: {
+  email: string;
+  url: string;
+  documentName: string;
+}) {
+  return sendEmail({
+    to: opts.email,
+    subject: `Completed: "${opts.documentName}" has been signed by all parties`,
+    html: shell({
+      heading: `Everyone has signed`,
+      body: `<strong>${opts.documentName}</strong> is fully executed. The final document, with its certificate of completion, is available below.${button(
+        opts.url,
+        "Download signed document"
+      )}`,
+    }),
+  });
+}
+
 export async function sendActivityEmail(opts: {
   to: string;
   subject: string;

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronRight, Eye, Link2, Plus } from "lucide-react";
+import { ChevronRight, Eye, Link2, PenLine, Plus } from "lucide-react";
 import { requireTeam } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,8 @@ import {
 import { docTypeLabel } from "@/lib/doc-types";
 import { VersionUploadButton, RestoreVersionButton } from "./version-upload";
 import { DocumentTitle } from "./title-editor";
+import { createSignatureDraft } from "@/app/(app)/signatures/actions";
+import { StatusBadge } from "@/app/(app)/signatures/status-badge";
 
 export default async function DocumentPage({
   params,
@@ -69,6 +71,10 @@ export default async function DocumentPage({
           link: { include: { domain: true } },
           pageViews: true,
         },
+      },
+      signatureRequests: {
+        include: { signers: true },
+        orderBy: { createdAt: "desc" },
       },
     },
   });
@@ -149,6 +155,13 @@ export default async function DocumentPage({
                 <Eye className="size-4" /> Preview
               </Link>
             </Button>
+            {doc.type === "PDF" && (
+              <form action={createSignatureDraft.bind(null, doc.id)}>
+                <Button variant="outline" type="submit">
+                  <PenLine className="size-4" /> Request signatures
+                </Button>
+              </form>
+            )}
             {doc.type !== "NOTION" && (
               <VersionUploadButton documentId={doc.id} />
             )}
@@ -211,6 +224,42 @@ export default async function DocumentPage({
             />
           )}
         </section>
+
+        {doc.signatureRequests.length > 0 && (
+          <section>
+            <h2 className="mb-3 font-display text-xl">Signature requests</h2>
+            <div className="space-y-1">
+              {doc.signatureRequests.map((r) => {
+                const signers = r.signers.filter((s) => s.role === "SIGNER");
+                const signed = signers.filter(
+                  (s) => s.status === "SIGNED"
+                ).length;
+                return (
+                  <Link
+                    key={r.id}
+                    href={`/signatures/${r.id}`}
+                    className="flex items-center gap-4 rounded-md border bg-card px-4 py-3 transition-colors hover:bg-accent/50"
+                  >
+                    <PenLine className="size-4 shrink-0 text-muted-foreground" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{r.title}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {signers.map((s) => s.email).join(", ") ||
+                          "no recipients yet"}
+                      </p>
+                    </div>
+                    {r.status === "SENT" && (
+                      <Badge variant="secondary" className="font-mono">
+                        {signed}/{signers.length} signed
+                      </Badge>
+                    )}
+                    <StatusBadge status={r.status} />
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {pages.length > 0 && (
           <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
