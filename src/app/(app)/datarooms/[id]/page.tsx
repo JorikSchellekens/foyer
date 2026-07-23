@@ -32,11 +32,17 @@ import { DataroomMenu } from "./dataroom-menu";
 import {
   AddFromLibraryDialog,
   AddNotionToDataroomDialog,
+  CrumbDropLink,
   DataroomUploadButtons,
   ReorderableDocRows,
   DrFolderRow,
   NewDrFolderButton,
 } from "./contents-client";
+import {
+  DataroomExplorer,
+  type ExplorerDoc,
+  type ExplorerFolder,
+} from "./explorer";
 import { AccessTab, type MemberAccess } from "./access-client";
 import { QaTab } from "./qa-client";
 import { FolderLock } from "lucide-react";
@@ -394,28 +400,64 @@ async function ContentsTabInner({
     dataroom.folders.filter((f) => f.parentId === fid).length +
     dataroom.documents.filter((d) => d.folderId === fid).length;
 
+  // full hierarchy for the explorer pane
+  const explorerDocsIn = (fid: string | null): ExplorerDoc[] =>
+    dataroom.documents
+      .filter((d) => d.folderId === fid)
+      .map((d) => ({
+        itemId: d.id,
+        documentId: d.document.id,
+        name: d.document.name,
+        type: d.document.type,
+      }));
+  const explorerFoldersIn = (fid: string | null): ExplorerFolder[] =>
+    dataroom.folders
+      .filter((f) => f.parentId === fid)
+      .map((f) => ({
+        id: f.id,
+        name: f.name,
+        folders: explorerFoldersIn(f.id),
+        docs: explorerDocsIn(f.id),
+      }));
+
   return (
-    <div className="space-y-4">
+    <div className="flex items-start gap-6">
+      <aside className="sticky top-6 hidden w-60 shrink-0 md:block">
+        <p className="mb-2 px-2 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+          Explorer
+        </p>
+        <DataroomExplorer
+          dataroomId={dataroom.id}
+          currentFolderId={folderId}
+          folders={explorerFoldersIn(null)}
+          docs={explorerDocsIn(null)}
+        />
+      </aside>
+      <div className="min-w-0 flex-1 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <nav className="flex items-center gap-1 text-sm text-muted-foreground">
-          <Link
+          <CrumbDropLink
+            dataroomId={dataroom.id}
+            folderId={null}
             href={`/datarooms/${dataroom.id}`}
-            className="hover:text-foreground"
+            className="px-1 hover:text-foreground"
           >
-          Root
-          </Link>
+            Root
+          </CrumbDropLink>
           {crumbs.map((c, i) => (
             <span key={c.id} className="flex items-center gap-1">
               <ChevronRight className="size-3.5" />
               {i === crumbs.length - 1 ? (
                 <span className="text-foreground">{c.name}</span>
               ) : (
-                <Link
+                <CrumbDropLink
+                  dataroomId={dataroom.id}
+                  folderId={c.id}
                   href={`/datarooms/${dataroom.id}?folder=${c.id}`}
-                  className="hover:text-foreground"
+                  className="px-1 hover:text-foreground"
                 >
                   {c.name}
-                </Link>
+                </CrumbDropLink>
               )}
             </span>
           ))}
@@ -484,6 +526,7 @@ async function ContentsTabInner({
           </Table>
         </div>
       )}
+      </div>
     </div>
   );
 }

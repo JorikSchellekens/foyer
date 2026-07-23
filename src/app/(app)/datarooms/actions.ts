@@ -286,6 +286,44 @@ export async function moveDataroomItem(
 }
 
 /**
+ * Re-parent a folder (null = root). Refuses drops into itself or any of its
+ * descendants, which would detach the subtree from the room.
+ */
+export async function moveDataroomFolder(
+  dataroomId: string,
+  folderId: string,
+  newParentId: string | null
+) {
+  const owned = await ownDataroom(dataroomId);
+  if (!owned) return { error: "Data room not found." };
+  if (folderId === newParentId)
+    return { error: "A folder cannot contain itself." };
+  const folders = await db.dataroomFolder.findMany({
+    where: { dataroomId },
+    select: { id: true, parentId: true },
+  });
+  const byId = new Map(folders.map((f) => [f.id, f]));
+  if (!byId.has(folderId)) return { error: "Folder not found." };
+  if (newParentId) {
+    if (!byId.has(newParentId))
+      return { error: "Destination folder not found." };
+    // walk up from the destination; reaching the moved folder means a cycle
+    let cursor: string | null = newParentId;
+    while (cursor) {
+      if (cursor === folderId)
+        return { error: "A folder cannot move into its own subfolder." };
+      cursor = byId.get(cursor)?.parentId ?? null;
+    }
+  }
+  await db.dataroomFolder.update({
+    where: { id: folderId },
+    data: { parentId: newParentId },
+  });
+  bust(dataroomId);
+  return { ok: true };
+}
+
+/**
  * Persist a new visitor-facing order for the documents in one folder. Ids must
  * all belong to the data room; their position in the array becomes orderIndex.
  */

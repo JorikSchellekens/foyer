@@ -8,7 +8,12 @@ import {
   verifyPreviewToken,
 } from "@/lib/access";
 import { ensureView } from "@/lib/view-session";
-import { viewableDocOrder } from "@/lib/dataroom-nav";
+import {
+  viewableDocOrder,
+  viewableTree,
+  type NavTreeNode,
+} from "@/lib/dataroom-nav";
+import type { ViewerTreeNode } from "@/components/viewer/dataroom-tree";
 import { resolveBranding, gateBrand } from "@/lib/viewer-brand";
 import { fetchNotionPage } from "@/lib/notion";
 import { db } from "@/lib/db";
@@ -73,6 +78,25 @@ export default async function DataroomDocumentPage({
     pos >= 0 && pos < order.length - 1 ? docHref(order[pos + 1].itemId) : null;
   const position = pos >= 0 ? `${pos + 1} / ${order.length}` : null;
 
+  // explorer sidebar: the same grant-filtered tree as the index page
+  const toViewerTree = (nodes: NavTreeNode[]): ViewerTreeNode[] =>
+    nodes.map((n) =>
+      n.kind === "folder"
+        ? {
+            kind: "folder",
+            id: n.id,
+            name: n.name,
+            children: toViewerTree(n.children),
+          }
+        : {
+            kind: "document",
+            itemId: n.itemId,
+            name: n.name,
+            href: docHref(n.itemId),
+          }
+    );
+  const tree = toViewerTree(viewableTree(link));
+
   const branding = await resolveBranding(link);
   const brand = gateBrand(link, branding);
   const version = doc.currentVersion;
@@ -115,6 +139,8 @@ export default async function DataroomDocumentPage({
       prevHref={prevHref}
       nextHref={nextHref}
       position={position}
+      tree={tree}
+      currentItemId={itemId}
     />
   );
 }

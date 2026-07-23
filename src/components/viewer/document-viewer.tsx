@@ -1,8 +1,15 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ChevronLeft, ChevronRight, Download, ExternalLink } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  ExternalLink,
+  PanelLeft,
+} from "lucide-react";
 import type { ExtendedRecordMap } from "notion-types";
 import dynamic from "next/dynamic";
 import { useTracking } from "./use-tracking";
@@ -10,6 +17,7 @@ import { Watermark } from "./watermark";
 import { NotionViewer } from "./notion-viewer";
 import { PreviewBanner } from "./preview-banner";
 import { DocumentLoading } from "./document-loading";
+import { DataroomTree, type ViewerTreeNode } from "./dataroom-tree";
 
 // pdf.js touches DOM globals at module scope; only load it in the browser
 const PdfViewer = dynamic(
@@ -68,6 +76,8 @@ export function DocumentViewer({
   prevHref = null,
   nextHref = null,
   position = null,
+  tree = null,
+  currentItemId = null,
 }: {
   doc: ViewerDoc;
   viewId: string;
@@ -81,7 +91,17 @@ export function DocumentViewer({
   prevHref?: string | null;
   nextHref?: string | null;
   position?: string | null;
+  tree?: ViewerTreeNode[] | null;
+  currentItemId?: string | null;
 }) {
+  const hasTree = !!tree && tree.length > 0;
+  // null = untouched: CSS opens it on large screens, keeps it closed on
+  // small ones, with no post-hydration flash
+  const [navOpen, setNavOpen] = useState<boolean | null>(null);
+  const toggleNav = () =>
+    setNavOpen(
+      (v) => !(v ?? window.matchMedia("(min-width: 1024px)").matches)
+    );
   const { setPage, containerRef, notifyDownload } = useTracking({
     viewId,
     token: trackToken,
@@ -121,6 +141,16 @@ export function DocumentViewer({
     >
       {preview && <PreviewBanner />}
       <header className="z-40 flex h-14 shrink-0 items-center gap-3 border-b border-white/10 bg-[#0c1013] px-4 text-white">
+        {hasTree && (
+          <button
+            type="button"
+            onClick={toggleNav}
+            className="rounded-md p-1.5 text-white/70 hover:bg-white/10 hover:text-white"
+            title="Toggle contents"
+          >
+            <PanelLeft className="size-4" />
+          </button>
+        )}
         {backHref && (
           <Link
             href={backHref}
@@ -207,9 +237,36 @@ export function DocumentViewer({
         )}
       </header>
 
-      <div ref={containerRef} className="relative min-h-0 flex-1 overflow-auto">
-        {watermarkText && <Watermark text={watermarkText} />}
-        <Body doc={doc} onPageChange={onPageChange} protection={protection} />
+      <div className="relative flex min-h-0 flex-1">
+        {hasTree && navOpen !== false && (
+          <aside
+            className={`absolute inset-y-0 left-0 z-30 w-72 shrink-0 overflow-y-auto border-r border-white/10 bg-[#0c1013] p-3 lg:static ${
+              navOpen === null ? "hidden lg:block" : ""
+            }`}
+          >
+            <p className="mb-2 px-2 font-mono text-[10px] uppercase tracking-[0.18em] text-white/40">
+              Contents
+            </p>
+            <DataroomTree
+              nodes={tree!}
+              currentItemId={currentItemId}
+              palette={{
+                text: "rgba(255,255,255,0.8)",
+                subtle: "rgba(255,255,255,0.45)",
+                accent: "#ffffff",
+                hoverBg: "rgba(255,255,255,0.08)",
+                activeBg: "rgba(255,255,255,0.12)",
+              }}
+            />
+          </aside>
+        )}
+        <div
+          ref={containerRef}
+          className="relative min-h-0 flex-1 overflow-auto"
+        >
+          {watermarkText && <Watermark text={watermarkText} />}
+          <Body doc={doc} onPageChange={onPageChange} protection={protection} />
+        </div>
       </div>
     </div>
   );

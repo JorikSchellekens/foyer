@@ -59,6 +59,60 @@ import {
   uploadIntoDataroom,
 } from "../actions";
 import type { UploadedFile } from "@/app/(app)/documents/actions";
+import {
+  handleMoveDrop,
+  hasMovePayload,
+  startDocDrag,
+  startFolderDrag,
+} from "./dnd";
+
+/**
+ * Breadcrumb link that also accepts a dragged file/folder, moving it into
+ * the crumb's folder (null = root).
+ */
+export function CrumbDropLink({
+  dataroomId,
+  folderId,
+  href,
+  className,
+  children,
+}: {
+  dataroomId: string;
+  folderId: string | null;
+  href: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const router = useRouter();
+  const [over, setOver] = useState(false);
+  return (
+    <a
+      href={href}
+      onClick={(e) => {
+        e.preventDefault();
+        router.push(href);
+      }}
+      onDragOver={(e) => {
+        if (!hasMovePayload(e)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={async (e) => {
+        e.preventDefault();
+        setOver(false);
+        if (await handleMoveDrop(e, dataroomId, folderId)) router.refresh();
+      }}
+      className={cn(
+        className,
+        over && "rounded-sm bg-primary/10 ring-2 ring-primary/60"
+      )}
+    >
+      {children}
+    </a>
+  );
+}
 
 // ---------- toolbar ----------
 
@@ -433,9 +487,27 @@ export function DrFolderRow({
   const router = useRouter();
   const [renameOpen, setRenameOpen] = useState(false);
   const [name, setName] = useState(folder.name);
+  const [dropOver, setDropOver] = useState(false);
   return (
     <TableRow
-      className="cursor-pointer"
+      className={cn(
+        "cursor-pointer",
+        dropOver && "bg-primary/5 ring-2 ring-inset ring-primary/60"
+      )}
+      draggable
+      onDragStart={(e) => startFolderDrag(e, folder.id)}
+      onDragOver={(e) => {
+        if (!hasMovePayload(e)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        setDropOver(true);
+      }}
+      onDragLeave={() => setDropOver(false)}
+      onDrop={async (e) => {
+        e.preventDefault();
+        setDropOver(false);
+        if (await handleMoveDrop(e, dataroomId, folder.id)) router.refresh();
+      }}
       onClick={() =>
         router.push(`/datarooms/${dataroomId}?folder=${folder.id}`)
       }
@@ -560,12 +632,18 @@ export function ReorderableDocRows({
         <TableRow
           key={item.id}
           draggable
-          onDragStart={() => setDragId(item.id)}
+          onDragStart={(e) => {
+            setDragId(item.id);
+            // also carry the move payload so folders and the explorer
+            // tree can receive this row
+            startDocDrag(e, item.id);
+          }}
           onDragEnd={() => {
             setDragId(null);
             setOverId(null);
           }}
           onDragOver={(e) => {
+            if (!dragId) return; // reorder is only for drags started here
             e.preventDefault();
             if (overId !== item.id) setOverId(item.id);
           }}

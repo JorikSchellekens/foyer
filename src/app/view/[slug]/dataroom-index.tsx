@@ -8,6 +8,11 @@ import { FoyerMark } from "@/components/brand/logo";
 import { PreviewBanner } from "@/components/viewer/preview-banner";
 import { formatBytes } from "@/lib/format";
 import { db } from "@/lib/db";
+import { viewableTree, type NavTreeNode } from "@/lib/dataroom-nav";
+import {
+  DataroomTree,
+  type ViewerTreeNode,
+} from "@/components/viewer/dataroom-tree";
 import { IndexTracker } from "./index-tracker";
 import { QaWidget } from "./qa-widget";
 
@@ -116,6 +121,25 @@ export async function DataroomIndex({
   const subtle = dark ? "rgba(242,241,236,0.55)" : "rgba(22,24,29,0.55)";
   const hairline = dark ? "rgba(255,255,255,0.14)" : "rgba(22,24,29,0.14)";
 
+  // explorer sidebar: the same grant-filtered content as the index list
+  const toViewerTree = (nodes: NavTreeNode[]): ViewerTreeNode[] =>
+    nodes.map((n) =>
+      n.kind === "folder"
+        ? {
+            kind: "folder",
+            id: n.id,
+            name: n.name,
+            children: toViewerTree(n.children),
+          }
+        : {
+            kind: "document",
+            itemId: n.itemId,
+            name: n.name,
+            href: `/view/${slug}/d/${n.itemId}${previewQuery}`,
+          }
+    );
+  const tree = toViewerTree(viewableTree(link));
+
   const questions = link.enableQA
     ? await db.dataroomQuestion.findMany({
         where: { dataroomId: dataroom.id },
@@ -143,7 +167,7 @@ export async function DataroomIndex({
         trackToken={trackToken}
         preview={!!previewToken}
       >
-        <div className="mx-auto max-w-3xl px-6 pb-20 pt-10">
+        <div className="mx-auto max-w-3xl px-6 pb-20 pt-10 lg:max-w-5xl">
           <header className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               {brand.logoUrl ? (
@@ -213,7 +237,34 @@ export async function DataroomIndex({
             />
           </div>
 
-          <div className="mt-10">
+          <div className="mt-10 lg:grid lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-10">
+            {entries.length > 0 && (
+              <aside className="hidden lg:block">
+                <div className="sticky top-8">
+                  <p
+                    className="mb-3 font-mono text-[10px] uppercase tracking-[0.18em]"
+                    style={{ color: subtle }}
+                  >
+                    Contents
+                  </p>
+                  <DataroomTree
+                    nodes={tree}
+                    palette={{
+                      text,
+                      subtle,
+                      accent: brand.brandColor,
+                      hoverBg: dark
+                        ? "rgba(255,255,255,0.06)"
+                        : "rgba(22,24,29,0.04)",
+                      activeBg: dark
+                        ? "rgba(255,255,255,0.1)"
+                        : "rgba(22,24,29,0.06)",
+                    }}
+                  />
+                </div>
+              </aside>
+            )}
+            <div className="min-w-0">
             {entries.length === 0 ? (
               <p className="text-sm" style={{ color: subtle }}>
                 Nothing has been shared with you here yet.
@@ -267,6 +318,7 @@ export async function DataroomIndex({
                 )}
               </ol>
             )}
+            </div>
           </div>
 
           {link.enableQA && (

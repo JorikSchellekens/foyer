@@ -94,6 +94,10 @@ Tools: list/search documents & datarooms, create/manage links, get analytics
 - [x] Analytics cross-linking: views tables row-click → /views/[id] detail
       (per-page dwell + attention maps, works for anonymous visits),
       "Viewed" → document/dataroom page, link name → public link URL
+- [x] Dataroom explorer: admin tree pane beside contents (navigate, drag
+      files/folders into folders/crumbs/root, cycle-safe folder moves);
+      viewer tree sidebar on the index page and collapsible in-document
+      contents panel (grant-filtered via viewableTree)
 
 ## Known cut corners (candidates for later)
 - Agreement "field placement on PDF" simplified to read-PDF + drawn signature
