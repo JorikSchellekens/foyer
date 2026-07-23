@@ -235,3 +235,35 @@ export async function moveDocument(id: string, folderId: string | null) {
   });
   revalidatePath("/documents");
 }
+
+/**
+ * Re-parent a library folder (null = root). Refuses drops into itself or
+ * any of its descendants, which would detach the subtree.
+ */
+export async function moveFolder(id: string, newParentId: string | null) {
+  const ctx = await requireTeam();
+  if (id === newParentId) return { error: "A folder cannot contain itself." };
+  const folders = await db.folder.findMany({
+    where: { teamId: ctx.team.id },
+    select: { id: true, parentId: true },
+  });
+  const byId = new Map(folders.map((f) => [f.id, f]));
+  if (!byId.has(id)) return { error: "Folder not found." };
+  if (newParentId) {
+    if (!byId.has(newParentId))
+      return { error: "Destination folder not found." };
+    // walk up from the destination; reaching the moved folder means a cycle
+    let cursor: string | null = newParentId;
+    while (cursor) {
+      if (cursor === id)
+        return { error: "A folder cannot move into its own subfolder." };
+      cursor = byId.get(cursor)?.parentId ?? null;
+    }
+  }
+  await db.folder.update({
+    where: { id },
+    data: { parentId: newParentId },
+  });
+  revalidatePath("/documents");
+  return { ok: true };
+}

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { FileText, ChevronRight } from "lucide-react";
 import { requireTeam } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -14,7 +13,7 @@ import {
 } from "@/components/ui/table";
 import { teamMemberEmails, externalViews } from "@/lib/internal-views";
 import { NewFolderDialog, AddNotionDialog } from "./toolbar";
-import { DocumentRow, FolderRow } from "./rows";
+import { DocumentRow, FolderRow, LibCrumbDropLink } from "./rows";
 
 export const metadata = { title: "Documents" };
 
@@ -76,21 +75,26 @@ export default async function DocumentsPage({
       <div className="px-4 sm:px-8 py-6">
         {crumbs.length > 0 && (
           <nav className="mb-4 flex items-center gap-1 text-sm text-muted-foreground">
-            <Link href="/documents" className="hover:text-foreground">
+            <LibCrumbDropLink
+              folderId={null}
+              href="/documents"
+              className="px-1 hover:text-foreground"
+            >
               All documents
-            </Link>
+            </LibCrumbDropLink>
             {crumbs.map((c, i) => (
               <span key={c.id} className="flex items-center gap-1">
                 <ChevronRight className="size-3.5" />
                 {i === crumbs.length - 1 ? (
                   <span className="text-foreground">{c.name}</span>
                 ) : (
-                  <Link
+                  <LibCrumbDropLink
+                    folderId={c.id}
                     href={`/documents?folder=${c.id}`}
-                    className="hover:text-foreground"
+                    className="px-1 hover:text-foreground"
                   >
                     {c.name}
-                  </Link>
+                  </LibCrumbDropLink>
                 )}
               </span>
             ))}

@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, Folder as FolderIcon } from "lucide-react";
 import type { DocumentType } from "@prisma/client";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { FileIcon } from "@/components/shell/file-icon";
@@ -16,6 +18,58 @@ import {
   renameFolder,
   deleteFolder,
 } from "./actions";
+import {
+  handleLibMoveDrop,
+  hasLibMovePayload,
+  startLibDocDrag,
+  startLibFolderDrag,
+} from "./dnd";
+
+/**
+ * Breadcrumb link that also accepts a dragged file/folder, moving it into
+ * the crumb's folder (null = root).
+ */
+export function LibCrumbDropLink({
+  folderId,
+  href,
+  className,
+  children,
+}: {
+  folderId: string | null;
+  href: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const router = useRouter();
+  const [over, setOver] = useState(false);
+  return (
+    <a
+      href={href}
+      onClick={(e) => {
+        e.preventDefault();
+        router.push(href);
+      }}
+      onDragOver={(e) => {
+        if (!hasLibMovePayload(e)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={async (e) => {
+        e.preventDefault();
+        setOver(false);
+        if (await handleLibMoveDrop(e, folderId)) router.refresh();
+      }}
+      className={cn(
+        className,
+        over && "rounded-sm bg-primary/10 ring-2 ring-primary/60"
+      )}
+    >
+      {children}
+    </a>
+  );
+}
 
 export function FolderRow({
   folder,
@@ -23,9 +77,27 @@ export function FolderRow({
   folder: { id: string; name: string; itemCount: number };
 }) {
   const router = useRouter();
+  const [dropOver, setDropOver] = useState(false);
   return (
     <TableRow
-      className="cursor-pointer"
+      className={cn(
+        "cursor-pointer",
+        dropOver && "bg-primary/5 ring-2 ring-inset ring-primary/60"
+      )}
+      draggable
+      onDragStart={(e) => startLibFolderDrag(e, folder.id)}
+      onDragOver={(e) => {
+        if (!hasLibMovePayload(e)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        setDropOver(true);
+      }}
+      onDragLeave={() => setDropOver(false)}
+      onDrop={async (e) => {
+        e.preventDefault();
+        setDropOver(false);
+        if (await handleLibMoveDrop(e, folder.id)) router.refresh();
+      }}
       onClick={() => router.push(`/documents?folder=${folder.id}`)}
     >
       <TableCell>
@@ -73,6 +145,8 @@ export function DocumentRow({
   return (
     <TableRow
       className="group cursor-pointer"
+      draggable
+      onDragStart={(e) => startLibDocDrag(e, doc.id)}
       onClick={() => router.push(`/documents/${doc.id}`)}
     >
       <TableCell>
