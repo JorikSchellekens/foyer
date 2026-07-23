@@ -123,9 +123,10 @@ Tools: list/search documents & datarooms, create/manage links, get analytics
       metrics (script ascenders no longer clip), Start/Next-field guided
       navigation with focus/highlight, auto-derived initials from the typed
       signature name (no second dialog), a field-index popover behind the
-      n/m counter (jump between fields, collapsed by default), Finish always
-      clickable (guides to the blocking field or consent instead of sitting
-      disabled), signer pages carry the team's Branding logo with a quiet
+      n/m counter (jump between fields, collapsed by default), a Sign button
+      that is always clickable (guides to the blocking field, then opens a
+      clickwrap consent dialog - "Agree and sign" is the recorded consent
+      action), signer pages carry the team's Branding logo with a quiet
       "via Foyer" mark.
       E2E: scripts/sign-e2e.ts
 

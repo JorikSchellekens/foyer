@@ -201,8 +201,9 @@ async function signAs(
     await page.fill('[data-sign-kind="TEXT"] input', textValue);
   }
 
-  await page.click("#esign-consent");
-  await page.click('[data-testid="finish"]');
+  await page.click('[data-testid="sign"]');
+  await page.waitForSelector('[data-testid="agree-sign"]');
+  await page.click('[data-testid="agree-sign"]');
   try {
     await page.waitForSelector("text=/You have signed|Everyone has signed/", {
       timeout: 20_000,

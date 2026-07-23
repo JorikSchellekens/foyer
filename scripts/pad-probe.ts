@@ -97,11 +97,11 @@ async function main() {
   await page.goto(`${BASE}/sign/t/${token}`);
   await page.waitForSelector('button:has-text("Sign here")');
 
-  // Finish before anything is filled: must guide, not submit or sit dead.
-  await page.click('[data-testid="finish"]');
+  // Sign before anything is filled: must guide, not submit or sit dead.
+  await page.click('[data-testid="sign"]');
   await page.waitForSelector("[data-sonner-toast]", { timeout: 5_000 });
   console.log(
-    "premature finish guided:",
+    "premature sign guided:",
     (await page.locator("[data-sonner-toast]").first().textContent())?.slice(0, 60)
   );
 
@@ -199,10 +199,14 @@ async function main() {
   console.log("index rows:", indexRows);
   await page.locator('[data-slot="popover-content"] button').first().click();
   await page.keyboard.press("Escape");
-  await page.click("#esign-consent");
-  const finish = page.locator('[data-testid="finish"]');
-  console.log("finish disabled:", await finish.isDisabled());
-  await finish.click({ timeout: 5_000 });
+  // Sign -> clickwrap confirmation dialog -> Agree and sign
+  await page.click('[data-testid="sign"]');
+  await page.waitForSelector('[data-testid="agree-sign"]');
+  console.log(
+    "consent dialog shown:",
+    !!(await page.locator("text=Agree and sign, you agree").count())
+  );
+  await page.click('[data-testid="agree-sign"]');
   await page.waitForSelector("text=/You have signed|Everyone has signed/", {
     timeout: 20_000,
   });
@@ -210,7 +214,7 @@ async function main() {
     where: { request: { title: "Pad Probe" } },
     orderBy: { signedAt: "desc" },
   });
-  console.log("signer status after finish:", signed?.status);
+  console.log("signer status after sign:", signed?.status);
 
   if (errors.length) console.log("page errors:", errors.slice(0, 5));
   await browser.close();

@@ -6,8 +6,6 @@ import { useRouter } from "next/navigation";
 import { CheckCircle2, Circle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
 import {
   Popover,
   PopoverContent,
@@ -71,12 +69,11 @@ export function SignerClient({
   const [adoptedName, setAdoptedName] = useState<string | null>(signerName);
   const [values, setValues] = useState<Record<string, string>>({});
   const [adopting, setAdopting] = useState<"signature" | "initials" | null>(null);
-  const [consent, setConsent] = useState(false);
   const [declineOpen, setDeclineOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [activeFieldId, setActiveFieldId] = useState<string | null>(null);
-  const [consentPulse, setConsentPulse] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
@@ -86,7 +83,7 @@ export function SignerClient({
     { signature: !!signature, initials: !!initials }
   );
   const done = fields.length - missing.length;
-  const ready = missing.length === 0 && consent;
+  const ready = missing.length === 0;
 
   // Guided navigation: the unfilled fields that actually need a hand, in
   // reading order across pages. DATE_SIGNED auto-fills; checkboxes are valid
@@ -121,7 +118,7 @@ export function SignerClient({
 
   const goNext = () => goToField(navTargets[0]);
 
-  async function finish() {
+  function sign() {
     // Never a dead button: explain and point at whatever still blocks.
     if (navTargets.length > 0) {
       toast.info(
@@ -132,12 +129,10 @@ export function SignerClient({
       goNext();
       return;
     }
-    if (!consent) {
-      toast.info("Tick the agreement checkbox at the bottom to finish.");
-      setConsentPulse(true);
-      setTimeout(() => setConsentPulse(false), 2500);
-      return;
-    }
+    setConfirmOpen(true);
+  }
+
+  async function agreeAndSign() {
     setBusy(true);
     try {
       const res = await submitSignature(requestId, {
@@ -145,10 +140,15 @@ export function SignerClient({
         signatureData: signature ?? undefined,
         initialsData: initials ?? undefined,
         values,
-        consent,
+        // Clicking "Agree and sign" in the confirmation dialog IS the consent
+        // action (clickwrap); recorded as the consented audit event.
+        consent: true,
       });
       if (res && "error" in res) toast.error(res.error);
-      else router.refresh();
+      else {
+        setConfirmOpen(false);
+        router.refresh();
+      }
     } finally {
       setBusy(false);
     }
@@ -305,13 +305,12 @@ export function SignerClient({
             </Button>
           )}
           <Button
-            onClick={finish}
+            onClick={sign}
             disabled={busy}
             variant={ready ? "default" : "secondary"}
-            data-testid="finish"
+            data-testid="sign"
           >
-            {busy && <Loader2 className="size-4 animate-spin" />}
-            Finish
+            Sign
           </Button>
         </div>
       </header>
@@ -327,29 +326,42 @@ export function SignerClient({
         />
       </div>
 
-      <footer
-        className={`flex items-center gap-2 border-t bg-card px-4 py-3 transition-shadow sm:px-6 ${
-          consentPulse ? "animate-pulse ring-2 ring-inset ring-primary" : ""
-        }`}
-      >
-        <Checkbox
-          id="esign-consent"
-          checked={consent}
-          onCheckedChange={(v) => setConsent(v === true)}
-        />
-        <Label
-          htmlFor="esign-consent"
-          className="text-xs font-normal text-muted-foreground"
-        >
-          I agree to do business electronically and that my electronic signature
-          is the legal equivalent of my handwritten signature.
-        </Label>
-        {brandLogoUrl && (
-          <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-            via <span className="font-display italic">Foyer</span>
-          </span>
-        )}
-      </footer>
+      {brandLogoUrl && (
+        <span className="pointer-events-none fixed bottom-3 right-4 z-30 text-xs text-muted-foreground/70">
+          via <span className="font-display italic">Foyer</span>
+        </span>
+      )}
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Sign {title}?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            You are signing as <strong>{adoptedName ?? signerEmail}</strong>{" "}
+            ({signerEmail}). All {fields.length === 1 ? "1 field is" : `${fields.length} fields are`}{" "}
+            complete.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            By choosing Agree and sign, you agree to do business electronically
+            with {teamName} and that your electronic signature is the legal
+            equivalent of your handwritten signature.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setConfirmOpen(false)}
+              disabled={busy}
+            >
+              Go back
+            </Button>
+            <Button onClick={agreeAndSign} disabled={busy} data-testid="agree-sign">
+              {busy && <Loader2 className="size-4 animate-spin" />}
+              Agree and sign
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <AdoptSignatureDialog
         open={adopting !== null}
