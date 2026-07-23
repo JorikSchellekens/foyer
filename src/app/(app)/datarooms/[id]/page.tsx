@@ -32,10 +32,9 @@ import { DataroomMenu } from "./dataroom-menu";
 import {
   AddFromLibraryDialog,
   AddNotionToDataroomDialog,
+  ContentsRows,
   CrumbDropLink,
   DataroomUploadButtons,
-  ReorderableDocRows,
-  FolderRows,
   NewDrFolderButton,
 } from "./contents-client";
 import {
@@ -500,25 +499,19 @@ async function ContentsTabInner({
               </TableRow>
             </TableHeader>
             <TableBody>
-              <FolderRows
-                key={`f-${foldersHere
-                  .map((f) => f.id)
+              <ContentsRows
+                key={[...foldersHere, ...docsHere]
+                  .map((x) => x.id)
                   .sort()
-                  .join(",")}`}
+                  .join(",")}
                 dataroomId={dataroom.id}
+                currentFolderId={folderId}
                 folders={foldersHere.map((f) => ({
                   id: f.id,
                   name: f.name,
                   itemCount: countIn(f.id),
                 }))}
-              />
-              <ReorderableDocRows
-                key={docsHere
-                  .map((d) => d.id)
-                  .sort()
-                  .join(",")}
-                dataroomId={dataroom.id}
-                items={docsHere.map((d) => ({
+                docs={docsHere.map((d) => ({
                   id: d.id,
                   documentId: d.document.id,
                   name: d.document.name,

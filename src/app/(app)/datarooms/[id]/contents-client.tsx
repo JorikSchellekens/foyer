@@ -62,6 +62,7 @@ import {
 } from "../actions";
 import type { UploadedFile } from "@/app/(app)/documents/actions";
 import {
+  DR_DOC_MIME,
   DR_FOLDER_MIME,
   handleMoveDrop,
   hasMovePayload,
@@ -482,124 +483,264 @@ export function AddFromLibraryDialog({
 
 export type DrFolderItem = { id: string; name: string; itemCount: number };
 
-type FolderDropZone = "before" | "into" | "after";
+export type DrDocItem = {
+  id: string; // DataroomDocument id
+  documentId: string;
+  name: string;
+  type: DocumentType;
+  size: number;
+  addedAt: string;
+};
+
+type Zone = "before" | "into" | "after";
+type Target = { key: string; zone: Zone } | null;
 
 /**
- * Sibling folders of the current directory. A dragged folder dropped on the
- * middle of a row nests inside it; dropped near a row's top or bottom edge
- * it reorders among its siblings (the file-manager convention). Dragged
- * documents always nest.
+ * All rows of the current directory under one drag model, so every drop
+ * position means something:
+ *
+ *   dragging a file over a file    -> insert before/after (midpoint line)
+ *   dragging a file over a folder  -> center files it inside (ring);
+ *                                     edges put it at the top of the file
+ *                                     list, so "first" stays reachable even
+ *                                     when folders sit above the files
+ *   dragging a folder over folder  -> edges reorder siblings, center nests
+ *   dragging a folder over a file  -> ignored
+ *
+ * Reorder positions come from local state (only rows born here can be
+ * reordered); cross-directory moves ride the dataTransfer payload, so drags
+ * from the explorer tree land here too. File order is visitor-facing
+ * (orderIndex drives the index page numbering).
  */
-export function FolderRows({
+export function ContentsRows({
   dataroomId,
+  currentFolderId,
   folders,
+  docs,
 }: {
   dataroomId: string;
+  currentFolderId: string | null;
   folders: DrFolderItem[];
+  docs: DrDocItem[];
 }) {
-  const [order, setOrder] = useState(folders);
-  const [target, setTarget] = useState<{
-    id: string;
-    zone: FolderDropZone;
-  } | null>(null);
   const router = useRouter();
+  const [folderOrder, setFolderOrder] = useState(folders);
+  const [docOrder, setDocOrder] = useState(docs);
+  const [dragKey, setDragKey] = useState<string | null>(null);
+  const [target, setTarget] = useState<Target>(null);
 
-  function zoneOf(e: React.DragEvent): FolderDropZone {
-    // only sibling folders reorder; documents always file into the folder
-    if (!e.dataTransfer.types.includes(DR_FOLDER_MIME)) return "into";
+  const isFolderDrag = (e: React.DragEvent) =>
+    e.dataTransfer.types.includes(DR_FOLDER_MIME);
+  const isDocDrag = (e: React.DragEvent) =>
+    e.dataTransfer.types.includes(DR_DOC_MIME);
+
+  function relY(e: React.DragEvent) {
     const rect = e.currentTarget.getBoundingClientRect();
-    const y = (e.clientY - rect.top) / rect.height;
-    if (y < 0.25) return "before";
-    if (y > 0.75) return "after";
-    return "into";
+    return (e.clientY - rect.top) / rect.height;
   }
 
-  async function onDrop(e: React.DragEvent, folder: DrFolderItem) {
-    e.preventDefault();
-    const zone = zoneOf(e);
+  function folderZone(e: React.DragEvent): Zone {
+    const y = relY(e);
+    if (isFolderDrag(e)) return y < 0.25 ? "before" : y > 0.75 ? "after" : "into";
+    // file drag: a wide center files it inside; edges mean "top of the files"
+    return y < 0.2 ? "before" : y > 0.8 ? "after" : "into";
+  }
+
+  const docZone = (e: React.DragEvent): Zone =>
+    relY(e) < 0.5 ? "before" : "after";
+
+  function clearDrag() {
+    setDragKey(null);
     setTarget(null);
-    if (zone === "into") {
-      if (await handleMoveDrop(e, dataroomId, folder.id)) router.refresh();
-      return;
-    }
-    const draggedId = e.dataTransfer.getData(DR_FOLDER_MIME);
-    if (!draggedId || draggedId === folder.id) return;
-    const from = order.findIndex((f) => f.id === draggedId);
-    if (from < 0) return; // dragged in from elsewhere; only edges of siblings reorder
-    const next = [...order];
-    const [moved] = next.splice(from, 1);
-    let to = next.findIndex((f) => f.id === folder.id);
-    if (zone === "after") to += 1;
-    next.splice(to, 0, moved);
-    setOrder(next);
+  }
+
+  function persistFolders(next: DrFolderItem[]) {
+    setFolderOrder(next);
     reorderDataroomFolders(
       dataroomId,
       next.map((f) => f.id)
     ).then(() => router.refresh());
   }
 
+  function persistDocs(next: DrDocItem[]) {
+    setDocOrder(next);
+    reorderDataroomDocuments(
+      dataroomId,
+      next.map((d) => d.id)
+    ).then(() => router.refresh());
+  }
+
+  /** Reinsert an id at index (list must contain it); no-op otherwise. */
+  function moveWithin<T extends { id: string }>(
+    list: T[],
+    id: string,
+    index: number
+  ): T[] | null {
+    const from = list.findIndex((x) => x.id === id);
+    if (from < 0) return null;
+    const next = [...list];
+    const [moved] = next.splice(from, 1);
+    next.splice(Math.max(0, Math.min(index, next.length)), 0, moved);
+    return next;
+  }
+
+  async function onDropFolderRow(e: React.DragEvent, folder: DrFolderItem) {
+    e.preventDefault();
+    const zone = folderZone(e);
+    clearDrag();
+    if (zone === "into") {
+      if (await handleMoveDrop(e, dataroomId, folder.id)) router.refresh();
+      return;
+    }
+    const folderId = e.dataTransfer.getData(DR_FOLDER_MIME);
+    if (folderId) {
+      if (folderId === folder.id) return;
+      const at = folderOrder.findIndex((f) => f.id === folder.id);
+      const next = moveWithin(
+        folderOrder,
+        folderId,
+        zone === "after" ? at + 1 : at
+      );
+      if (next) persistFolders(next);
+      // a folder dragged in from the tree has no order here; only "into" moves it
+      return;
+    }
+    const docId = e.dataTransfer.getData(DR_DOC_MIME);
+    if (docId) {
+      // folder edges are "above the file list": first position
+      const next = moveWithin(docOrder, docId, 0);
+      if (next) persistDocs(next);
+      else if (await handleMoveDrop(e, dataroomId, currentFolderId))
+        router.refresh(); // from another directory: bring it here
+    }
+  }
+
+  async function onDropDocRow(e: React.DragEvent, doc: DrDocItem) {
+    e.preventDefault();
+    const zone = docZone(e);
+    clearDrag();
+    const docId = e.dataTransfer.getData(DR_DOC_MIME);
+    if (!docId || docId === doc.id) return;
+    const at = docOrder.findIndex((d) => d.id === doc.id);
+    const next = moveWithin(docOrder, docId, zone === "after" ? at + 1 : at);
+    if (next) persistDocs(next);
+    else if (await handleMoveDrop(e, dataroomId, currentFolderId))
+      router.refresh(); // from another directory: bring it here
+  }
+
+  const zoneAt = (key: string): Zone | null =>
+    target?.key === key ? target.zone : null;
+
   return (
     <>
-      {order.map((folder) => (
-        <DrFolderRow
-          key={folder.id}
-          dataroomId={dataroomId}
-          folder={folder}
-          dropZone={target?.id === folder.id ? target.zone : null}
-          onZone={(zone) =>
-            setTarget(zone === null ? null : { id: folder.id, zone })
-          }
-          zoneOf={zoneOf}
-          onDropRow={(e) => onDrop(e, folder)}
-        />
-      ))}
+      {folderOrder.map((folder) => {
+        const key = `f-${folder.id}`;
+        const zone = zoneAt(key);
+        return (
+          <FolderRowView
+            key={key}
+            dataroomId={dataroomId}
+            folder={folder}
+            dragging={dragKey === key}
+            zone={zone}
+            onDragStart={(e) => {
+              setDragKey(key);
+              startFolderDrag(e, folder.id);
+            }}
+            onDragEnd={clearDrag}
+            onDragOver={(e) => {
+              if (!hasMovePayload(e)) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
+              const z = folderZone(e);
+              if (target?.key !== key || target.zone !== z)
+                setTarget({ key, zone: z });
+            }}
+            onDragLeave={() =>
+              setTarget((t) => (t?.key === key ? null : t))
+            }
+            onDrop={(e) => onDropFolderRow(e, folder)}
+          />
+        );
+      })}
+      {docOrder.map((doc) => {
+        const key = `d-${doc.id}`;
+        const zone = zoneAt(key);
+        return (
+          <DocRowView
+            key={key}
+            doc={doc}
+            dataroomId={dataroomId}
+            dragging={dragKey === key}
+            zone={zone}
+            onDragStart={(e) => {
+              setDragKey(key);
+              startDocDrag(e, doc.id);
+            }}
+            onDragEnd={clearDrag}
+            onDragOver={(e) => {
+              if (!isDocDrag(e)) return; // folders have no place between files
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
+              const z = docZone(e);
+              if (target?.key !== key || target.zone !== z)
+                setTarget({ key, zone: z });
+            }}
+            onDragLeave={() =>
+              setTarget((t) => (t?.key === key ? null : t))
+            }
+            onDrop={(e) => onDropDocRow(e, doc)}
+          />
+        );
+      })}
     </>
   );
 }
 
-function DrFolderRow({
+type RowDragProps = {
+  dragging: boolean;
+  zone: Zone | null;
+  onDragStart: (e: React.DragEvent) => void;
+  onDragEnd: () => void;
+  onDragOver: (e: React.DragEvent) => void;
+  onDragLeave: () => void;
+  onDrop: (e: React.DragEvent) => void;
+};
+
+function FolderRowView({
   dataroomId,
   folder,
-  dropZone,
-  onZone,
-  zoneOf,
-  onDropRow,
+  dragging,
+  zone,
+  ...drag
 }: {
   dataroomId: string;
   folder: DrFolderItem;
-  dropZone: FolderDropZone | null;
-  onZone: (zone: FolderDropZone | null) => void;
-  zoneOf: (e: React.DragEvent) => FolderDropZone;
-  onDropRow: (e: React.DragEvent) => void;
-}) {
+} & RowDragProps) {
   const router = useRouter();
   const [renameOpen, setRenameOpen] = useState(false);
   const [name, setName] = useState(folder.name);
   return (
     <TableRow
       className={cn(
-        "cursor-pointer",
-        dropZone === "into" && "bg-primary/5 ring-2 ring-inset ring-primary/60",
-        dropZone === "before" && "border-t-2 border-t-primary",
-        dropZone === "after" && "border-b-2 border-b-primary"
+        "group cursor-pointer",
+        dragging && "opacity-40",
+        zone === "into" && "bg-primary/5 ring-2 ring-inset ring-primary/60",
+        zone === "before" && "border-t-2 border-t-primary",
+        zone === "after" && "border-b-2 border-b-primary"
       )}
       draggable
-      onDragStart={(e) => startFolderDrag(e, folder.id)}
-      onDragEnd={() => onZone(null)}
-      onDragOver={(e) => {
-        if (!hasMovePayload(e)) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "move";
-        onZone(zoneOf(e));
-      }}
-      onDragLeave={() => onZone(null)}
-      onDrop={onDropRow}
+      {...drag}
       onClick={() =>
         router.push(`/datarooms/${dataroomId}?folder=${folder.id}`)
       }
     >
       <TableCell>
         <div className="flex items-center gap-2.5">
+          <GripVertical
+            className="size-4 shrink-0 cursor-grab text-muted-foreground/40 transition-colors group-hover:text-muted-foreground active:cursor-grabbing"
+            onClick={(e) => e.stopPropagation()}
+          />
           <Folder className="size-4 text-[#b7791f]" strokeWidth={1.5} />
           <span className="font-medium">{folder.name}</span>
         </div>
@@ -668,127 +809,73 @@ function DrFolderRow({
   );
 }
 
-export type DrDocItem = {
-  id: string; // DataroomDocument id
-  documentId: string;
-  name: string;
-  type: DocumentType;
-  size: number;
-  addedAt: string;
-};
-
-/**
- * Documents in the current folder, drag-reorderable. Position becomes the
- * visitor-facing index order (orderIndex), persisted on drop. Keyed by the id
- * set from the server so add/remove remounts with fresh data while a reorder
- * keeps local state.
- */
-export function ReorderableDocRows({
+function DocRowView({
+  doc,
   dataroomId,
-  items,
+  dragging,
+  zone,
+  ...drag
 }: {
+  doc: DrDocItem;
   dataroomId: string;
-  items: DrDocItem[];
-}) {
+} & RowDragProps) {
   const router = useRouter();
-  const [order, setOrder] = useState(items);
-  const [dragId, setDragId] = useState<string | null>(null);
-  const [overId, setOverId] = useState<string | null>(null);
-
-  function drop(targetId: string) {
-    setOverId(null);
-    if (!dragId || dragId === targetId) return;
-    const from = order.findIndex((o) => o.id === dragId);
-    const to = order.findIndex((o) => o.id === targetId);
-    if (from < 0 || to < 0) return;
-    const next = [...order];
-    const [moved] = next.splice(from, 1);
-    next.splice(to, 0, moved);
-    setOrder(next);
-    setDragId(null);
-    reorderDataroomDocuments(
-      dataroomId,
-      next.map((o) => o.id)
-    ).then(() => router.refresh());
-  }
-
   return (
-    <>
-      {order.map((item) => (
-        <TableRow
-          key={item.id}
-          draggable
-          onDragStart={(e) => {
-            setDragId(item.id);
-            // also carry the move payload so folders and the explorer
-            // tree can receive this row
-            startDocDrag(e, item.id);
+    <TableRow
+      className={cn(
+        "group cursor-pointer transition-colors",
+        dragging && "opacity-40",
+        zone === "before" && "border-t-2 border-t-primary",
+        zone === "after" && "border-b-2 border-b-primary"
+      )}
+      draggable
+      {...drag}
+      onClick={() => router.push(`/documents/${doc.documentId}`)}
+    >
+      <TableCell>
+        <div className="flex items-center gap-2.5">
+          <GripVertical
+            className="size-4 shrink-0 cursor-grab text-muted-foreground/40 transition-colors group-hover:text-muted-foreground active:cursor-grabbing"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <FileIcon type={doc.type} />
+          <span className="font-medium">{doc.name}</span>
+        </div>
+      </TableCell>
+      <TableCell className="text-muted-foreground">
+        {doc.type === "NOTION" ? "Notion" : formatBytes(doc.size)}
+      </TableCell>
+      <TableCell className="text-xs text-muted-foreground">
+        added {timeAgo(doc.addedAt)}
+      </TableCell>
+      <TableCell className="text-right">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-7 opacity-0 transition-opacity group-hover:opacity-100"
+          title="Preview"
+          onClick={(e) => {
+            e.stopPropagation();
+            router.push(`/documents/${doc.documentId}/preview`);
           }}
-          onDragEnd={() => {
-            setDragId(null);
-            setOverId(null);
-          }}
-          onDragOver={(e) => {
-            if (!dragId) return; // reorder is only for drags started here
-            e.preventDefault();
-            if (overId !== item.id) setOverId(item.id);
-          }}
-          onDrop={() => drop(item.id)}
-          className={cn(
-            "group cursor-pointer transition-colors",
-            dragId === item.id && "opacity-40",
-            overId === item.id && dragId && dragId !== item.id
-              ? "border-t-2 border-primary"
-              : ""
-          )}
-          onClick={() => router.push(`/documents/${item.documentId}`)}
         >
-          <TableCell>
-            <div className="flex items-center gap-2.5">
-              <GripVertical
-                className="size-4 shrink-0 cursor-grab text-muted-foreground/40 transition-colors group-hover:text-muted-foreground active:cursor-grabbing"
-                onClick={(e) => e.stopPropagation()}
-              />
-              <FileIcon type={item.type} />
-              <span className="font-medium">{item.name}</span>
-            </div>
-          </TableCell>
-          <TableCell className="text-muted-foreground">
-            {item.type === "NOTION" ? "Notion" : formatBytes(item.size)}
-          </TableCell>
-          <TableCell className="text-xs text-muted-foreground">
-            added {timeAgo(item.addedAt)}
-          </TableCell>
-          <TableCell className="text-right">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7 opacity-0 transition-opacity group-hover:opacity-100"
-              title="Preview"
-              onClick={(e) => {
-                e.stopPropagation();
-                router.push(`/documents/${item.documentId}/preview`);
-              }}
-            >
-              <Eye className="size-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7"
-              title="Remove from data room"
-              onClick={async (e) => {
-                e.stopPropagation();
-                await removeFromDataroom(dataroomId, item.id);
-                toast.success("Removed from data room");
-                router.refresh();
-              }}
-            >
-              <Trash2 className="size-3.5" />
-            </Button>
-          </TableCell>
-        </TableRow>
-      ))}
-    </>
+          <Eye className="size-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-7"
+          title="Remove from data room"
+          onClick={async (e) => {
+            e.stopPropagation();
+            await removeFromDataroom(dataroomId, doc.id);
+            toast.success("Removed from data room");
+            router.refresh();
+          }}
+        >
+          <Trash2 className="size-3.5" />
+        </Button>
+      </TableCell>
+    </TableRow>
   );
 }

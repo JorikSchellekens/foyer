@@ -7,7 +7,7 @@
      bun dev > /tmp/foyer-dev.log 2>&1 &
      bun run scripts/dnd-e2e.ts /tmp/foyer-dev.log
 */
-import { chromium, type Page } from "playwright";
+import { chromium, type Locator, type Page } from "playwright";
 import { PrismaClient } from "@prisma/client";
 import { readFileSync } from "fs";
 
@@ -54,7 +54,7 @@ async function seed() {
   });
 
   // fresh fixtures every run
-  await db.dataroom.deleteMany({ where: { teamId: team.id, name: "DnD Room" } });
+  await db.dataroom.deleteMany({ where: { teamId: team.id } });
   await db.folder.deleteMany({ where: { teamId: team.id } });
   await db.document.deleteMany({ where: { teamId: team.id } });
 
@@ -75,8 +75,10 @@ async function seed() {
       data: { dataroomId: room.id, documentId: doc.id, folderId, orderIndex: order },
     });
   };
-  const drDocInA = await mkDrDoc("Doc In A", drA.id, 0);
-  const drRootDoc = await mkDrDoc("Root Doc", null, 1);
+  const nested = await mkDrDoc("Doc Nested", drA.id, 0);
+  await mkDrDoc("Doc Alpha", null, 1);
+  await mkDrDoc("Doc Bravo", null, 2);
+  await mkDrDoc("Doc Charlie", null, 3);
 
   const libA = await db.folder.create({ data: { teamId: team.id, name: "Lib A" } });
   const libB = await db.folder.create({ data: { teamId: team.id, name: "Lib B" } });
@@ -87,7 +89,7 @@ async function seed() {
     data: { teamId: team.id, name: "Lib Doc", type: "TEXT", folderId: libA.id },
   });
 
-  return { team, room, drA, drB, drDocInA, drRootDoc, libA, libB, looseDoc, libDoc };
+  return { team, room, drA, drB, nested, libA, libB, looseDoc, libDoc };
 }
 
 async function login(page: Page) {
@@ -101,6 +103,14 @@ async function login(page: Page) {
   await page.waitForLoadState("networkidle");
 }
 
+/** dragTo with the target point at a vertical fraction of the target row. */
+async function dragToAtY(src: Locator, dst: Locator, yFraction: number) {
+  const box = (await dst.boundingBox())!;
+  await src.dragTo(dst, {
+    targetPosition: { x: Math.min(200, box.width / 2), y: Math.max(2, Math.min(box.height - 2, box.height * yFraction)) },
+  });
+}
+
 async function main() {
   const fx = await seed();
   const browser = await chromium.launch();
@@ -112,21 +122,60 @@ async function main() {
   const row = (text: string) => page.locator("tr", { hasText: text }).first();
   const roomUrl = `${BASE}/datarooms/${fx.room.id}`;
   const settle = () => page.waitForTimeout(1200);
+  const rootNames = async () =>
+    (
+      await db.dataroomDocument.findMany({
+        where: { dataroomId: fx.room.id, folderId: null },
+        orderBy: { orderIndex: "asc" },
+        include: { document: true },
+      })
+    ).map((d) => d.document.name);
 
-  // ---- dataroom ----
+  // ---- dataroom: file reorder with folders present ----
   await page.goto(roomUrl);
-  await page.waitForSelector("text=Root Doc");
-  await row("Root Doc").dragTo(row("Folder B"));
+  await page.waitForSelector("text=Doc Charlie");
+  await dragToAtY(row("Doc Charlie"), row("Doc Alpha"), 0.2); // top half = before
   await settle();
   check(
-    "dr doc -> folder row",
-    (await db.dataroomDocument.findUnique({ where: { id: fx.drRootDoc.id } }))
-      ?.folderId === fx.drB.id
+    "dr file reorder (folders present)",
+    (await rootNames()).join(",") === "Doc Charlie,Doc Alpha,Doc Bravo",
+    `got ${(await rootNames()).join(",")}`
   );
 
+  // ---- dataroom: file to FIRST position via folder bottom edge ----
+  await page.goto(roomUrl);
+  await page.waitForSelector("text=Doc Bravo");
+  await dragToAtY(row("Doc Bravo"), row("Folder B"), 0.95); // edge = top of files
+  await settle();
+  check(
+    "dr file -> first via folder edge",
+    (await rootNames()).join(",") === "Doc Bravo,Doc Charlie,Doc Alpha",
+    `got ${(await rootNames()).join(",")}`
+  );
+
+  // ---- dataroom: file onto folder center = file into folder ----
+  await page.goto(roomUrl);
+  await page.waitForSelector("text=Doc Alpha");
+  await dragToAtY(row("Doc Alpha"), row("Folder B"), 0.5);
+  await settle();
+  {
+    const moved = await db.dataroomDocument.findFirst({
+      where: {
+        dataroomId: fx.room.id,
+        document: { name: "Doc Alpha" },
+      },
+    });
+    check(
+      "dr file -> folder center files it",
+      moved?.folderId === fx.drB.id,
+      `folderId=${moved?.folderId}`
+    );
+  }
+
+  // ---- dataroom: file onto explorer tree node ----
   await page.goto(`${roomUrl}?folder=${fx.drA.id}`);
-  await page.waitForSelector("text=Doc In A");
-  await row("Doc In A").dragTo(
+  await page.waitForSelector("text=Doc Nested");
+  await row("Doc Nested").dragTo(
     page
       .locator('nav[aria-label="Data room explorer"] div', {
         hasText: /^Folder B$/,
@@ -135,16 +184,26 @@ async function main() {
   );
   await settle();
   check(
-    "dr doc -> explorer tree",
-    (await db.dataroomDocument.findUnique({ where: { id: fx.drDocInA.id } }))
+    "dr file -> explorer tree",
+    (await db.dataroomDocument.findUnique({ where: { id: fx.nested.id } }))
       ?.folderId === fx.drB.id
   );
 
+  // ---- dataroom: file out via Root crumb ----
+  await page.goto(`${roomUrl}?folder=${fx.drB.id}`);
+  await page.waitForSelector("text=Doc Nested");
+  await row("Doc Nested").dragTo(page.locator('a:has-text("Root")').first());
+  await settle();
+  check(
+    "dr file -> Root crumb",
+    (await db.dataroomDocument.findUnique({ where: { id: fx.nested.id } }))
+      ?.folderId === null
+  );
+
+  // ---- dataroom: folder edge reorder, then center nest ----
   await page.goto(roomUrl);
   await page.waitForSelector("text=Folder A");
-  await row("Folder B").dragTo(row("Folder A"), {
-    targetPosition: { x: 200, y: 3 },
-  });
+  await dragToAtY(row("Folder B"), row("Folder A"), 0.05);
   await settle();
   {
     const [a, b] = await Promise.all([
@@ -160,7 +219,7 @@ async function main() {
 
   await page.goto(roomUrl);
   await page.waitForSelector("text=Folder A");
-  await row("Folder A").dragTo(row("Folder B"));
+  await dragToAtY(row("Folder A"), row("Folder B"), 0.5);
   await settle();
   check(
     "dr folder center -> nest",
@@ -174,7 +233,7 @@ async function main() {
   await row("Loose Doc").dragTo(row("Lib B"));
   await settle();
   check(
-    "lib doc -> folder row",
+    "lib file -> folder row",
     (await db.document.findUnique({ where: { id: fx.looseDoc.id } }))
       ?.folderId === fx.libB.id
   );
@@ -184,7 +243,7 @@ async function main() {
   await row("Lib Doc").dragTo(page.locator('a:has-text("All documents")').first());
   await settle();
   check(
-    "lib doc -> root crumb",
+    "lib file -> root crumb",
     (await db.document.findUnique({ where: { id: fx.libDoc.id } }))
       ?.folderId === null
   );
