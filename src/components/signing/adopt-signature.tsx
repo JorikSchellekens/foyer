@@ -18,24 +18,33 @@ import { SignaturePad } from "@/components/viewer/signature-pad";
 const SCRIPT_FONT =
   '"Snell Roundhand","Savoye LET","Segoe Script","Brush Script MT","Dancing Script",cursive';
 
-/** Render typed text in the script face onto an offscreen canvas -> PNG. */
-function typedToPng(text: string): string | null {
+/** Render typed text in the script face onto an offscreen canvas -> PNG.
+ * Sized from the measured ink extent (script capitals overshoot any fixed
+ * line-height - the old fontSize*1.6 box clipped their tops). */
+export function typedToPng(text: string): string | null {
   const trimmed = text.trim();
   if (!trimmed) return null;
   const scale = 3; // supersample so the stamped PDF image stays crisp
   const fontSize = 44;
+  const pad = 10;
   const probe = document.createElement("canvas").getContext("2d")!;
   probe.font = `${fontSize}px ${SCRIPT_FONT}`;
-  const textW = Math.ceil(probe.measureText(trimmed).width);
+  const m = probe.measureText(trimmed);
+  const ascent = Math.ceil(m.actualBoundingBoxAscent || fontSize);
+  const descent = Math.ceil(m.actualBoundingBoxDescent || fontSize * 0.35);
+  const left = Math.ceil(m.actualBoundingBoxLeft || 0);
+  const right = Math.ceil(
+    m.actualBoundingBoxRight || m.width || fontSize * trimmed.length
+  );
   const canvas = document.createElement("canvas");
-  canvas.width = (textW + 32) * scale;
-  canvas.height = fontSize * 1.6 * scale;
+  canvas.width = (left + right + pad * 2) * scale;
+  canvas.height = (ascent + descent + pad * 2) * scale;
   const ctx = canvas.getContext("2d")!;
   ctx.scale(scale, scale);
   ctx.font = `${fontSize}px ${SCRIPT_FONT}`;
   ctx.fillStyle = "#16181d";
-  ctx.textBaseline = "middle";
-  ctx.fillText(trimmed, 16, (fontSize * 1.6) / 2);
+  ctx.textBaseline = "alphabetic";
+  ctx.fillText(trimmed, left + pad, ascent + pad);
   return canvas.toDataURL("image/png");
 }
 

@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { Download, CheckCircle2, Clock } from "lucide-react";
+import { db } from "@/lib/db";
 import { getSignerSession } from "@/lib/sign-session";
 import { recordSignerView, signersUpNow, getFullRequest } from "@/lib/signing";
 import { FoyerLogo } from "@/components/brand/logo";
@@ -9,13 +10,35 @@ import type { FieldKind } from "@/lib/sign-fields";
 
 export const metadata = { title: "Sign document" };
 
-function Shell({ children }: { children: React.ReactNode }) {
+function Shell({
+  children,
+  brandLogoUrl,
+  teamName,
+}: {
+  children: React.ReactNode;
+  brandLogoUrl?: string | null;
+  teamName?: string;
+}) {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-muted/40 p-6">
-      <FoyerLogo size="md" />
+      {brandLogoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={brandLogoUrl}
+          alt={teamName ?? ""}
+          className="h-9 max-w-40 object-contain"
+        />
+      ) : (
+        <FoyerLogo size="md" />
+      )}
       <div className="w-full max-w-md rounded-lg border bg-card p-8 text-center shadow-sm">
         {children}
       </div>
+      {brandLogoUrl && (
+        <p className="text-xs text-muted-foreground">
+          via <span className="font-display italic">Foyer</span>
+        </p>
+      )}
     </div>
   );
 }
@@ -46,6 +69,15 @@ export default async function SignPage({
       </Shell>
     );
 
+  // Signer-facing surfaces carry the team's brand, with a quiet Foyer mark.
+  const branding = await db.branding.findFirst({
+    where: { teamId: request.teamId, dataroomId: null },
+  });
+  const brandLogoUrl = branding?.logoKey
+    ? `/api/assets/${branding.logoKey}`
+    : null;
+  const brand = { brandLogoUrl, teamName: request.team.name };
+
   const downloadButton = request.signedFileKey ? (
     <Button asChild className="mt-4">
       <a href={`/api/sign/completed/${request.id}?download=1`}>
@@ -56,7 +88,7 @@ export default async function SignPage({
 
   if (request.status === "COMPLETED")
     return (
-      <Shell>
+      <Shell {...brand}>
         <CheckCircle2 className="mx-auto size-8 text-primary" />
         <p className="mt-3 font-display text-xl">Everyone has signed</p>
         <p className="mt-2 text-sm text-muted-foreground">
@@ -69,7 +101,7 @@ export default async function SignPage({
 
   if (request.status !== "SENT")
     return (
-      <Shell>
+      <Shell {...brand}>
         <p className="font-display text-xl">
           This request is {request.status.toLowerCase()}
         </p>
@@ -81,7 +113,7 @@ export default async function SignPage({
 
   if (signer.role === "CC")
     return (
-      <Shell>
+      <Shell {...brand}>
         <p className="font-display text-xl">Nothing for you to sign</p>
         <p className="mt-2 text-sm text-muted-foreground">
           You are on copy for <strong>{request.title}</strong> and will receive
@@ -92,7 +124,7 @@ export default async function SignPage({
 
   if (signer.status === "SIGNED")
     return (
-      <Shell>
+      <Shell {...brand}>
         <CheckCircle2 className="mx-auto size-8 text-primary" />
         <p className="mt-3 font-display text-xl">You have signed</p>
         <p className="mt-2 text-sm text-muted-foreground">
@@ -104,7 +136,7 @@ export default async function SignPage({
 
   if (signer.status === "DECLINED")
     return (
-      <Shell>
+      <Shell {...brand}>
         <p className="font-display text-xl">You declined to sign</p>
         <p className="mt-2 text-sm text-muted-foreground">
           The sender has been notified.
@@ -115,7 +147,7 @@ export default async function SignPage({
   // Sequential routing: a later-round signer who clicks early waits.
   if (!signersUpNow(request).some((s) => s.id === signer.id))
     return (
-      <Shell>
+      <Shell {...brand}>
         <Clock className="mx-auto size-8 text-muted-foreground" />
         <p className="mt-3 font-display text-xl">It is not your turn yet</p>
         <p className="mt-2 text-sm text-muted-foreground">
@@ -151,6 +183,7 @@ export default async function SignPage({
       requestId={request.id}
       title={request.title}
       teamName={request.team.name}
+      brandLogoUrl={brandLogoUrl}
       signerEmail={signer.email}
       signerName={signer.name}
       fileUrl={`/api/sign/file/${request.id}`}

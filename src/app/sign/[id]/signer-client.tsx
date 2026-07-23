@@ -26,14 +26,26 @@ const PdfFieldCanvas = dynamic(
     ),
   { ssr: false }
 );
-import { AdoptSignatureDialog } from "@/components/signing/adopt-signature";
+import {
+  AdoptSignatureDialog,
+  typedToPng,
+} from "@/components/signing/adopt-signature";
 import { missingRequiredFields } from "@/lib/sign-fields";
 import { submitSignature, declineToSign } from "@/app/sign/actions";
+
+function initialsOf(name: string): string {
+  return name
+    .split(/\s+/)
+    .map((p) => p[0] ?? "")
+    .join("")
+    .toUpperCase();
+}
 
 export function SignerClient({
   requestId,
   title,
   teamName,
+  brandLogoUrl,
   signerEmail,
   signerName,
   fileUrl,
@@ -42,6 +54,7 @@ export function SignerClient({
   requestId: string;
   title: string;
   teamName: string;
+  brandLogoUrl: string | null;
   signerEmail: string;
   signerName: string | null;
   fileUrl: string;
@@ -57,6 +70,7 @@ export function SignerClient({
   const [declineOpen, setDeclineOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [activeFieldId, setActiveFieldId] = useState<string | null>(null);
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
@@ -67,6 +81,39 @@ export function SignerClient({
   );
   const done = fields.length - missing.length;
   const ready = missing.length === 0 && consent;
+
+  // Guided navigation: the unfilled fields that actually need a hand, in
+  // reading order across pages. DATE_SIGNED auto-fills; checkboxes are valid
+  // unchecked - neither needs a visit.
+  const unfilledIds = new Set(missing.map((f) => f.id));
+  const navTargets = fields
+    .filter(
+      (f) =>
+        unfilledIds.has(f.id) &&
+        f.kind !== "DATE_SIGNED" &&
+        f.kind !== "CHECKBOX"
+    )
+    .sort((a, b) => a.page - b.page || a.yPct - b.yPct || a.xPct - b.xPct);
+
+  function goToField(field: CanvasField | undefined) {
+    if (!field) return;
+    setActiveFieldId(field.id);
+    document
+      .querySelector(`[data-sign-field="${field.id}"]`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (field.kind === "TEXT") {
+      // Focus once the scroll settles so the signer can type immediately.
+      setTimeout(() => {
+        document
+          .querySelector<HTMLInputElement>(
+            `[data-sign-field="${field.id}"] input`
+          )
+          ?.focus({ preventScroll: true });
+      }, 350);
+    }
+  }
+
+  const goNext = () => goToField(navTargets[0]);
 
   async function finish() {
     setBusy(true);
@@ -148,7 +195,16 @@ export function SignerClient({
   return (
     <div className="flex h-screen flex-col">
       <header className="flex flex-wrap items-center gap-3 border-b bg-card px-4 py-3 sm:px-6">
-        <FoyerLogo size="sm" />
+        {brandLogoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={brandLogoUrl}
+            alt={teamName}
+            className="h-7 max-w-32 object-contain"
+          />
+        ) : (
+          <FoyerLogo size="sm" />
+        )}
         <div className="min-w-0">
           <p className="truncate text-sm font-medium">{title}</p>
           <p className="truncate text-xs text-muted-foreground">
@@ -167,6 +223,11 @@ export function SignerClient({
           >
             Decline
           </Button>
+          {navTargets.length > 0 && (
+            <Button variant="outline" onClick={goNext} data-testid="next-field">
+              {done === 0 ? "Start" : "Next field"}
+            </Button>
+          )}
           <Button onClick={finish} disabled={!ready || busy} data-testid="finish">
             {busy && <Loader2 className="size-4 animate-spin" />}
             Finish
@@ -180,6 +241,7 @@ export function SignerClient({
           fields={fields}
           mode="fill"
           signerColorIndex={{}}
+          selectedId={activeFieldId}
           renderFill={renderFill}
         />
       </div>
@@ -197,6 +259,11 @@ export function SignerClient({
           I agree to do business electronically and that my electronic signature
           is the legal equivalent of my handwritten signature.
         </Label>
+        {brandLogoUrl && (
+          <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+            via <span className="font-display italic">Foyer</span>
+          </span>
+        )}
       </footer>
 
       <AdoptSignatureDialog
@@ -213,10 +280,30 @@ export function SignerClient({
             : (signerName ?? "")
         }
         onAdopt={(png, typedText) => {
-          if (adopting === "initials") setInitials(png);
-          else {
+          const remaining = navTargets.filter((f) => f.id !== activeFieldId);
+          if (adopting === "initials") {
+            setInitials(png);
+            const next = remaining.filter((f) => f.kind !== "INITIALS")[0];
+            goToField(next);
+          } else {
             setSignature(png);
             if (typedText && !signerName) setAdoptedName(typedText);
+            // A typed name gives us initials for free - adopt them too so
+            // initials fields don't demand a second dialog.
+            let coveredInitials = !!initials;
+            if (typedText && !initials) {
+              const derived = typedToPng(initialsOf(typedText));
+              if (derived) {
+                setInitials(derived);
+                coveredInitials = true;
+              }
+            }
+            const next = remaining.filter(
+              (f) =>
+                f.kind !== "SIGNATURE" &&
+                (!coveredInitials || f.kind !== "INITIALS")
+            )[0];
+            goToField(next);
           }
         }}
       />

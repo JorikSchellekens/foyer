@@ -116,7 +116,15 @@ Tools: list/search documents & datarooms, create/manage links, get analytics
       (image/docx/sheet/text) get a browser-free PDF rendition at draft time
       (lib/pdf-rendition.ts) pinned on SignatureRequest.pdfKey; upload-first
       entry on /signatures ("Upload & request signatures") creates the library
-      doc + draft in one step. E2E: scripts/sign-e2e.ts
+      doc + draft in one step. Signer UX: stroke-model drawing pad (resize-
+      proof, window-level capture with a grace zone so strokes starting just
+      outside the box still register, ink-cropped normalized PNG export -
+      scripts/pad-probe.ts verifies), typed signatures sized from real font
+      metrics (script ascenders no longer clip), Start/Next-field guided
+      navigation with focus/highlight, auto-derived initials from the typed
+      signature name (no second dialog), signer pages carry the team's
+      Branding logo with a quiet "via Foyer" mark.
+      E2E: scripts/sign-e2e.ts
 
 ## Known cut corners (candidates for later)
 - Agreement "field placement on PDF" simplified to read-PDF + drawn signature
