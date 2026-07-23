@@ -56,8 +56,7 @@ import {
   deleteDataroomFolder,
   renameDataroomFolder,
   removeFromDataroom,
-  reorderDataroomDocuments,
-  reorderDataroomFolders,
+  reorderDataroomContents,
   uploadIntoDataroom,
 } from "../actions";
 import type { UploadedFile } from "@/app/(app)/documents/actions";
@@ -481,218 +480,168 @@ export function AddFromLibraryDialog({
 
 // ---------- rows ----------
 
-export type DrFolderItem = { id: string; name: string; itemCount: number };
-
-export type DrDocItem = {
-  id: string; // DataroomDocument id
-  documentId: string;
-  name: string;
-  type: DocumentType;
-  size: number;
-  addedAt: string;
-};
+export type DrItem =
+  | { kind: "folder"; id: string; name: string; itemCount: number }
+  | {
+      kind: "doc";
+      id: string; // DataroomDocument id
+      documentId: string;
+      name: string;
+      type: DocumentType;
+      size: number;
+      addedAt: string;
+    };
 
 type Zone = "before" | "into" | "after";
 type Target = { key: string; zone: Zone } | null;
 
+const rowKey = (item: DrItem) => `${item.kind}-${item.id}`;
+
 /**
- * All rows of the current directory under one drag model, so every drop
- * position means something:
+ * The current directory as one ordered list: folders and files share a
+ * single sequence (orderIndex), so any interleaving is allowed and every
+ * drop position means something:
  *
- *   dragging a file over a file    -> insert before/after (midpoint line)
- *   dragging a file over a folder  -> center files it inside (ring);
- *                                     edges put it at the top of the file
- *                                     list, so "first" stays reachable even
- *                                     when folders sit above the files
- *   dragging a folder over folder  -> edges reorder siblings, center nests
- *   dragging a folder over a file  -> ignored
+ *   over a file row     -> insert before/after by midpoint (line)
+ *   over a folder row   -> center files/nests the drag inside (ring);
+ *                          edges insert before/after the folder (line)
+ *   folder over folder  -> same, with a wider center band for nesting
  *
  * Reorder positions come from local state (only rows born here can be
  * reordered); cross-directory moves ride the dataTransfer payload, so drags
- * from the explorer tree land here too. File order is visitor-facing
- * (orderIndex drives the index page numbering).
+ * from the explorer tree land here too - dropped between rows they join
+ * this directory. The order is visitor-facing (index page numbering).
  */
 export function ContentsRows({
   dataroomId,
   currentFolderId,
-  folders,
-  docs,
+  items,
 }: {
   dataroomId: string;
   currentFolderId: string | null;
-  folders: DrFolderItem[];
-  docs: DrDocItem[];
+  items: DrItem[];
 }) {
   const router = useRouter();
-  const [folderOrder, setFolderOrder] = useState(folders);
-  const [docOrder, setDocOrder] = useState(docs);
+  const [order, setOrder] = useState(items);
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [target, setTarget] = useState<Target>(null);
 
   const isFolderDrag = (e: React.DragEvent) =>
     e.dataTransfer.types.includes(DR_FOLDER_MIME);
-  const isDocDrag = (e: React.DragEvent) =>
-    e.dataTransfer.types.includes(DR_DOC_MIME);
 
   function relY(e: React.DragEvent) {
     const rect = e.currentTarget.getBoundingClientRect();
     return (e.clientY - rect.top) / rect.height;
   }
 
-  function folderZone(e: React.DragEvent): Zone {
+  function zoneOver(e: React.DragEvent, row: DrItem): Zone {
     const y = relY(e);
-    if (isFolderDrag(e)) return y < 0.25 ? "before" : y > 0.75 ? "after" : "into";
-    // file drag: a wide center files it inside; edges mean "top of the files"
-    return y < 0.2 ? "before" : y > 0.8 ? "after" : "into";
+    if (row.kind === "doc") return y < 0.5 ? "before" : "after";
+    // folder rows keep a center band for filing/nesting inside; it is wider
+    // for file drags, whose only other meaning is a position
+    const edge = isFolderDrag(e) ? 0.25 : 0.2;
+    return y < edge ? "before" : y > 1 - edge ? "after" : "into";
   }
-
-  const docZone = (e: React.DragEvent): Zone =>
-    relY(e) < 0.5 ? "before" : "after";
 
   function clearDrag() {
     setDragKey(null);
     setTarget(null);
   }
 
-  function persistFolders(next: DrFolderItem[]) {
-    setFolderOrder(next);
-    reorderDataroomFolders(
+  function persist(next: DrItem[]) {
+    setOrder(next);
+    reorderDataroomContents(
       dataroomId,
-      next.map((f) => f.id)
+      next.map((x) => ({
+        kind: x.kind === "folder" ? ("folder" as const) : ("document" as const),
+        id: x.id,
+      }))
     ).then(() => router.refresh());
   }
 
-  function persistDocs(next: DrDocItem[]) {
-    setDocOrder(next);
-    reorderDataroomDocuments(
-      dataroomId,
-      next.map((d) => d.id)
-    ).then(() => router.refresh());
-  }
+  async function onDropRow(e: React.DragEvent, row: DrItem) {
+    e.preventDefault();
+    const zone = zoneOver(e, row);
+    clearDrag();
 
-  /** Reinsert an id at index (list must contain it); no-op otherwise. */
-  function moveWithin<T extends { id: string }>(
-    list: T[],
-    id: string,
-    index: number
-  ): T[] | null {
-    const from = list.findIndex((x) => x.id === id);
-    if (from < 0) return null;
-    const next = [...list];
+    if (zone === "into" && row.kind === "folder") {
+      if (await handleMoveDrop(e, dataroomId, row.id)) router.refresh();
+      return;
+    }
+
+    const payload: { kind: DrItem["kind"]; id: string } | null = (() => {
+      const folderId = e.dataTransfer.getData(DR_FOLDER_MIME);
+      if (folderId) return { kind: "folder", id: folderId };
+      const docId = e.dataTransfer.getData(DR_DOC_MIME);
+      if (docId) return { kind: "doc", id: docId };
+      return null;
+    })();
+    if (!payload) return;
+    if (payload.kind === row.kind && payload.id === row.id) return;
+
+    const from = order.findIndex(
+      (x) => x.kind === payload.kind && x.id === payload.id
+    );
+    if (from < 0) {
+      // dragged in from another directory (explorer tree): joining this one
+      // at any position means moving here first; it lands appended
+      if (await handleMoveDrop(e, dataroomId, currentFolderId))
+        router.refresh();
+      return;
+    }
+    const next = [...order];
     const [moved] = next.splice(from, 1);
-    next.splice(Math.max(0, Math.min(index, next.length)), 0, moved);
-    return next;
+    let at = next.findIndex((x) => x.kind === row.kind && x.id === row.id);
+    if (zone === "after") at += 1;
+    next.splice(Math.max(0, at), 0, moved);
+    persist(next);
   }
 
-  async function onDropFolderRow(e: React.DragEvent, folder: DrFolderItem) {
-    e.preventDefault();
-    const zone = folderZone(e);
-    clearDrag();
-    if (zone === "into") {
-      if (await handleMoveDrop(e, dataroomId, folder.id)) router.refresh();
-      return;
-    }
-    const folderId = e.dataTransfer.getData(DR_FOLDER_MIME);
-    if (folderId) {
-      if (folderId === folder.id) return;
-      const at = folderOrder.findIndex((f) => f.id === folder.id);
-      const next = moveWithin(
-        folderOrder,
-        folderId,
-        zone === "after" ? at + 1 : at
-      );
-      if (next) persistFolders(next);
-      // a folder dragged in from the tree has no order here; only "into" moves it
-      return;
-    }
-    const docId = e.dataTransfer.getData(DR_DOC_MIME);
-    if (docId) {
-      // folder edges are "above the file list": first position
-      const next = moveWithin(docOrder, docId, 0);
-      if (next) persistDocs(next);
-      else if (await handleMoveDrop(e, dataroomId, currentFolderId))
-        router.refresh(); // from another directory: bring it here
-    }
-  }
-
-  async function onDropDocRow(e: React.DragEvent, doc: DrDocItem) {
-    e.preventDefault();
-    const zone = docZone(e);
-    clearDrag();
-    const docId = e.dataTransfer.getData(DR_DOC_MIME);
-    if (!docId || docId === doc.id) return;
-    const at = docOrder.findIndex((d) => d.id === doc.id);
-    const next = moveWithin(docOrder, docId, zone === "after" ? at + 1 : at);
-    if (next) persistDocs(next);
-    else if (await handleMoveDrop(e, dataroomId, currentFolderId))
-      router.refresh(); // from another directory: bring it here
-  }
-
-  const zoneAt = (key: string): Zone | null =>
-    target?.key === key ? target.zone : null;
+  const dragProps = (row: DrItem) => {
+    const key = rowKey(row);
+    return {
+      dragging: dragKey === key,
+      zone: target?.key === key ? target.zone : null,
+      onDragStart: (e: React.DragEvent) => {
+        setDragKey(key);
+        if (row.kind === "folder") startFolderDrag(e, row.id);
+        else startDocDrag(e, row.id);
+      },
+      onDragEnd: clearDrag,
+      onDragOver: (e: React.DragEvent) => {
+        if (!hasMovePayload(e)) return;
+        // a folder has no position between files-only rows? it does now:
+        // any row is a valid position for any drag
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        const z = zoneOver(e, row);
+        if (target?.key !== key || target.zone !== z)
+          setTarget({ key, zone: z });
+      },
+      onDragLeave: () => setTarget((t) => (t?.key === key ? null : t)),
+      onDrop: (e: React.DragEvent) => onDropRow(e, row),
+    };
+  };
 
   return (
     <>
-      {folderOrder.map((folder) => {
-        const key = `f-${folder.id}`;
-        const zone = zoneAt(key);
-        return (
+      {order.map((item) =>
+        item.kind === "folder" ? (
           <FolderRowView
-            key={key}
+            key={rowKey(item)}
             dataroomId={dataroomId}
-            folder={folder}
-            dragging={dragKey === key}
-            zone={zone}
-            onDragStart={(e) => {
-              setDragKey(key);
-              startFolderDrag(e, folder.id);
-            }}
-            onDragEnd={clearDrag}
-            onDragOver={(e) => {
-              if (!hasMovePayload(e)) return;
-              e.preventDefault();
-              e.dataTransfer.dropEffect = "move";
-              const z = folderZone(e);
-              if (target?.key !== key || target.zone !== z)
-                setTarget({ key, zone: z });
-            }}
-            onDragLeave={() =>
-              setTarget((t) => (t?.key === key ? null : t))
-            }
-            onDrop={(e) => onDropFolderRow(e, folder)}
+            folder={item}
+            {...dragProps(item)}
           />
-        );
-      })}
-      {docOrder.map((doc) => {
-        const key = `d-${doc.id}`;
-        const zone = zoneAt(key);
-        return (
+        ) : (
           <DocRowView
-            key={key}
-            doc={doc}
+            key={rowKey(item)}
+            doc={item}
             dataroomId={dataroomId}
-            dragging={dragKey === key}
-            zone={zone}
-            onDragStart={(e) => {
-              setDragKey(key);
-              startDocDrag(e, doc.id);
-            }}
-            onDragEnd={clearDrag}
-            onDragOver={(e) => {
-              if (!isDocDrag(e)) return; // folders have no place between files
-              e.preventDefault();
-              e.dataTransfer.dropEffect = "move";
-              const z = docZone(e);
-              if (target?.key !== key || target.zone !== z)
-                setTarget({ key, zone: z });
-            }}
-            onDragLeave={() =>
-              setTarget((t) => (t?.key === key ? null : t))
-            }
-            onDrop={(e) => onDropDocRow(e, doc)}
+            {...dragProps(item)}
           />
-        );
-      })}
+        )
+      )}
     </>
   );
 }
@@ -715,7 +664,7 @@ function FolderRowView({
   ...drag
 }: {
   dataroomId: string;
-  folder: DrFolderItem;
+  folder: Extract<DrItem, { kind: "folder" }>;
 } & RowDragProps) {
   const router = useRouter();
   const [renameOpen, setRenameOpen] = useState(false);
@@ -816,7 +765,7 @@ function DocRowView({
   zone,
   ...drag
 }: {
-  doc: DrDocItem;
+  doc: Extract<DrItem, { kind: "doc" }>;
   dataroomId: string;
 } & RowDragProps) {
   const router = useRouter();

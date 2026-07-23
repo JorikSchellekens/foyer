@@ -153,6 +153,44 @@ async function main() {
     `got ${(await rootNames()).join(",")}`
   );
 
+  // ---- dataroom: file ABOVE a folder (interleaved order) ----
+  await page.goto(roomUrl);
+  await page.waitForSelector("text=Doc Bravo");
+  await dragToAtY(row("Doc Bravo"), row("Folder A"), 0.05); // top edge = before
+  await settle();
+  {
+    const [bravo, fa] = await Promise.all([
+      db.dataroomDocument.findFirst({
+        where: { dataroomId: fx.room.id, document: { name: "Doc Bravo" } },
+      }),
+      db.dataroomFolder.findUnique({ where: { id: fx.drA.id } }),
+    ]);
+    check(
+      "dr file precedes folder",
+      bravo!.orderIndex < fa!.orderIndex && bravo!.folderId === null,
+      `(bravo=${bravo!.orderIndex} folderA=${fa!.orderIndex})`
+    );
+  }
+
+  // ---- dataroom: folder BELOW a file (interleaved order) ----
+  await page.goto(roomUrl);
+  await page.waitForSelector("text=Doc Charlie");
+  await dragToAtY(row("Folder A"), row("Doc Charlie"), 0.8); // bottom half = after
+  await settle();
+  {
+    const [charlie, fa] = await Promise.all([
+      db.dataroomDocument.findFirst({
+        where: { dataroomId: fx.room.id, document: { name: "Doc Charlie" } },
+      }),
+      db.dataroomFolder.findUnique({ where: { id: fx.drA.id } }),
+    ]);
+    check(
+      "dr folder follows file",
+      fa!.orderIndex > charlie!.orderIndex && fa!.parentId === null,
+      `(folderA=${fa!.orderIndex} charlie=${charlie!.orderIndex} parent=${fa!.parentId})`
+    );
+  }
+
   // ---- dataroom: file onto folder center = file into folder ----
   await page.goto(roomUrl);
   await page.waitForSelector("text=Doc Alpha");

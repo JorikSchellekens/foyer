@@ -37,11 +37,8 @@ import {
   DataroomUploadButtons,
   NewDrFolderButton,
 } from "./contents-client";
-import {
-  DataroomExplorer,
-  type ExplorerDoc,
-  type ExplorerFolder,
-} from "./explorer";
+import { interleave } from "@/lib/dataroom-nav";
+import { DataroomExplorer, type ExplorerNode } from "./explorer";
 import { AccessTab, type MemberAccess } from "./access-client";
 import { QaTab } from "./qa-client";
 import { FolderLock } from "lucide-react";
@@ -325,10 +322,17 @@ function ContentsTab({
 }: {
   dataroom: {
     id: string;
-    folders: { id: string; name: string; parentId: string | null }[];
+    folders: {
+      id: string;
+      name: string;
+      parentId: string | null;
+      orderIndex: number;
+      createdAt: Date;
+    }[];
     documents: {
       id: string;
       folderId: string | null;
+      orderIndex: number;
       createdAt: Date;
       document: {
         id: string;
@@ -351,10 +355,17 @@ async function ContentsTabInner({
 }: {
   dataroom: {
     id: string;
-    folders: { id: string; name: string; parentId: string | null }[];
+    folders: {
+      id: string;
+      name: string;
+      parentId: string | null;
+      orderIndex: number;
+      createdAt: Date;
+    }[];
     documents: {
       id: string;
       folderId: string | null;
+      orderIndex: number;
       createdAt: Date;
       document: {
         id: string;
@@ -393,31 +404,54 @@ async function ContentsTabInner({
     cursor = dataroom.folders.find((f) => f.id === cursor!.parentId);
   }
 
-  const foldersHere = dataroom.folders.filter((f) => f.parentId === folderId);
-  const docsHere = dataroom.documents.filter((d) => d.folderId === folderId);
   const countIn = (fid: string): number =>
     dataroom.folders.filter((f) => f.parentId === fid).length +
     dataroom.documents.filter((d) => d.folderId === fid).length;
 
-  // full hierarchy for the explorer pane
-  const explorerDocsIn = (fid: string | null): ExplorerDoc[] =>
-    dataroom.documents
-      .filter((d) => d.folderId === fid)
-      .map((d) => ({
-        itemId: d.id,
-        documentId: d.document.id,
-        name: d.document.name,
-        type: d.document.type,
-      }));
-  const explorerFoldersIn = (fid: string | null): ExplorerFolder[] =>
-    dataroom.folders
-      .filter((f) => f.parentId === fid)
-      .map((f) => ({
-        id: f.id,
-        name: f.name,
-        folders: explorerFoldersIn(f.id),
-        docs: explorerDocsIn(f.id),
-      }));
+  // one shared order per directory: folders and files interleaved
+  const childrenOf = (fid: string | null) =>
+    interleave(
+      dataroom.folders.filter((f) => f.parentId === fid),
+      dataroom.documents.filter((d) => d.folderId === fid)
+    );
+
+  const itemsHere = childrenOf(folderId).map((child) =>
+    child.kind === "folder"
+      ? {
+          kind: "folder" as const,
+          id: child.item.id,
+          name: child.item.name,
+          itemCount: countIn(child.item.id),
+        }
+      : {
+          kind: "doc" as const,
+          id: child.item.id,
+          documentId: child.item.document.id,
+          name: child.item.document.name,
+          type: child.item.document.type,
+          size: child.item.document.currentVersion?.fileSize ?? 0,
+          addedAt: child.item.createdAt.toISOString(),
+        }
+  );
+
+  // full hierarchy for the explorer pane, in the same interleaved order
+  const explorerChildren = (fid: string | null): ExplorerNode[] =>
+    childrenOf(fid).map((child) =>
+      child.kind === "folder"
+        ? {
+            kind: "folder" as const,
+            id: child.item.id,
+            name: child.item.name,
+            children: explorerChildren(child.item.id),
+          }
+        : {
+            kind: "doc" as const,
+            itemId: child.item.id,
+            documentId: child.item.document.id,
+            name: child.item.document.name,
+            type: child.item.document.type,
+          }
+    );
 
   return (
     <div className="flex items-start gap-6">
@@ -428,8 +462,7 @@ async function ContentsTabInner({
         <DataroomExplorer
           dataroomId={dataroom.id}
           currentFolderId={folderId}
-          folders={explorerFoldersIn(null)}
-          docs={explorerDocsIn(null)}
+          nodes={explorerChildren(null)}
         />
       </aside>
       <div className="min-w-0 flex-1 space-y-4">
@@ -481,7 +514,7 @@ async function ContentsTabInner({
         </div>
       </div>
 
-      {foldersHere.length === 0 && docsHere.length === 0 ? (
+      {itemsHere.length === 0 ? (
         <EmptyState
           icon={FolderLock}
           title="Nothing here yet"
@@ -500,25 +533,13 @@ async function ContentsTabInner({
             </TableHeader>
             <TableBody>
               <ContentsRows
-                key={[...foldersHere, ...docsHere]
+                key={itemsHere
                   .map((x) => x.id)
                   .sort()
                   .join(",")}
                 dataroomId={dataroom.id}
                 currentFolderId={folderId}
-                folders={foldersHere.map((f) => ({
-                  id: f.id,
-                  name: f.name,
-                  itemCount: countIn(f.id),
-                }))}
-                docs={docsHere.map((d) => ({
-                  id: d.id,
-                  documentId: d.document.id,
-                  name: d.document.name,
-                  type: d.document.type,
-                  size: d.document.currentVersion?.fileSize ?? 0,
-                  addedAt: d.createdAt.toISOString(),
-                }))}
+                items={itemsHere}
               />
             </TableBody>
           </Table>

@@ -8,7 +8,11 @@ import { FoyerMark } from "@/components/brand/logo";
 import { PreviewBanner } from "@/components/viewer/preview-banner";
 import { formatBytes } from "@/lib/format";
 import { db } from "@/lib/db";
-import { viewableTree, type NavTreeNode } from "@/lib/dataroom-nav";
+import {
+  interleave,
+  viewableTree,
+  type NavTreeNode,
+} from "@/lib/dataroom-nav";
 import {
   DataroomTree,
   type ViewerTreeNode,
@@ -67,49 +71,52 @@ export async function DataroomIndex({
     ? `?preview=${encodeURIComponent(previewToken)}`
     : "";
 
-  // flatten visible tree with book-index numbering
+  // flatten visible tree with book-index numbering; folders and files share
+  // one order at each level, so a file may precede a folder
   const entries: Entry[] = [];
   const walk = (parentId: string | null, prefix: string, depth: number) => {
     let n = 1;
-    for (const folder of dataroom.folders.filter(
-      (f) => f.parentId === parentId
-    )) {
-      const start = entries.length;
+    const children = interleave(
+      dataroom.folders.filter((f) => f.parentId === parentId),
+      dataroom.documents.filter((d) => d.folderId === parentId)
+    );
+    for (const child of children) {
       const number = prefix ? `${prefix}.${n}` : `${n}`;
-      entries.push({
-        kind: "folder",
-        number,
-        name: folder.name,
-        depth,
-        key: `f-${folder.id}`,
-      });
-      walk(folder.id, number, depth + 1);
-      // drop empty folders the visitor cannot see into
-      if (entries.length === start + 1) entries.pop();
-      else n++;
-    }
-    for (const item of dataroom.documents.filter(
-      (d) => d.folderId === parentId
-    )) {
-      const grant = itemGrant(link, "DATAROOM_DOCUMENT", item.id);
-      if (!grant.canView) continue;
-      const number = prefix ? `${prefix}.${n}` : `${n}`;
-      const version = item.document.currentVersion;
-      const metaBits = [
-        item.document.type === "NOTION" ? "Notion" : version?.fileName?.split(".").pop()?.toUpperCase(),
-        version?.numPages ? `${version.numPages} pp` : null,
-        version?.fileSize ? formatBytes(version.fileSize) : null,
-      ].filter(Boolean);
-      entries.push({
-        kind: "document",
-        number,
-        name: item.document.name,
-        depth,
-        key: `d-${item.id}`,
-        itemId: item.id,
-        meta: metaBits.join(" · "),
-      });
-      n++;
+      if (child.kind === "folder") {
+        const folder = child.item;
+        const start = entries.length;
+        entries.push({
+          kind: "folder",
+          number,
+          name: folder.name,
+          depth,
+          key: `f-${folder.id}`,
+        });
+        walk(folder.id, number, depth + 1);
+        // drop empty folders the visitor cannot see into
+        if (entries.length === start + 1) entries.pop();
+        else n++;
+      } else {
+        const item = child.item;
+        const grant = itemGrant(link, "DATAROOM_DOCUMENT", item.id);
+        if (!grant.canView) continue;
+        const version = item.document.currentVersion;
+        const metaBits = [
+          item.document.type === "NOTION" ? "Notion" : version?.fileName?.split(".").pop()?.toUpperCase(),
+          version?.numPages ? `${version.numPages} pp` : null,
+          version?.fileSize ? formatBytes(version.fileSize) : null,
+        ].filter(Boolean);
+        entries.push({
+          kind: "document",
+          number,
+          name: item.document.name,
+          depth,
+          key: `d-${item.id}`,
+          itemId: item.id,
+          meta: metaBits.join(" · "),
+        });
+        n++;
+      }
     }
   };
   walk(null, "", 0);

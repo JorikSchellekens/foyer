@@ -7,6 +7,7 @@ import {
   resolveLink,
   type FullLink,
 } from "@/lib/access";
+import { interleave } from "@/lib/dataroom-nav";
 import { zipResponse, type ZipEntry } from "@/lib/zip";
 import { generateIndexPdf, type IndexNode } from "@/lib/dataroom-index";
 
@@ -19,30 +20,38 @@ function buildNodes(link: FullLink, forIndex: boolean): {
 
   const folderChildren = (parentId: string | null, path: string): IndexNode[] => {
     const out: IndexNode[] = [];
-    for (const folder of dataroom.folders.filter((f) => f.parentId === parentId)) {
-      const grant = itemGrant(link, "DATAROOM_FOLDER", folder.id);
-      // folders show when they contain anything visible; recurse regardless
-      const children = folderChildren(folder.id, `${path}${folder.name}/`);
-      if (children.length > 0 || grant.canView) {
-        out.push({ kind: "folder", name: folder.name, children });
-      }
-    }
-    for (const item of dataroom.documents.filter((d) => d.folderId === parentId)) {
-      const grant = itemGrant(link, "DATAROOM_DOCUMENT", item.id);
-      if (!grant.canView) continue;
-      if (!forIndex && !grant.canDownload) continue;
-      const version = item.document.currentVersion;
-      if (version?.fileKey) {
-        entries.push({
-          path: `${path}${version.fileName}`,
-          key: version.fileKey,
+    // folders and files share one order at each level (matches the index page)
+    const children = interleave(
+      dataroom.folders.filter((f) => f.parentId === parentId),
+      dataroom.documents.filter((d) => d.folderId === parentId)
+    );
+    for (const child of children) {
+      if (child.kind === "folder") {
+        const folder = child.item;
+        const grant = itemGrant(link, "DATAROOM_FOLDER", folder.id);
+        // folders show when they contain anything visible; recurse regardless
+        const sub = folderChildren(folder.id, `${path}${folder.name}/`);
+        if (sub.length > 0 || grant.canView) {
+          out.push({ kind: "folder", name: folder.name, children: sub });
+        }
+      } else {
+        const item = child.item;
+        const grant = itemGrant(link, "DATAROOM_DOCUMENT", item.id);
+        if (!grant.canView) continue;
+        if (!forIndex && !grant.canDownload) continue;
+        const version = item.document.currentVersion;
+        if (version?.fileKey) {
+          entries.push({
+            path: `${path}${version.fileName}`,
+            key: version.fileKey,
+          });
+        }
+        out.push({
+          kind: "document",
+          name: item.document.name,
+          fileName: version?.fileName,
         });
       }
-      out.push({
-        kind: "document",
-        name: item.document.name,
-        fileName: version?.fileName,
-      });
     }
     return out;
   };

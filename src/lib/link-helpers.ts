@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { interleave } from "@/lib/dataroom-nav";
 import { requestHost } from "@/lib/origin";
 import type { EditorLink, TreeItem } from "@/components/links/link-editor";
 import type { LinkConfig } from "@/lib/link-config";
@@ -103,23 +104,25 @@ export function buildTree(
   documents: (DataroomDocument & { document: Document })[]
 ): TreeItem[] {
   function childrenOf(parentId: string | null): TreeItem[] {
-    const subFolders: TreeItem[] = folders
-      .filter((f) => f.parentId === parentId)
-      .map((f) => ({
-        kind: "folder" as const,
-        id: f.id,
-        name: f.name,
-        children: childrenOf(f.id),
-      }));
-    const docs: TreeItem[] = documents
-      .filter((d) => d.folderId === parentId)
-      .map((d) => ({
-        kind: "document" as const,
-        id: d.id,
-        name: d.document.name,
-        docType: d.document.type,
-      }));
-    return [...subFolders, ...docs];
+    // folders and files share one order at each level
+    return interleave(
+      folders.filter((f) => f.parentId === parentId),
+      documents.filter((d) => d.folderId === parentId)
+    ).map((child) =>
+      child.kind === "folder"
+        ? {
+            kind: "folder" as const,
+            id: child.item.id,
+            name: child.item.name,
+            children: childrenOf(child.item.id),
+          }
+        : {
+            kind: "document" as const,
+            id: child.item.id,
+            name: child.item.document.name,
+            docType: child.item.document.type,
+          }
+    );
   }
   return childrenOf(null);
 }

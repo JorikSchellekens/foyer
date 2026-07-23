@@ -63,6 +63,25 @@ export async function deleteDataroom(id: string) {
   return { ok: true };
 }
 
+/**
+ * Next position in the room's shared folder/document order sequence.
+ * Indexes are per-directory positions but drawn from one room-wide counter,
+ * so appended items always land after everything existing.
+ */
+async function nextOrderIndex(dataroomId: string) {
+  const [f, d] = await Promise.all([
+    db.dataroomFolder.aggregate({
+      where: { dataroomId },
+      _max: { orderIndex: true },
+    }),
+    db.dataroomDocument.aggregate({
+      where: { dataroomId },
+      _max: { orderIndex: true },
+    }),
+  ]);
+  return Math.max(f._max.orderIndex ?? 0, d._max.orderIndex ?? 0) + 1;
+}
+
 export async function createDataroomFolder(
   dataroomId: string,
   name: string,
@@ -72,7 +91,12 @@ export async function createDataroomFolder(
   if (!owned) return { error: "Data room not found." };
   if (!name.trim()) return { error: "Folder name is required." };
   await db.dataroomFolder.create({
-    data: { dataroomId, name: name.trim(), parentId },
+    data: {
+      dataroomId,
+      name: name.trim(),
+      parentId,
+      orderIndex: await nextOrderIndex(dataroomId),
+    },
   });
   bust(dataroomId);
   return { ok: true };
@@ -113,11 +137,7 @@ export async function addDocumentsToDataroom(
   const docs = await db.document.findMany({
     where: { id: { in: documentIds }, teamId: owned.ctx.team.id },
   });
-  const max = await db.dataroomDocument.aggregate({
-    where: { dataroomId },
-    _max: { orderIndex: true },
-  });
-  let order = (max._max.orderIndex ?? 0) + 1;
+  let order = await nextOrderIndex(dataroomId);
   for (const doc of docs) {
     await db.dataroomDocument.upsert({
       where: { dataroomId_documentId: { dataroomId, documentId: doc.id } },
@@ -139,6 +159,8 @@ export async function uploadIntoDataroom(
   if (!owned) return { error: "Data room not found." };
   const { ctx } = owned;
 
+  let order = await nextOrderIndex(dataroomId);
+
   // mirror folder structure from relativeDir inside the dataroom
   async function ensureDrPath(relativeDir: string): Promise<string | null> {
     let parentId = folderId;
@@ -150,18 +172,12 @@ export async function uploadIntoDataroom(
         ? existing.id
         : (
             await db.dataroomFolder.create({
-              data: { dataroomId, parentId, name: part },
+              data: { dataroomId, parentId, name: part, orderIndex: order++ },
             })
           ).id;
     }
     return parentId;
   }
-
-  const max = await db.dataroomDocument.aggregate({
-    where: { dataroomId },
-    _max: { orderIndex: true },
-  });
-  let order = (max._max.orderIndex ?? 0) + 1;
 
   for (const up of uploads.slice(0, 500)) {
     // Only trust keys under this team's prefix (see isTeamKey).
@@ -241,16 +257,12 @@ export async function addNotionToDataroom(
     data: { currentVersionId: doc.versions[0].id },
   });
 
-  const max = await db.dataroomDocument.aggregate({
-    where: { dataroomId },
-    _max: { orderIndex: true },
-  });
   await db.dataroomDocument.create({
     data: {
       dataroomId,
       documentId: doc.id,
       folderId,
-      orderIndex: (max._max.orderIndex ?? 0) + 1,
+      orderIndex: await nextOrderIndex(dataroomId),
     },
   });
 
@@ -323,40 +335,29 @@ export async function moveDataroomFolder(
   return { ok: true };
 }
 
-/** Sibling-folder counterpart of reorderDataroomDocuments. */
-export async function reorderDataroomFolders(
-  dataroomId: string,
-  orderedIds: string[]
-) {
-  const owned = await ownDataroom(dataroomId);
-  if (!owned) return;
-  await db.$transaction(
-    orderedIds.map((id, index) =>
-      db.dataroomFolder.updateMany({
-        where: { id, dataroomId },
-        data: { orderIndex: index },
-      })
-    )
-  );
-  bust(dataroomId);
-}
-
 /**
- * Persist a new visitor-facing order for the documents in one folder. Ids must
- * all belong to the data room; their position in the array becomes orderIndex.
+ * Persist a new visitor-facing order for one directory of a data room.
+ * Folders and documents share the sequence: each entry's position in the
+ * array becomes its orderIndex, so files may precede folders. Ids must all
+ * belong to the data room.
  */
-export async function reorderDataroomDocuments(
+export async function reorderDataroomContents(
   dataroomId: string,
-  orderedIds: string[]
+  ordered: { kind: "folder" | "document"; id: string }[]
 ) {
   const owned = await ownDataroom(dataroomId);
   if (!owned) return;
   await db.$transaction(
-    orderedIds.map((id, index) =>
-      db.dataroomDocument.updateMany({
-        where: { id, dataroomId },
-        data: { orderIndex: index },
-      })
+    ordered.map((entry, index) =>
+      entry.kind === "folder"
+        ? db.dataroomFolder.updateMany({
+            where: { id: entry.id, dataroomId },
+            data: { orderIndex: index },
+          })
+        : db.dataroomDocument.updateMany({
+            where: { id: entry.id, dataroomId },
+            data: { orderIndex: index },
+          })
     )
   );
   bust(dataroomId);
