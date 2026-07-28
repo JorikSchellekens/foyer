@@ -58,24 +58,25 @@ model Team {
   slug      String   @unique
   createdAt DateTime @default(now())
 
-  members       TeamMember[]
-  invites       TeamInvite[]
-  folders       Folder[]
-  documents     Document[]
-  datarooms     Dataroom[]
-  links         Link[]
-  viewers       Viewer[]
-  agreements    Agreement[]
-  brandings     Branding[]
-  domains       Domain[]
-  presets       LinkPreset[]
-  previewPresets PreviewPreset[]
-  apiTokens     ApiToken[]
-  webhooks      Webhook[]
-  notifications Notification[]
-  notifPrefs    NotificationPreference[]
-  accessRequests AccessRequest[]
+  members           TeamMember[]
+  invites           TeamInvite[]
+  folders           Folder[]
+  documents         Document[]
+  datarooms         Dataroom[]
+  links             Link[]
+  viewers           Viewer[]
+  agreements        Agreement[]
+  brandings         Branding[]
+  domains           Domain[]
+  presets           LinkPreset[]
+  previewPresets    PreviewPreset[]
+  apiTokens         ApiToken[]
+  webhooks          Webhook[]
+  notifications     Notification[]
+  notifPrefs        NotificationPreference[]
+  accessRequests    AccessRequest[]
   signatureRequests SignatureRequest[]
+  imports           Import[]
 }
 
 model TeamMember {
@@ -172,13 +173,13 @@ model Document {
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
-  team           Team               @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  folder         Folder?            @relation(fields: [folderId], references: [id], onDelete: SetNull)
-  currentVersion DocumentVersion?   @relation("CurrentVersion", fields: [currentVersionId], references: [id])
-  versions       DocumentVersion[]
-  links          Link[]
-  dataroomDocs   DataroomDocument[]
-  views          View[]
+  team              Team               @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  folder            Folder?            @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  currentVersion    DocumentVersion?   @relation("CurrentVersion", fields: [currentVersionId], references: [id])
+  versions          DocumentVersion[]
+  links             Link[]
+  dataroomDocs      DataroomDocument[]
+  views             View[]
   signatureRequests SignatureRequest[]
 
   @@index([teamId, folderId])
@@ -197,10 +198,10 @@ model DocumentVersion {
   note          String?
   createdAt     DateTime @default(now())
 
-  document   Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  currentOf  Document? @relation("CurrentVersion")
-  uploadedBy User?     @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
-  pageViews  PageView[]
+  document          Document           @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  currentOf         Document?          @relation("CurrentVersion")
+  uploadedBy        User?              @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  pageViews         PageView[]
   signatureRequests SignatureRequest[]
 
   @@unique([documentId, versionNumber])
@@ -310,15 +311,15 @@ model Link {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  team        Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  document    Document?        @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  dataroom    Dataroom?        @relation(fields: [dataroomId], references: [id], onDelete: Cascade)
-  domain      Domain?          @relation(fields: [domainId], references: [id], onDelete: SetNull)
-  agreement   Agreement?       @relation(fields: [agreementId], references: [id], onDelete: SetNull)
-  previewPreset PreviewPreset? @relation(fields: [previewPresetId], references: [id], onDelete: SetNull)
-  permissions LinkPermission[]
-  recipients  LinkRecipient[]
-  views       View[]
+  team           Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  document       Document?        @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  dataroom       Dataroom?        @relation(fields: [dataroomId], references: [id], onDelete: Cascade)
+  domain         Domain?          @relation(fields: [domainId], references: [id], onDelete: SetNull)
+  agreement      Agreement?       @relation(fields: [agreementId], references: [id], onDelete: SetNull)
+  previewPreset  PreviewPreset?   @relation(fields: [previewPresetId], references: [id], onDelete: SetNull)
+  permissions    LinkPermission[]
+  recipients     LinkRecipient[]
+  views          View[]
   accessRequests AccessRequest[]
 
   @@unique([domainId, slug])
@@ -415,12 +416,12 @@ model View {
   os            String?
   device        String?
 
-  link        Link                @relation(fields: [linkId], references: [id], onDelete: Cascade)
-  viewer      Viewer?             @relation(fields: [viewerId], references: [id], onDelete: SetNull)
-  document    Document?           @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  dataroom    Dataroom?           @relation(fields: [dataroomId], references: [id], onDelete: Cascade)
-  pageViews   PageView[]
-  mouseBatches MouseBatch[]
+  link               Link                @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  viewer             Viewer?             @relation(fields: [viewerId], references: [id], onDelete: SetNull)
+  document           Document?           @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  dataroom           Dataroom?           @relation(fields: [dataroomId], references: [id], onDelete: Cascade)
+  pageViews          PageView[]
+  mouseBatches       MouseBatch[]
   agreementResponses AgreementResponse[]
 
   @@index([linkId, startedAt])
@@ -531,38 +532,38 @@ enum SignFieldKind {
 }
 
 model SignatureRequest {
-  id         String                 @id @default(cuid())
-  teamId     String
-  documentId String
+  id                       String                 @id @default(cuid())
+  teamId                   String
+  documentId               String
   // Pinned so later uploads cannot change what recipients see or signed.
-  versionId  String
+  versionId                String
   // The exact PDF recipients see and that gets stamped. Equals the version's
   // fileKey for PDF documents; a generated PDF rendition for other types.
   // Null only on rows predating renditions - readers fall back to the version.
-  pdfKey     String?
-  title      String
-  message    String?
-  status     SignatureRequestStatus @default(DRAFT)
+  pdfKey                   String?
+  title                    String
+  message                  String?
+  status                   SignatureRequestStatus @default(DRAFT)
   // true: signers are emailed round by round in Signer.order; false: all at once
-  sequential Boolean                @default(false)
-  requireEmailVerification Boolean  @default(false)
-  expiresAt         DateTime?
-  reminderEveryDays Int?
-  lastReminderAt    DateTime?
-  createdById String?
-  sentAt      DateTime?
-  completedAt DateTime?
-  voidReason  String?
+  sequential               Boolean                @default(false)
+  requireEmailVerification Boolean                @default(false)
+  expiresAt                DateTime?
+  reminderEveryDays        Int?
+  lastReminderAt           DateTime?
+  createdById              String?
+  sentAt                   DateTime?
+  completedAt              DateTime?
+  voidReason               String?
   // flattened PDF with all field values + certificate-of-completion page
-  signedFileKey String?
+  signedFileKey            String?
   // sha256 hex of the final PDF bytes, also printed on the certificate
-  finalHash     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  finalHash                String?
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
 
-  team     Team            @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  document Document        @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  version  DocumentVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  team     Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  document Document         @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  version  DocumentVersion  @relation(fields: [versionId], references: [id], onDelete: Cascade)
   signers  Signer[]
   fields   SignatureField[]
   events   SigningEvent[]
@@ -572,17 +573,17 @@ model SignatureRequest {
 }
 
 model Signer {
-  id        String       @id @default(cuid())
-  requestId String
-  email     String
-  name      String?
-  role      SignerRole   @default(SIGNER)
+  id            String       @id @default(cuid())
+  requestId     String
+  email         String
+  name          String?
+  role          SignerRole   @default(SIGNER)
   // routing round when the request is sequential; ties are emailed together
-  order     Int          @default(0)
+  order         Int          @default(0)
   // possession of this token proves the email invitation was received
-  token     String       @unique
-  status    SignerStatus @default(PENDING)
-  verified  Boolean      @default(false)
+  token         String       @unique
+  status        SignerStatus @default(PENDING)
+  verified      Boolean      @default(false)
   // adopted signature/initials as PNG data URLs, applied to all owned fields
   signatureData String?
   initialsData  String?
@@ -608,15 +609,15 @@ model SignatureField {
   kind      SignFieldKind
   page      Int
   // fractions of page size (0..1), same shape as Agreement.fields
-  xPct Float
-  yPct Float
-  wPct Float
-  hPct Float
-  required Boolean @default(true)
+  xPct      Float
+  yPct      Float
+  wPct      Float
+  hPct      Float
+  required  Boolean       @default(true)
   // TEXT: entered text; CHECKBOX: "true"; DATE_SIGNED: ISO date.
   // SIGNATURE/INITIALS read the signer's adopted PNG instead.
-  value    String?
-  filledAt DateTime?
+  value     String?
+  filledAt  DateTime?
 
   request SignatureRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
   signer  Signer           @relation(fields: [signerId], references: [id], onDelete: Cascade)
@@ -645,21 +646,21 @@ model SigningEvent {
 // ---------- Branding / domains / presets ----------
 
 model Branding {
-  id                 String   @id @default(cuid())
-  teamId             String
-  dataroomId         String?  @unique
-  logoKey            String?
-  bannerKey          String?
-  brandColor         String   @default("#175B47")
-  backgroundColor    String   @default("#101418")
-  applyBgToDataroom  Boolean  @default(false)
-  welcomeMessage     String?
-  ctaLabel           String?
-  ctaUrl             String?
-  metaTitle          String?
-  metaDescription    String?
-  metaImageKey       String?
-  updatedAt          DateTime @updatedAt
+  id                String   @id @default(cuid())
+  teamId            String
+  dataroomId        String?  @unique
+  logoKey           String?
+  bannerKey         String?
+  brandColor        String   @default("#175B47")
+  backgroundColor   String   @default("#101418")
+  applyBgToDataroom Boolean  @default(false)
+  welcomeMessage    String?
+  ctaLabel          String?
+  ctaUrl            String?
+  metaTitle         String?
+  metaDescription   String?
+  metaImageKey      String?
+  updatedAt         DateTime @updatedAt
 
   team     Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
   dataroom Dataroom? @relation(fields: [dataroomId], references: [id], onDelete: Cascade)
@@ -674,15 +675,15 @@ enum DomainStatus {
 }
 
 model Domain {
-  id                    String       @id @default(cuid())
-  teamId                String
-  domain                String       @unique
-  status                DomainStatus @default(PENDING)
-  verificationToken     String       @default(cuid())
-  cloudflareRecordId    String?
-  cloudflareZoneId      String?
-  lastCheckedAt         DateTime?
-  createdAt             DateTime     @default(now())
+  id                 String       @id @default(cuid())
+  teamId             String
+  domain             String       @unique
+  status             DomainStatus @default(PENDING)
+  verificationToken  String       @default(cuid())
+  cloudflareRecordId String?
+  cloudflareZoneId   String?
+  lastCheckedAt      DateTime?
+  createdAt          DateTime     @default(now())
 
   team  Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
   links Link[]
@@ -786,16 +787,169 @@ model WebhookDelivery {
 }
 
 model DataroomQuestion {
-  id         String    @id @default(cuid())
-  dataroomId String
+  id          String    @id @default(cuid())
+  dataroomId  String
   viewerEmail String?
-  body       String
-  answer     String?
-  answeredBy String?
-  answeredAt DateTime?
-  createdAt  DateTime  @default(now())
+  body        String
+  answer      String?
+  answeredBy  String?
+  answeredAt  DateTime?
+  createdAt   DateTime  @default(now())
 
   dataroom Dataroom @relation(fields: [dataroomId], references: [id], onDelete: Cascade)
 
   @@index([dataroomId, createdAt])
+}
+
+// ---------- Migration / import ----------
+
+enum ImportSource {
+  PAPERMARK
+}
+
+enum ImportStatus {
+  // Credentials captured, nothing read yet.
+  DRAFT
+  // Reading the source account's inventory.
+  SCANNING
+  // Inventory read; waiting for the user to review and confirm the plan.
+  READY
+  RUNNING
+  PAUSED
+  COMPLETED
+  FAILED
+}
+
+/**
+ * One migration run from another product into this team.
+ * Deliberately self-contained: no core model (Document, Link, Dataroom...)
+ * carries an import id. Everything an import produces is an ordinary Foyer
+ * object from the moment it is created, and the provenance trail lives only in
+ * ImportItem. That is what makes a finished import *forgettable* - deleting
+ * the Import row removes every trace of the migration without touching, or
+ * even locking, a single piece of migrated content.
+ */
+model Import {
+  id     String       @id @default(cuid())
+  teamId String
+  source ImportSource @default(PAPERMARK)
+  status ImportStatus @default(DRAFT)
+
+  createdById String?
+
+  // Source credentials, encrypted at rest and wiped the moment the run
+  // finishes (or the user clears it). Never returned to the client.
+  tokenCipher  String?
+  cookieCipher String?
+  /**
+   * Papermark team id, needed only by the session-cookie file strategy.
+   */
+  sourceTeamId String?
+
+  /**
+   * Inventory captured during SCANNING; the exact thing the user reviewed.
+   */
+  plan    Json?
+  /**
+   * User's choices from the review screen (what to import, where it lands).
+   */
+  options Json?
+
+  /**
+   * Denormalised progress so the list view needs no aggregate query.
+   */
+  totalItems  Int @default(0)
+  doneItems   Int @default(0)
+  failedItems Int @default(0)
+
+  /**
+   * Library folder the run created to hold imported content, if any.
+   */
+  rootFolderId String?
+
+  /** Current activity line ("Reading datarooms"), shown while scanning/running. */
+  activity    String?
+  error       String?
+  createdAt   DateTime  @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+  /**
+   * Set when the user dismisses the receipt; hidden from the dashboard.
+   */
+  dismissedAt DateTime?
+  /**
+   * Heartbeat from the active runner, so a crashed run can be detected.
+   */
+  heartbeatAt DateTime?
+
+  team  Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  items ImportItem[]
+
+  @@index([teamId, status])
+}
+
+enum ImportItemKind {
+  FOLDER
+  DOCUMENT
+  DATAROOM
+  DATAROOM_FOLDER
+  DATAROOM_DOCUMENT
+  LINK
+  DOMAIN
+  VISITOR
+}
+
+enum ImportItemStatus {
+  PENDING
+  RUNNING
+  DONE
+  SKIPPED
+  FAILED
+}
+
+/**
+ * One source object and what became of it.
+ * Doubles as the idempotency ledger (a re-run skips anything already DONE, so
+ * an interrupted import resumes instead of duplicating) and as the audit trail
+ * the review screen renders.
+ */
+model ImportItem {
+  id       String           @id @default(cuid())
+  importId String
+  kind     ImportItemKind
+  status   ImportItemStatus @default(PENDING)
+
+  /**
+   * Id in the source system. Unique per import+kind - the resume key.
+   */
+  externalId   String
+  externalName String
+  /**
+   * Id of the Foyer object created for it, once created.
+   */
+  localId      String?
+
+  /**
+   * Ordering hint so dependencies (folders before documents) run first.
+   */
+  sortOrder Int @default(0)
+
+  /**
+   * Lossy-conversion notes surfaced in review; shape from lib/papermark/mapping.
+   */
+  caveats Json?
+  /**
+   * Kind-specific payload: mapped settings, url plan, file strategy used.
+   */
+  meta    Json?
+
+  error       String?
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  import Import @relation(fields: [importId], references: [id], onDelete: Cascade)
+
+  @@unique([importId, kind, externalId])
+  @@index([importId, status])
+  @@index([importId, kind])
 }

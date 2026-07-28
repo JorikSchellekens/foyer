@@ -71,6 +71,12 @@ function useLeaveGuard(active: boolean) {
   }, [active]);
 }
 
+/**
+ * Upload files into object storage and return their keys, without creating
+ * any Document rows. Exported (below) because callers that are not "add to
+ * library" - the Papermark importer supplying files for already-planned
+ * documents - need the bytes stored but must attach them themselves.
+ */
 async function presignAndPut(
   files: { file: File; relativeDir: string }[],
   onProgress: (done: number, pct: number) => void
@@ -127,7 +133,7 @@ async function presignAndPut(
   return uploaded;
 }
 
-function relativeDirOf(file: File): string {
+export function relativeDirOf(file: File): string {
   const rel = (file as File & { webkitRelativePath?: string })
     .webkitRelativePath;
   if (!rel) return "";

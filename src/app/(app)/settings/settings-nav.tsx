@@ -15,6 +15,7 @@ const ITEMS = [
   { href: "/settings/notifications", label: "Notifications" },
   { href: "/settings/tokens", label: "API & MCP" },
   { href: "/settings/webhooks", label: "Webhooks" },
+  { href: "/settings/import", label: "Import" },
 ];
 
 export function SettingsNav() {

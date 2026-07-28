@@ -74,6 +74,31 @@ webhooks (document.viewed, dataroom.visited, link.created, agreement.signed…).
 Tools: list/search documents & datarooms, create/manage links, get analytics
 (document/link/visitor), invite recipients, list visits.
 
+## Import from Papermark (Settings → Import)
+Connect (API token + optional session cookie) → scan → review → run → receipt.
+Import/ImportItem models hold the whole migration; **no core model carries an
+import id**, so the receipt can be deleted with zero residue - that is what
+makes a finished migration forgettable. ImportItem doubles as the resume ledger
+(unique on importId+kind+externalId) and the audit trail.
+- Papermark's public API (api.papermark.com/v1, 33 endpoints) serves **no file
+  bytes** (`Document.url` is null for files), **no /v1/domains** and **no
+  /v1/teams**. Files therefore come from either the session-cookie route
+  (`POST /api/teams/{id}/documents/{id}/download`, returns `originalFile`,
+  ~2min presign, no analytics pollution) or the user supplying them by hand
+  (name-matched, extension/case-insensitive). The viewer-scraping route is
+  deliberately NOT implemented: it fabricates a view against every document.
+- URL preservation: custom-domain links keep `domain`+`slug` verbatim, so
+  re-pointing DNS keeps them working byte-for-byte. papermark.com/view/<id>
+  links cannot be preserved (not our host); slug reuses the Papermark link id
+  so at least the path matches.
+- Lossy conversions are surfaced as typed Caveats, never silent. Passwords
+  (never returned by the API) and NDAs block: the user sets a new password or
+  the link is left behind rather than being published less protected.
+- Run is client-driven in ~20s steps (no queue infra); closing the tab pauses,
+  reopening resumes. Credentials are AES-256-GCM sealed (lib/secret-box.ts,
+  keyed off AUTH_SECRET) and wiped on completion.
+- E2E: `bun run --conditions=react-server scripts/import-e2e.ts`
+
 ## Status
 - [x] Scaffold (Next 16, Tailwind 4, shadcn radix/nova)
 - [x] Schema + migrations (prisma 6, initial migration applied)
@@ -134,6 +159,10 @@ Tools: list/search documents & datarooms, create/manage links, get analytics
       purpose, foyer_signed cookie); completion emails and post-sign screens
       link to it. No guest accounts by design.
       E2E: scripts/sign-e2e.ts
+- [x] Papermark migration (Settings → Import): scan → review → resumable run →
+      receipt; provenance in a side table so the record deletes cleanly;
+      custom-domain links keep their exact URLs. See "Import from Papermark".
+      E2E: scripts/import-e2e.ts
 
 ## Known cut corners (candidates for later)
 - Agreement "field placement on PDF" simplified to read-PDF + drawn signature
