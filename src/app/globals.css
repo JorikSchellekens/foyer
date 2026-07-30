@@ -47,6 +47,31 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  /*
+   * Motion system. One vocabulary, used everywhere.
+   * Durations are short: this is a business tool, movement should read as
+   * responsiveness, never as decoration. Anything above --dur-slow is a
+   * deliberate first-paint reveal, not an interaction.
+   */
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out-soft: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-in-out-soft: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --dur-instant: 80ms;
+  --dur-fast: 130ms;
+  --dur: 190ms;
+  --dur-slow: 300ms;
+  --dur-reveal: 420ms;
+
+  /* Elevation. Paper stacked on paper: tight, warm, never a glow. */
+  --shadow-hairline: 0 0 0 1px var(--border);
+  --shadow-raise:
+    0 1px 2px -1px rgb(22 24 29 / 0.08), 0 2px 6px -2px rgb(22 24 29 / 0.06);
+  --shadow-float:
+    0 2px 4px -2px rgb(22 24 29 / 0.1), 0 8px 20px -6px rgb(22 24 29 / 0.1);
+  --shadow-overlay:
+    0 4px 8px -4px rgb(22 24 29 / 0.12), 0 20px 44px -12px rgb(22 24 29 / 0.16);
 }
 
 /*
@@ -132,6 +157,40 @@
   }
   html {
     @apply font-sans;
+    scroll-behavior: smooth;
+    /* Keep the layout from jumping when an overlay locks the scrollbar. */
+    scrollbar-gutter: stable;
+  }
+  /* Ink-on-paper selection rather than the OS blue. */
+  ::selection {
+    background: color-mix(in oklab, var(--primary) 22%, transparent);
+    color: var(--foreground);
+  }
+  /* Thin, self-effacing scrollbars that only assert themselves on hover. */
+  @supports selector(::-webkit-scrollbar) {
+    ::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      border: 3px solid transparent;
+      background-clip: padding-box;
+      border-radius: 99px;
+      background-color: color-mix(in oklab, var(--foreground) 18%, transparent);
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background-color: color-mix(in oklab, var(--foreground) 32%, transparent);
+    }
+    ::-webkit-scrollbar-corner {
+      background: transparent;
+    }
+  }
+  /* Headings set on the display face read tighter than body copy. */
+  .font-display {
+    letter-spacing: -0.011em;
   }
 }
 
@@ -155,6 +214,138 @@
     user-select: none;
     -webkit-user-select: none;
     -webkit-touch-callout: none;
+  }
+
+  /* ---- Motion utilities ------------------------------------------------
+   * Shared vocabulary. Prefer these over ad-hoc transitions so timing and
+   * easing stay consistent across the app. All of them are neutralised by
+   * the prefers-reduced-motion block at the bottom of this file.
+   */
+
+  /* Mount reveal. Add .stagger-item + --i on children to cascade. */
+  .reveal {
+    animation: reveal var(--dur-reveal) var(--ease-out-quint) both;
+  }
+  .reveal-up {
+    animation: reveal-up var(--dur-reveal) var(--ease-out-quint) both;
+  }
+  .stagger-item {
+    animation: reveal-up var(--dur-reveal) var(--ease-out-quint) both;
+    animation-delay: calc(var(--i, 0) * 40ms);
+  }
+
+  /* Row/card hover: lift a hair, warm the surface. Pair with border color. */
+  .hover-raise {
+    transition:
+      box-shadow var(--dur) var(--ease-out-soft),
+      border-color var(--dur) var(--ease-out-soft),
+      transform var(--dur) var(--ease-out-soft),
+      background-color var(--dur) var(--ease-out-soft);
+  }
+  .hover-raise:hover {
+    box-shadow: var(--shadow-raise);
+    transform: translateY(-1px);
+  }
+
+  /* Anything clickable that is not a <Button>: crisp press feedback. */
+  .press {
+    transition: transform var(--dur-instant) var(--ease-out-soft);
+  }
+  .press:active {
+    transform: translateY(0.5px) scale(0.995);
+  }
+
+  /* Text link that grows an underline from the leading edge. */
+  .underline-grow {
+    background-image: linear-gradient(currentColor, currentColor);
+    background-position: 0 100%;
+    background-repeat: no-repeat;
+    background-size: 0% 1px;
+    transition: background-size var(--dur) var(--ease-out-quint);
+  }
+  .underline-grow:hover,
+  .underline-grow:focus-visible {
+    background-size: 100% 1px;
+  }
+
+  /* Skeleton sheen. Travels once per cycle, slow enough to feel calm. */
+  .shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+  .shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in oklab, var(--foreground) 6%, transparent),
+      transparent
+    );
+    transform: translateX(-100%);
+    animation: shimmer 1.6s var(--ease-in-out-soft) infinite;
+  }
+
+  /* Numbers that change in place (live counts, durations). */
+  .tick-in {
+    animation: tick-in var(--dur) var(--ease-out-quint) both;
+  }
+
+  /* A value that just updated: brief accent wash, no layout shift. */
+  .flash-accent {
+    animation: flash-accent 1s var(--ease-out-soft) both;
+  }
+
+  /* Focus ring for non-shadcn interactive elements. */
+  .focus-ring {
+    outline: none;
+  }
+  .focus-ring:focus-visible {
+    box-shadow: 0 0 0 3px var(--ring);
+    border-color: color-mix(in oklab, var(--primary) 60%, transparent);
+  }
+}
+
+/* ---- Keyframes ------------------------------------------------------- */
+@keyframes reveal {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes reveal-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+@keyframes tick-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+@keyframes flash-accent {
+  0%,
+  30% {
+    background-color: color-mix(in oklab, var(--primary) 12%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--primary) 45%, transparent);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 6px transparent;
   }
 }
 
@@ -198,5 +389,27 @@
 @media print {
   .no-print {
     display: none !important;
+  }
+}
+
+/*
+ * Reduced motion: strip movement, keep state changes legible. Opacity-only
+ * transitions survive so hover/focus feedback does not disappear entirely.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+  .hover-raise:hover,
+  .press:active {
+    transform: none !important;
+  }
+  .shimmer::after {
+    display: none;
   }
 }
