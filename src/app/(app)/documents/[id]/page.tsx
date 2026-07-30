@@ -27,6 +27,10 @@ import { DocumentTitle } from "./title-editor";
 import { createSignatureDraft } from "@/app/(app)/signatures/actions";
 import { StatusBadge } from "@/app/(app)/signatures/status-badge";
 import { isSignable } from "@/lib/pdf-rendition";
+import {
+  DocumentDatarooms,
+  type RoomOption,
+} from "@/app/(app)/documents/dataroom-picker";
 
 export default async function DocumentPage({
   params,
@@ -82,6 +86,36 @@ export default async function DocumentPage({
   if (!doc) notFound();
 
   const editorCtx = await getEditorContext(ctx.team.id);
+
+  // Data rooms this document sits in, plus the rooms it could be added to.
+  const { accessibleDataroomIds } = await import("@/lib/permissions");
+  const [viewable, editable] = await Promise.all([
+    accessibleDataroomIds(ctx),
+    accessibleDataroomIds(ctx, "EDIT"),
+  ]);
+  const editableIds = editable === "all" ? null : new Set(editable);
+  const roomScope = {
+    teamId: ctx.team.id,
+    ...(viewable === "all" ? {} : { id: { in: viewable } }),
+  };
+  const [allRooms, roomJoins] = await Promise.all([
+    db.dataroom.findMany({
+      where: roomScope,
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+    db.dataroomDocument.findMany({
+      where: { documentId: doc.id, dataroom: roomScope },
+      select: { dataroom: { select: { id: true, name: true } } },
+    }),
+  ]);
+  const rooms: RoomOption[] = allRooms.map((r) => ({
+    ...r,
+    canEdit: !editableIds || editableIds.has(r.id),
+  }));
+  const memberOf = roomJoins
+    .map((j) => j.dataroom)
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   const totalTime = doc.views.reduce((s, v) => s + v.totalDuration, 0);
   const uniqueEmails = new Set(
@@ -183,6 +217,20 @@ export default async function DocumentPage({
             )}
           />
         </div>
+
+        <section>
+          <h2 className="mb-3 font-display text-xl">Data rooms</h2>
+          <p className="mb-3 text-sm text-muted-foreground">
+            {memberOf.length === 0
+              ? "This document is not in any data room yet."
+              : "Everyone with access to these rooms can open this document."}
+          </p>
+          <DocumentDatarooms
+            documentId={doc.id}
+            rooms={rooms}
+            memberOf={memberOf}
+          />
+        </section>
 
         <section>
           <h2 className="mb-3 font-display text-xl">Links</h2>

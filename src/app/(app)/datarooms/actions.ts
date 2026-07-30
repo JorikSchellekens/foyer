@@ -16,6 +16,13 @@ function bust(id?: string) {
   if (id) revalidatePath(`/datarooms/${id}`);
 }
 
+/** Membership changed: both the room and the library view show it. */
+function bustMembership(dataroomIds: string[], documentIds: string[]) {
+  for (const id of dataroomIds) bust(id);
+  revalidatePath("/documents");
+  for (const id of documentIds) revalidatePath(`/documents/${id}`);
+}
+
 /**
  * Resolve a team-owned data room, requiring the caller to hold at least
  * `level` on it. OWNER/ADMIN always pass; a MEMBER passes if unrestricted or
@@ -49,7 +56,10 @@ export async function updateDataroom(
   if (!owned) return { error: "Data room not found." };
   await db.dataroom.update({
     where: { id },
-    data: { name: data.name?.trim() || undefined, description: data.description },
+    data: {
+      name: data.name?.trim() || undefined,
+      description: data.description,
+    },
   });
   bust(id);
   return { ok: true };
@@ -147,6 +157,68 @@ export async function addDocumentsToDataroom(
   }
   bust(dataroomId);
   return { added: docs.length };
+}
+
+/**
+ * Add library documents to the root of several rooms at once, appended after
+ * everything already there. Drives the data room picker in the documents view.
+ * Rooms the caller may not edit are skipped rather than failing the batch.
+ */
+export async function addDocumentsToDatarooms(
+  documentIds: string[],
+  dataroomIds: string[]
+) {
+  const ctx = await requireTeam();
+  const docs = await db.document.findMany({
+    where: { id: { in: documentIds }, teamId: ctx.team.id },
+    select: { id: true },
+  });
+  if (docs.length === 0) return { error: "Document not found." };
+
+  const touched: string[] = [];
+  let skipped = 0;
+  for (const dataroomId of dataroomIds) {
+    if (!(await ownDataroom(dataroomId))) {
+      skipped++;
+      continue;
+    }
+    let order = await nextOrderIndex(dataroomId);
+    for (const doc of docs) {
+      await db.dataroomDocument.upsert({
+        where: { dataroomId_documentId: { dataroomId, documentId: doc.id } },
+        update: {},
+        create: {
+          dataroomId,
+          documentId: doc.id,
+          folderId: null,
+          orderIndex: order++,
+        },
+      });
+    }
+    touched.push(dataroomId);
+  }
+
+  bustMembership(
+    touched,
+    docs.map((d) => d.id)
+  );
+  if (touched.length === 0)
+    return { error: "You cannot add documents to that data room." };
+  return { added: docs.length * touched.length, skipped };
+}
+
+/** Remove documents from a room, keyed by the pair rather than the join row. */
+export async function removeDocumentsFromDataroom(
+  dataroomId: string,
+  documentIds: string[]
+) {
+  const owned = await ownDataroom(dataroomId);
+  if (!owned) return { error: "Data room not found." };
+  await db.dataroomDocument.deleteMany({
+    where: { dataroomId, documentId: { in: documentIds } },
+  });
+  bustMembership([dataroomId], documentIds);
+  return { ok: true as const };
 }
 
 /** Upload files straight into a dataroom (also lands them in the library). */

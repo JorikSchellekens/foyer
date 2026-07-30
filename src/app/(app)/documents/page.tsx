@@ -14,6 +14,8 @@ import {
 import { teamMemberEmails, externalViews } from "@/lib/internal-views";
 import { NewFolderDialog, AddNotionDialog } from "./toolbar";
 import { DocumentRow, FolderRow, LibCrumbDropLink } from "./rows";
+import { SelectionProvider, SelectAllCheckbox } from "./selection";
+import type { RoomOption, RoomRef } from "./dataroom-picker";
 
 export const metadata = { title: "Documents" };
 
@@ -60,6 +62,50 @@ export default async function DocumentsPage({
   ]);
 
   const isEmpty = folders.length === 0 && documents.length === 0;
+
+  // Data room membership for the rooms this user may see, plus the pick list.
+  const { accessibleDataroomIds } = await import("@/lib/permissions");
+  const [viewable, editable] = await Promise.all([
+    accessibleDataroomIds(ctx),
+    accessibleDataroomIds(ctx, "EDIT"),
+  ]);
+  const editableIds = editable === "all" ? null : new Set(editable);
+  const [allRooms, joins] = await Promise.all([
+    db.dataroom.findMany({
+      where: {
+        teamId: ctx.team.id,
+        ...(viewable === "all" ? {} : { id: { in: viewable } }),
+      },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+    documents.length
+      ? db.dataroomDocument.findMany({
+          where: {
+            documentId: { in: documents.map((d) => d.id) },
+            dataroom: {
+              teamId: ctx.team.id,
+              ...(viewable === "all" ? {} : { id: { in: viewable } }),
+            },
+          },
+          select: {
+            documentId: true,
+            dataroom: { select: { id: true, name: true } },
+          },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const rooms: RoomOption[] = allRooms.map((r) => ({
+    ...r,
+    canEdit: !editableIds || editableIds.has(r.id),
+  }));
+  const memberships: Record<string, RoomRef[]> = {};
+  for (const join of joins) {
+    (memberships[join.documentId] ??= []).push(join.dataroom);
+  }
+  for (const list of Object.values(memberships))
+    list.sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <div>
@@ -114,46 +160,58 @@ export default async function DocumentsPage({
             <DropZone folderId={folderId} />
           )
         ) : (
-          <div className="rounded-lg border bg-card">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead className="w-28">Type</TableHead>
-                  <TableHead className="w-24">Size</TableHead>
-                  <TableHead className="w-20">Links</TableHead>
-                  <TableHead className="w-20">Views</TableHead>
-                  <TableHead className="w-40 text-right">Updated</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {folders.map((f) => (
-                  <FolderRow
-                    key={f.id}
-                    folder={{
-                      id: f.id,
-                      name: f.name,
-                      itemCount: f._count.documents + f._count.children,
-                    }}
-                  />
-                ))}
-                {documents.map((d) => (
-                  <DocumentRow
-                    key={d.id}
-                    doc={{
-                      id: d.id,
-                      name: d.name,
-                      type: d.type,
-                      size: d.currentVersion?.fileSize ?? 0,
-                      linkCount: d._count.links,
-                      viewCount: d._count.views,
-                      updatedAt: d.updatedAt.toISOString(),
-                    }}
-                  />
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+          <SelectionProvider
+            ids={documents.map((d) => d.id)}
+            rooms={rooms}
+            memberships={memberships}
+          >
+            <div className="rounded-lg border bg-card">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10">
+                      <SelectAllCheckbox />
+                    </TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead className="w-28">Type</TableHead>
+                    <TableHead className="w-24">Size</TableHead>
+                    <TableHead className="w-20">Links</TableHead>
+                    <TableHead className="w-20">Views</TableHead>
+                    <TableHead className="w-56">Data rooms</TableHead>
+                    <TableHead className="w-40 text-right">Updated</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {folders.map((f) => (
+                    <FolderRow
+                      key={f.id}
+                      folder={{
+                        id: f.id,
+                        name: f.name,
+                        itemCount: f._count.documents + f._count.children,
+                      }}
+                    />
+                  ))}
+                  {documents.map((d) => (
+                    <DocumentRow
+                      key={d.id}
+                      rooms={rooms}
+                      memberOf={memberships[d.id] ?? []}
+                      doc={{
+                        id: d.id,
+                        name: d.name,
+                        type: d.type,
+                        size: d.currentVersion?.fileSize ?? 0,
+                        linkCount: d._count.links,
+                        viewCount: d._count.views,
+                        updatedAt: d.updatedAt.toISOString(),
+                      }}
+                    />
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </SelectionProvider>
         )}
       </div>
     </div>

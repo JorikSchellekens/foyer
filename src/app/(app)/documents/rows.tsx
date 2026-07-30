@@ -11,6 +11,8 @@ import { FileIcon } from "@/components/shell/file-icon";
 import { formatBytes, timeAgo, pluralize } from "@/lib/format";
 import { docTypeLabel } from "@/lib/doc-types";
 import { RowMenu } from "./row-menu";
+import { RowCheckbox } from "./selection";
+import { DataroomCell, type RoomOption, type RoomRef } from "./dataroom-picker";
 import { ShareMenuItem } from "@/components/links/quick-share";
 import {
   renameDocument,
@@ -100,6 +102,7 @@ export function FolderRow({
       }}
       onClick={() => router.push(`/documents?folder=${folder.id}`)}
     >
+      <TableCell />
       <TableCell>
         <div className="flex items-center gap-2.5">
           <FolderIcon className="size-4 text-[#b7791f]" strokeWidth={1.5} />
@@ -110,6 +113,7 @@ export function FolderRow({
       <TableCell className="text-muted-foreground">
         {pluralize(folder.itemCount, "item")}
       </TableCell>
+      <TableCell />
       <TableCell />
       <TableCell />
       <TableCell className="text-right">
@@ -130,6 +134,8 @@ export function FolderRow({
 
 export function DocumentRow({
   doc,
+  rooms,
+  memberOf,
 }: {
   doc: {
     id: string;
@@ -140,6 +146,8 @@ export function DocumentRow({
     viewCount: number;
     updatedAt: string;
   };
+  rooms: RoomOption[];
+  memberOf: RoomRef[];
 }) {
   const router = useRouter();
   return (
@@ -149,6 +157,9 @@ export function DocumentRow({
       onDragStart={(e) => startLibDocDrag(e, doc.id)}
       onClick={() => router.push(`/documents/${doc.id}`)}
     >
+      <TableCell>
+        <RowCheckbox id={doc.id} />
+      </TableCell>
       <TableCell>
         <div className="flex items-center gap-2.5">
           <FileIcon type={doc.type} />
@@ -166,6 +177,9 @@ export function DocumentRow({
       </TableCell>
       <TableCell className="tabular text-muted-foreground">
         {doc.viewCount}
+      </TableCell>
+      <TableCell onClick={(e) => e.stopPropagation()}>
+        <DataroomCell documentId={doc.id} rooms={rooms} memberOf={memberOf} />
       </TableCell>
       <TableCell className="text-right text-muted-foreground">
         <div className="flex items-center justify-end gap-1">
