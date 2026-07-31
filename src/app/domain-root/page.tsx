@@ -3,15 +3,7 @@ import { headers } from "next/headers";
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
 import { FoyerLogo, FoyerMark } from "@/components/brand/logo";
-
-/** Same rule the viewer gates use: ink on light surfaces, paper on dark. */
-function contrastText(hex: string): string {
-  const n = hex.replace("#", "");
-  const r = parseInt(n.slice(0, 2), 16);
-  const g = parseInt(n.slice(2, 4), 16);
-  const b = parseInt(n.slice(4, 6), 16);
-  return (r * 299 + g * 587 + b * 114) / 1000 > 150 ? "#16181d" : "#ffffff";
-}
+import { contrastText } from "@/lib/contrast";
 
 /**
  * The domain this request arrived on, with the team's branding if it is one we

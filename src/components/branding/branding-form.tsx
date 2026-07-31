@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { HEX, contrastText } from "@/lib/contrast";
 import {
   saveBranding,
   resetBranding,
@@ -54,8 +55,6 @@ const DEFAULTS: BrandingValues = {
   metaImageKey: null,
 };
 
-const HEX = /^#[0-9a-fA-F]{6}$/;
-
 /** Relative luminance, WCAG 2.1 definition. */
 function luminance(hex: string): number {
   const n = hex.replace("#", "");
@@ -70,19 +69,6 @@ function contrastRatio(a: string, b: string): number {
   const [x, y] = [luminance(a), luminance(b)];
   const [hi, lo] = x > y ? [x, y] : [y, x];
   return (hi + 0.05) / (lo + 0.05);
-}
-
-/**
- * Mirrors the viewer's own ink/paper choice (viewer/gates.tsx) so the preview
- * below is not a rough idea of the front page but the same decision.
- */
-function contrastText(hex: string): string {
-  if (!HEX.test(hex)) return "#16181d";
-  const n = hex.replace("#", "");
-  const r = parseInt(n.slice(0, 2), 16);
-  const g = parseInt(n.slice(2, 4), 16);
-  const b = parseInt(n.slice(4, 6), 16);
-  return (r * 299 + g * 587 + b * 114) / 1000 > 150 ? "#16181d" : "#ffffff";
 }
 
 function ColorField({

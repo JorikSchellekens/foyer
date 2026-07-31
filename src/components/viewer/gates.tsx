@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SignaturePad } from "./signature-pad";
 import { FoyerMark } from "@/components/brand/logo";
+import { contrastText } from "@/lib/contrast";
 import {
   submitPassword,
   submitEmail,
@@ -33,14 +34,6 @@ export type GateBrand = {
   bannerUrl: string | null;
   welcomeMessage: string | null;
 };
-
-function contrastText(hex: string): string {
-  const n = hex.replace("#", "");
-  const r = parseInt(n.slice(0, 2), 16);
-  const g = parseInt(n.slice(2, 4), 16);
-  const b = parseInt(n.slice(4, 6), 16);
-  return (r * 299 + g * 587 + b * 114) / 1000 > 150 ? "#16181d" : "#ffffff";
-}
 
 export function GateShell({
   brand,
@@ -118,7 +111,16 @@ export function GateShell({
   );
 }
 
-/** The threshold card: paper, hairline, floated off the branded background. */
+/**
+ * The threshold card: paper, hairline, floated off the branded background.
+ *
+ * Fixed light, deliberately - no dark: variants here. What a visitor meets at
+ * the door is the sharing team's branding, not their own OS preference: the
+ * surrounding surface is the team's chosen backgroundColor and the accents are
+ * their brand colour, so letting a visitor's dark mode repaint the card would
+ * put an unreviewed colour scheme on someone else's front page. The viewer
+ * chrome past the gate is permanently dark for the same reason.
+ */
 const cardClass =
   "rounded-xl border border-black/[0.07] bg-white p-6 text-neutral-900 shadow-[var(--shadow-overlay)]";
 
