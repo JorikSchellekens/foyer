@@ -190,7 +190,7 @@ export function TokensClient({
                       {t.partialKey} · {t.createdBy}
                     </p>
                   </div>
-                  <span className="shrink-0 text-xs text-muted-foreground">
+                  <span className="shrink-0 text-xs text-muted-foreground" suppressHydrationWarning>
                     {t.lastUsedAt
                       ? `used ${timeAgo(t.lastUsedAt)}`
                       : "never used"}

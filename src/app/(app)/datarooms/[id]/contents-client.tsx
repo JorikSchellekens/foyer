@@ -886,6 +886,7 @@ function DocRowView({
       <TableCell
         className="text-xs text-muted-foreground"
         title={formatDateTime(doc.addedAt)}
+        suppressHydrationWarning
       >
         added {timeAgo(doc.addedAt)}
       </TableCell>

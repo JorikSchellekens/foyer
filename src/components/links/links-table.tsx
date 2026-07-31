@@ -273,6 +273,10 @@ function LinkRow({
           <time
             dateTime={row.lastViewed}
             title={formatDateTime(row.lastViewed)}
+            // Relative time is measured against the reader's clock, so the
+            // server's string and the client's can legitimately differ by a
+            // bucket. The absolute value in dateTime/title is the stable one.
+            suppressHydrationWarning
           >
             {timeAgo(row.lastViewed)}
           </time>

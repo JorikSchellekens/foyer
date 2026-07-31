@@ -218,7 +218,11 @@ export function ViewsTable({
                   title={formatDateTime(v.startedAt)}
                   className={`inline-flex items-center gap-0.5 font-mono text-xs text-muted-foreground tabular transition-colors duration-[var(--dur-fast)] hover:text-foreground ${CELL_LINK}`}
                 >
-                  <time dateTime={v.startedAt}>{timeAgo(v.startedAt)}</time>
+                  {/* Relative to the reader's clock, so server and client can
+                      land in different buckets: dateTime holds the truth. */}
+                  <time dateTime={v.startedAt} suppressHydrationWarning>
+                    {timeAgo(v.startedAt)}
+                  </time>
                   <ChevronRight
                     className="size-3.5 shrink-0 -translate-x-0.5 opacity-0 transition duration-[var(--dur)] ease-[var(--ease-out-quint)] group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100"
                     aria-hidden

@@ -139,6 +139,7 @@ export function NotificationBell() {
                     <span
                       className="mt-0.5 block font-mono text-[11px] text-muted-foreground tabular"
                       title={formatDateTime(n.createdAt)}
+                      suppressHydrationWarning
                     >
                       {timeAgo(n.createdAt)}
                     </span>
