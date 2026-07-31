@@ -558,6 +558,25 @@ async function ContentsTabInner({
   );
 }
 
+/**
+ * Visit counts for the last 30 days, zero-filled so the chart keeps a steady
+ * width on a quiet room. Outside the component because reading the clock is
+ * not something a render is allowed to do.
+ */
+function visitsByDay(views: { startedAt: Date }[]): Map<string, number> {
+  const byDay = new Map<string, number>();
+  const today = Date.now();
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(today - i * 86400_000);
+    byDay.set(d.toISOString().slice(0, 10), 0);
+  }
+  for (const v of views) {
+    const key = v.startedAt.toISOString().slice(0, 10);
+    if (byDay.has(key)) byDay.set(key, (byDay.get(key) ?? 0) + 1);
+  }
+  return byDay;
+}
+
 async function AnalyticsTab({
   dataroom,
 }: {
@@ -578,15 +597,7 @@ async function AnalyticsTab({
   );
   const totalTime = views.reduce((s, v) => s + v.totalDuration, 0);
 
-  const byDay = new Map<string, number>();
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date(Date.now() - i * 86400_000);
-    byDay.set(d.toISOString().slice(0, 10), 0);
-  }
-  for (const v of views) {
-    const key = v.startedAt.toISOString().slice(0, 10);
-    if (byDay.has(key)) byDay.set(key, (byDay.get(key) ?? 0) + 1);
-  }
+  const byDay = visitsByDay(views);
 
   return (
     <div className="space-y-6">

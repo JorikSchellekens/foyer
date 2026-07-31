@@ -28,15 +28,35 @@ export function useTracking({
 }) {
   const pageRef = useRef(1);
   const maxPageRef = useRef(1);
-  const lastBeatRef = useRef(Date.now());
+  const lastBeatRef = useRef(0);
   const dwellRef = useRef<Map<number, number>>(new Map());
   const mouseRef = useRef<Map<number, MouseSample[]>>(new Map());
-  const startRef = useRef(Date.now());
-  const pageEnterRef = useRef(Date.now());
+  const startRef = useRef(0);
+  const pageEnterRef = useRef(0);
   const trailRef = useRef<TrailSeg[]>([]);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
+  /**
+   * Stamps the time origin the first time anything needs it.
+   *
+   * Reading the clock while rendering is not allowed: render can run more than
+   * once, and runs on the server too, so the value it captures is not the
+   * moment the visitor actually arrived. The first thing that needs an origin
+   * is by definition the start of the view, so stamping there is both legal
+   * and more honest. Every reader calls this first rather than trusting effect
+   * ordering, because a zero origin would turn the first trail segment into an
+   * epoch-sized duration.
+   */
+  const begin = useCallback(() => {
+    if (startRef.current) return;
+    const t = Date.now();
+    startRef.current = t;
+    pageEnterRef.current = t;
+    lastBeatRef.current = t;
+  }, []);
+
   const setPage = useCallback((page: number) => {
+    begin();
     // bank dwell on the page we are leaving
     const now = Date.now();
     const prev = pageRef.current;
@@ -59,11 +79,12 @@ export function useTracking({
     }
     pageRef.current = page;
     maxPageRef.current = Math.max(maxPageRef.current, page);
-  }, []);
+  }, [begin]);
 
   const flush = useCallback(
     (useBeacon = false) => {
       if (preview) return;
+      begin();
       const now = Date.now();
       let delta = 0;
       if (document.visibilityState === "visible" || useBeacon) {
@@ -123,8 +144,12 @@ export function useTracking({
         }).catch(() => {});
       }
     },
-    [token, viewId, versionId, numPages, preview]
+    [token, viewId, versionId, numPages, preview, begin]
   );
+
+  // Mount-only, so a changing flush identity can never rewind the origin
+  // partway through a view.
+  useEffect(begin, [begin]);
 
   // Mouse sampling, throttled. Coordinates are relative to the rendered
   // page element ([data-track-page]) when one exists, so heatmaps can be
