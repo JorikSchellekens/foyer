@@ -51,7 +51,7 @@ import {
 import { CopyButton } from "@/components/shell/copy-button";
 import { LivePresenceProvider, LiveDot } from "@/components/links/live-presence";
 import { cn } from "@/lib/utils";
-import { formatDateTime, timeAgo } from "@/lib/format";
+import { formatDate, formatDateTime, timeAgo } from "@/lib/format";
 import {
   LinkEditor,
   type EditorLink,
@@ -122,23 +122,6 @@ function useHydrated() {
   );
 }
 
-/**
- * Expiry dates in the chip labels are pinned to UTC.
- *
- * A date-only string formatted in the runtime's own zone lands on a different
- * calendar day on a UTC server than in a browser an hour ahead, whenever the
- * timestamp sits near midnight. An expiry is a fixed instant, so naming it in
- * one zone is both stable across hydration and the honest reading.
- */
-function expiryDate(d: Date) {
-  return d.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-}
-
 export function LinksTable({
   rows,
   ctx,
@@ -206,10 +189,10 @@ function AccessChips({ link }: { link: EditorLink }) {
       expired
         ? {
             icon: CalendarX,
-            label: `Expired ${expiryDate(expiresAt)}`,
+            label: `Expired ${formatDate(expiresAt)}`,
             tone: "text-destructive",
           }
-        : { icon: CalendarClock, label: `Expires ${expiryDate(expiresAt)}` }
+        : { icon: CalendarClock, label: `Expires ${formatDate(expiresAt)}` }
     );
 
   if (chips.length === 0) return null;

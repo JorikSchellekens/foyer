@@ -27,12 +27,23 @@ export function timeAgo(date: Date | string): string {
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
+/**
+ * A calendar day, pinned to UTC.
+ *
+ * Formatted in the runtime's own zone, an instant near midnight lands on a
+ * different day on a UTC server than in a browser an hour ahead - so a client
+ * component renders one date on the server and another after hydration, and
+ * React tears the tree down. Naming the instant in one fixed zone is both
+ * stable across hydration and the honest reading of a deadline that was set
+ * as a single moment for everyone.
+ */
 export function formatDate(date: Date | string): string {
   const d = typeof date === "string" ? new Date(date) : date;
   return d.toLocaleDateString("en-GB", {
     day: "numeric",
     month: "short",
     year: "numeric",
+    timeZone: "UTC",
   });
 }
 
