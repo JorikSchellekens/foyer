@@ -36,8 +36,15 @@ type PdfDoc = {
   }>;
 };
 
+/*
+ * max-sm:size-10: at the desktop padding these are 28px boxes, which a mouse
+ * hits every time and a thumb does not. Below sm the hit area grows to 40px
+ * while the icon stays the same size, so the toolbar reads identically - the
+ * target is simply larger than the thing drawn inside it. Six of these plus
+ * the counter still fit across a 320px phone.
+ */
 const toolBtn =
-  "rounded-md p-1.5 text-white/55 outline-none transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out-soft)] hover:bg-white/10 hover:text-white focus-visible:bg-white/10 focus-visible:text-white focus-visible:ring-2 focus-visible:ring-white/40 disabled:pointer-events-none disabled:opacity-25";
+  "inline-flex items-center justify-center rounded-md p-1.5 max-sm:size-10 max-sm:p-0 text-white/55 outline-none transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out-soft)] hover:bg-white/10 hover:text-white focus-visible:bg-white/10 focus-visible:text-white focus-visible:ring-2 focus-visible:ring-white/40 disabled:pointer-events-none disabled:opacity-25";
 
 export function PdfViewer({
   fileUrl,

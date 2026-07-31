@@ -254,7 +254,8 @@ export function DocumentViewer({
             href={doc.downloadUrl}
             onClick={notifyDownload}
             aria-label="Download"
-            className="press inline-flex items-center gap-1.5 rounded-md border border-white/15 px-2.5 py-1.5 text-xs font-medium text-white/85 outline-none transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out-soft)] hover:border-white/30 hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/40 sm:px-3"
+            // Label drops below sm, so the target has to hold its own height.
+            className="press inline-flex items-center justify-center gap-1.5 rounded-md border border-white/15 px-2.5 py-1.5 text-xs font-medium text-white/85 outline-none transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out-soft)] hover:border-white/30 hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/40 max-sm:size-10 max-sm:px-0 sm:px-3"
           >
             <Download className="size-3.5" />
             <span className="max-sm:hidden">Download</span>

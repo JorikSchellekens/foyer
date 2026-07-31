@@ -29,8 +29,10 @@ function luminance(hex: string) {
 }
 
 /** Hairline action in the visitor's own colour scheme, quiet until hovered. */
+/* max-sm:min-h-10: these two sit alone above the index on a phone, where a
+   28px-tall pill is a miss waiting to happen. Width already carries the label. */
 const ghostAction =
-  "press inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium outline-none transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out-soft)] hover:bg-current/5 focus-visible:ring-2 focus-visible:ring-current/30";
+  "press inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 max-sm:min-h-10 text-xs font-medium outline-none transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out-soft)] hover:bg-current/5 focus-visible:ring-2 focus-visible:ring-current/30";
 
 /** Cap the mount cascade: a 200-file data room should not ripple for 8s. */
 const MAX_STAGGER = 12;
@@ -231,7 +233,7 @@ export async function DataroomIndex({
                   href={branding.ctaUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="press inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-white outline-none transition-opacity duration-[var(--dur-fast)] hover:opacity-85 focus-visible:ring-2 focus-visible:ring-current/40"
+                  className="press inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 max-sm:min-h-10 text-xs font-medium text-white outline-none transition-opacity duration-[var(--dur-fast)] hover:opacity-85 focus-visible:ring-2 focus-visible:ring-current/40"
                   style={{ backgroundColor: brand.brandColor }}
                 >
                   {branding.ctaLabel} <ExternalLink className="size-3" />

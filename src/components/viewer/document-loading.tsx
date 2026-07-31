@@ -23,11 +23,13 @@ export function DocumentLoading({
     >
       <div className="w-full max-w-sm reveal">
         {/*
-         * animate-pulse rather than .shimmer: the sheen in .shimmer is mixed
+         * .shimmer-on-dark, not plain .shimmer: the sheen in .shimmer is mixed
          * from --foreground, which inverts with the theme and would vanish
-         * against this permanently dark chrome.
+         * against this permanently dark chrome. A sheen travelling across the
+         * page reads calmer than pulsing the whole card, and matches how every
+         * other skeleton in the app waits.
          */}
-        <div className="mx-auto aspect-[1/1.294] w-full max-w-[280px] animate-pulse space-y-3.5 rounded-lg border border-white/10 bg-white/[0.035] p-7 shadow-[0_1px_2px_rgb(0_0_0/0.35),0_16px_40px_-16px_rgb(0_0_0/0.55)]">
+        <div className="shimmer shimmer-on-dark mx-auto aspect-[1/1.294] w-full max-w-[280px] space-y-3.5 rounded-lg border border-white/10 bg-white/[0.035] p-7 shadow-[0_1px_2px_rgb(0_0_0/0.35),0_16px_40px_-16px_rgb(0_0_0/0.55)]">
           <div className="h-4 w-2/3 rounded bg-white/15" />
           <div className="space-y-2.5 pt-3">
             <div className="h-2.5 w-full rounded bg-white/[0.08]" />
