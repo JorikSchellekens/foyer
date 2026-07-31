@@ -525,10 +525,18 @@ async function ContentsTabInner({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead className="w-28">Size</TableHead>
-                <TableHead className="w-36">Added</TableHead>
-                <TableHead className="w-16" />
+                <TableHead className="font-mono text-[10px] font-normal uppercase tracking-[0.18em] text-muted-foreground">
+                  Name
+                </TableHead>
+                <TableHead className="w-28 font-mono text-[10px] font-normal uppercase tracking-[0.18em] text-muted-foreground">
+                  Size
+                </TableHead>
+                <TableHead className="w-36 font-mono text-[10px] font-normal uppercase tracking-[0.18em] text-muted-foreground">
+                  Added
+                </TableHead>
+                <TableHead className="w-20">
+                  <span className="sr-only">Actions</span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

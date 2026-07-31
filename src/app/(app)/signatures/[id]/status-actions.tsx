@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Bell, Ban } from "lucide-react";
+import { Bell, Ban, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,24 +26,40 @@ export function StatusActions({
   status: string;
 }) {
   const [voidReason, setVoidReason] = useState("");
+  const [reminding, setReminding] = useState(false);
+  const [voiding, setVoiding] = useState(false);
   if (status !== "SENT") return null;
 
   return (
     <>
       <Button
         variant="outline"
+        disabled={reminding}
         onClick={async () => {
-          const res = await remindSigners(requestId);
-          if ("error" in res) toast.error(res.error);
-          else toast.success(`Reminded ${res.count} signer${res.count === 1 ? "" : "s"}.`);
+          setReminding(true);
+          try {
+            const res = await remindSigners(requestId);
+            if ("error" in res) toast.error(res.error);
+            else
+              toast.success(
+                `Reminded ${res.count} signer${res.count === 1 ? "" : "s"}.`
+              );
+          } finally {
+            setReminding(false);
+          }
         }}
       >
-        <Bell className="size-4" /> Remind
+        {reminding ? (
+          <Loader2 className="size-4 animate-spin" aria-hidden />
+        ) : (
+          <Bell className="size-4" aria-hidden />
+        )}
+        Remind
       </Button>
       <AlertDialog>
         <AlertDialogTrigger asChild>
           <Button variant="outline" className="text-destructive">
-            <Ban className="size-4" /> Void
+            <Ban className="size-4" aria-hidden /> Void
           </Button>
         </AlertDialogTrigger>
         <AlertDialogContent>
@@ -62,11 +78,20 @@ export function StatusActions({
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
+              disabled={voiding}
               onClick={async () => {
-                const res = await voidSignatureRequest(requestId, voidReason);
-                if ("error" in res) toast.error(res.error);
+                setVoiding(true);
+                try {
+                  const res = await voidSignatureRequest(requestId, voidReason);
+                  if ("error" in res) toast.error(res.error);
+                } finally {
+                  setVoiding(false);
+                }
               }}
             >
+              {voiding && (
+                <Loader2 className="size-4 animate-spin" aria-hidden />
+              )}
               Void request
             </AlertDialogAction>
           </AlertDialogFooter>

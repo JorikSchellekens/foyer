@@ -74,8 +74,10 @@ export default async function SignatureRequestPage({
               <ChevronRight className="size-3" />
               <span>{request.title}</span>
             </div>
-            <div className="mt-1 flex items-center gap-3">
-              <h1 className="font-display text-2xl">{request.title}</h1>
+            <div className="mt-1 flex flex-wrap items-center gap-3">
+              <h1 className="font-display text-3xl tracking-tight">
+                {request.title}
+              </h1>
               <StatusBadge status={request.status} />
             </div>
             <p className="mt-1.5 flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -102,12 +104,27 @@ export default async function SignatureRequestPage({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 px-4 py-6 sm:px-8 lg:grid-cols-2">
+      <div className="reveal grid grid-cols-1 items-start gap-6 px-4 py-6 sm:px-8 lg:grid-cols-2">
         <section className="rounded-lg border bg-card p-5">
-          <h2 className="mb-4 font-display text-xl">Recipients</h2>
+          <div className="mb-4 flex items-baseline justify-between gap-3">
+            <h2 className="font-display text-xl">Recipients</h2>
+            {signers.length > 0 && (
+              <span className="font-mono text-xs tabular text-muted-foreground">
+                {signers.filter((s) => s.status === "SIGNED").length}/
+                {signers.length} signed
+              </span>
+            )}
+          </div>
           <div className="space-y-3">
-            {signers.map((s) => (
+            {signers.map((s, i) => (
               <div key={s.id} className="flex items-center gap-3">
+                {/* Serial routing has an order, so show it: the reader needs to
+                    know who the envelope is waiting on. */}
+                {request.sequential && (
+                  <span className="w-3 shrink-0 font-mono text-[11px] tabular text-muted-foreground">
+                    {i + 1}
+                  </span>
+                )}
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm">{s.name ?? s.email}</p>
                   <p className="truncate text-xs text-muted-foreground">
@@ -138,7 +155,7 @@ export default async function SignatureRequestPage({
               ))}
           </div>
           {request.voidReason && (
-            <p className="mt-4 text-sm text-muted-foreground">
+            <p className="mt-4 border-t pt-4 text-sm text-muted-foreground">
               Voided: {request.voidReason}
             </p>
           )}
@@ -146,21 +163,39 @@ export default async function SignatureRequestPage({
 
         <section className="rounded-lg border bg-card p-5">
           <h2 className="mb-4 font-display text-xl">Activity</h2>
-          <div className="space-y-2">
-            {request.events.map((e) => (
-              <div key={e.id} className="flex items-baseline gap-3 text-sm">
-                <span className="w-36 shrink-0 font-mono text-xs text-muted-foreground">
-                  {formatDateTime(e.createdAt)}
-                </span>
-                <span className="capitalize">{e.type}</span>
-                <span className="truncate text-muted-foreground">
-                  {e.signerId ? signerById.get(e.signerId)?.email : ""}
-                </span>
-              </div>
-            ))}
-          </div>
+          {request.events.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Nothing has happened on this request yet.
+            </p>
+          ) : (
+            <ol className="space-y-2">
+              {request.events.map((e) => {
+                const who = e.signerId
+                  ? signerById.get(e.signerId)?.email
+                  : null;
+                return (
+                  <li key={e.id} className="flex items-baseline gap-3 text-sm">
+                    <span className="w-36 shrink-0 font-mono text-xs tabular text-muted-foreground">
+                      {formatDateTime(e.createdAt)}
+                    </span>
+                    <span className="shrink-0 capitalize">
+                      {e.type.toLowerCase().replace(/_/g, " ")}
+                    </span>
+                    {who && (
+                      <>
+                        <span className="leader-dots" aria-hidden />
+                        <span className="truncate text-muted-foreground">
+                          {who}
+                        </span>
+                      </>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+          )}
           {request.finalHash && (
-            <p className="mt-4 break-all font-mono text-xs text-muted-foreground">
+            <p className="mt-4 break-all border-t pt-4 font-mono text-xs text-muted-foreground">
               SHA-256 {request.finalHash}
             </p>
           )}

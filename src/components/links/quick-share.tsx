@@ -60,7 +60,8 @@ export function ShareButton({
   return (
     <button
       type="button"
-      title="Copy link"
+      title={done ? "Copied" : "Copy link"}
+      aria-label={done ? "Link copied" : "Copy link"}
       onClick={async (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -75,14 +76,14 @@ export function ShareButton({
         }
       }}
       className={cn(
-        "inline-flex items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+        "press focus-ring inline-flex items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors duration-[var(--dur-fast)] hover:bg-accent hover:text-foreground",
         className
       )}
     >
       {busy ? (
         <Loader2 className="size-4 animate-spin" />
       ) : done ? (
-        <Check className="size-4 text-primary" />
+        <Check className="tick-in size-4 text-primary" strokeWidth={2.5} />
       ) : (
         <Link2 className="size-4" />
       )}

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { MailPlus, X } from "lucide-react";
+import { Loader2, MailPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -50,9 +50,43 @@ export function InviteRecipientsDialog({
   const [sending, setSending] = useState(false);
   const router = useRouter();
 
+  const parsed = emails
+    .split(/[\n,;]+/)
+    .map((e) => e.trim())
+    .filter(Boolean);
+  const invalid = parsed.filter((e) => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e));
+  const canSend = parsed.length > 0 && invalid.length === 0;
+
+  async function send() {
+    setSending(true);
+    try {
+      const res = await inviteRecipients(
+        linkId,
+        emails.split(/[\n,;]+/),
+        expiry === "never" ? null : Number(expiry)
+      );
+      if ("error" in res && res.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(`Sent ${res.sent} invitation${res.sent === 1 ? "" : "s"}`);
+      setEmails("");
+      router.refresh();
+    } finally {
+      setSending(false);
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent
+        className="sm:max-w-md"
+        // Typed addresses are worth protecting from a stray click on the
+        // backdrop. Escape still closes.
+        onInteractOutside={(e) => {
+          if (emails.trim()) e.preventDefault();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Invite by email</DialogTitle>
           <DialogDescription>
@@ -69,16 +103,39 @@ export function InviteRecipientsDialog({
               rows={3}
               value={emails}
               onChange={(e) => setEmails(e.target.value)}
+              onKeyDown={(e) => {
+                // A textarea needs its Enter key, so send on the modifier.
+                if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && canSend) {
+                  e.preventDefault();
+                  void send();
+                }
+              }}
               placeholder={"jane@fund.com\nmark@partners.vc"}
+              autoFocus
+              spellCheck={false}
+              aria-invalid={invalid.length > 0}
+              aria-describedby="invite-emails-note"
             />
-            <p className="text-xs text-muted-foreground">
-              One per line, or separated by commas.
+            <p
+              id="invite-emails-note"
+              role={invalid.length > 0 ? "alert" : undefined}
+              className={
+                invalid.length > 0
+                  ? "text-xs text-destructive"
+                  : "text-xs text-muted-foreground"
+              }
+            >
+              {invalid.length > 0
+                ? `Check ${invalid.slice(0, 2).join(", ")}${invalid.length > 2 ? " and others" : ""}: that does not look like an email address.`
+                : parsed.length > 0
+                  ? `${parsed.length} recipient${parsed.length === 1 ? "" : "s"}. One per line, or separated by commas.`
+                  : "One per line, or separated by commas."}
             </p>
           </div>
           <div className="space-y-2">
-            <Label>Personal link expires</Label>
+            <Label htmlFor="invite-expiry">Personal link expires</Label>
             <Select value={expiry} onValueChange={setExpiry}>
-              <SelectTrigger>
+              <SelectTrigger id="invite-expiry">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -93,23 +150,25 @@ export function InviteRecipientsDialog({
 
           {recipients.length > 0 && (
             <div className="space-y-1">
-              <Label>Already invited</Label>
-              <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border p-2">
+              <p className="text-sm leading-none font-medium">
+                Already invited
+              </p>
+              <ul className="max-h-40 divide-y overflow-y-auto rounded-md border">
                 {recipients.map((r) => (
-                  <div
+                  <li
                     key={r.id}
-                    className="flex items-center gap-2 rounded px-1.5 py-1 text-sm hover:bg-muted/60"
+                    className="flex items-center gap-2 px-2 py-1.5 text-sm transition-colors duration-[var(--dur-fast)] hover:bg-muted/60"
                   >
-                    <span className="flex-1 truncate">{r.email}</span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="min-w-0 flex-1 truncate">{r.email}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">
                       {r.expiresAt
                         ? `expires ${formatDate(r.expiresAt)}`
                         : "no expiry"}
                     </span>
                     <button
                       type="button"
-                      title="Revoke access"
-                      className="rounded p-0.5 text-muted-foreground hover:text-destructive"
+                      aria-label={`Revoke access for ${r.email}`}
+                      className="focus-ring rounded p-0.5 text-muted-foreground transition-colors hover:text-destructive"
                       onClick={async () => {
                         await revokeRecipient(r.id);
                         toast.success(`Revoked ${r.email}`);
@@ -118,41 +177,32 @@ export function InviteRecipientsDialog({
                     >
                       <X className="size-3.5" />
                     </button>
-                  </div>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </div>
           )}
         </div>
 
         <DialogFooter>
           <Button
-            disabled={sending || !emails.trim()}
-            onClick={async () => {
-              setSending(true);
-              try {
-                const list = emails.split(/[\n,;]+/);
-                const res = await inviteRecipients(
-                  linkId,
-                  list,
-                  expiry === "never" ? null : Number(expiry)
-                );
-                if ("error" in res && res.error) {
-                  toast.error(res.error);
-                  return;
-                }
-                toast.success(
-                  `Sent ${res.sent} invitation${res.sent === 1 ? "" : "s"}`
-                );
-                setEmails("");
-                router.refresh();
-              } finally {
-                setSending(false);
-              }
-            }}
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={sending}
           >
-            <MailPlus className="size-4" />
-            {sending ? "Sending…" : "Send invitations"}
+            Close
+          </Button>
+          <Button disabled={sending || !canSend} onClick={send}>
+            {sending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <MailPlus className="size-4" />
+            )}
+            {sending
+              ? "Sending…"
+              : parsed.length > 1
+                ? `Send ${parsed.length} invitations`
+                : "Send invitation"}
           </Button>
         </DialogFooter>
       </DialogContent>

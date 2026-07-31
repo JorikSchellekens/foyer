@@ -109,7 +109,7 @@ export default async function VisitorPage({
       </div>
 
       <div className="space-y-8 px-4 sm:px-8 py-6">
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="reveal grid grid-cols-2 gap-4 lg:grid-cols-4">
           <Stat label="Visits" value={viewer.views.length} />
           <Stat label="Documents opened" value={docRows.length} />
           <Stat label="Total time" value={formatDuration(totalTime)} />
@@ -121,15 +121,25 @@ export default async function VisitorPage({
           />
         </div>
 
+        {viewer.views.length === 0 && (
+          <div className="rounded-lg border border-dashed px-6 py-12 text-center">
+            <p className="font-display text-lg">No visits recorded yet</p>
+            <p className="mx-auto mt-1.5 max-w-sm text-sm text-muted-foreground">
+              This visitor is known to your team, but has not opened a link yet.
+            </p>
+          </div>
+        )}
+
+        {viewer.views.length > 0 && (
         <section>
           <h2 className="mb-3 font-display text-xl">Reading history</h2>
-          <div className="rounded-lg border bg-card">
+          <div className="overflow-hidden rounded-lg border bg-card">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Document name</TableHead>
                   <TableHead className="w-36">Last viewed</TableHead>
-                  <TableHead className="w-32">Time spent</TableHead>
+                  <TableHead className="w-32 text-right">Time spent</TableHead>
                   <TableHead className="w-24 text-right">Visits</TableHead>
                 </TableRow>
               </TableHeader>
@@ -142,7 +152,7 @@ export default async function VisitorPage({
                         {d.documentId ? (
                           <Link
                             href={`/documents/${d.documentId}`}
-                            className="font-medium hover:underline"
+                            className="underline-grow font-medium"
                           >
                             {d.name}
                           </Link>
@@ -154,10 +164,10 @@ export default async function VisitorPage({
                     <TableCell className="text-xs text-muted-foreground">
                       {timeAgo(d.lastViewed)}
                     </TableCell>
-                    <TableCell className="font-mono text-sm tabular">
+                    <TableCell className="text-right font-mono text-sm tabular">
                       {formatDuration(d.timeSpent)}
                     </TableCell>
-                    <TableCell className="text-right tabular">
+                    <TableCell className="text-right font-mono text-sm tabular">
                       {d.visits}
                     </TableCell>
                   </TableRow>
@@ -166,15 +176,18 @@ export default async function VisitorPage({
             </Table>
           </div>
         </section>
+        )}
 
+        {viewer.views.length > 0 && (
         <section>
           <h2 className="mb-3 font-display text-xl">Individual visits</h2>
           <div className="space-y-1.5">
-            {viewer.views.map((v) => (
+            {viewer.views.map((v, i) => (
               <Link
                 key={v.id}
                 href={`/views/${v.id}`}
-                className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3 transition-colors hover:border-primary/40"
+                style={{ "--i": Math.min(i, 12) } as React.CSSProperties}
+                className="stagger-item hover-raise press flex items-center gap-3 rounded-lg border bg-card px-4 py-3 hover:border-primary/40"
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">
@@ -193,7 +206,8 @@ export default async function VisitorPage({
                     className="flex items-center gap-1 text-xs text-primary"
                     title="Attention map available"
                   >
-                    <MousePointer2 className="size-3.5" /> attention map
+                    <MousePointer2 className="size-3.5" aria-hidden /> attention
+                    map
                   </span>
                 )}
                 <span className="font-mono text-sm tabular text-muted-foreground">
@@ -203,6 +217,7 @@ export default async function VisitorPage({
             ))}
           </div>
         </section>
+        )}
       </div>
     </div>
   );

@@ -51,13 +51,19 @@ export type PlacedField = z.infer<typeof placedFieldSchema>;
 
 // Distinct tints so each recipient's fields are tellable apart in the editor.
 // Index by the signer's position in the recipients list.
+/*
+ * Signers have to be told apart at a glance on a dense page, so this is the one
+ * place the palette runs to more than a single accent. It stays inside the
+ * paper-and-ink family: library green first, then muted archival tones. No
+ * saturated primaries, no purple.
+ */
 export const SIGNER_COLORS = [
   { border: "#175B47", bg: "rgba(23,91,71,0.12)" },
-  { border: "#1D4ED8", bg: "rgba(29,78,216,0.10)" },
+  { border: "#1F3A5F", bg: "rgba(31,58,95,0.10)" },
   { border: "#93321F", bg: "rgba(147,50,31,0.10)" },
-  { border: "#7C3AED", bg: "rgba(124,58,237,0.10)" },
-  { border: "#B45309", bg: "rgba(180,83,9,0.10)" },
-  { border: "#0E7490", bg: "rgba(14,116,144,0.10)" },
+  { border: "#5A5433", bg: "rgba(90,84,51,0.12)" },
+  { border: "#2F6E6A", bg: "rgba(47,110,106,0.10)" },
+  { border: "#6B4A2F", bg: "rgba(107,74,47,0.10)" },
 ];
 
 export function signerColor(index: number) {

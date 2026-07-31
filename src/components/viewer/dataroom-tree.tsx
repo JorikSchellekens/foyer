@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import Link from "next/link";
 import { ChevronRight, FileText, Folder } from "lucide-react";
 
@@ -33,6 +33,7 @@ export function DataroomTree({
   palette: TreePalette;
 }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const uid = useId();
 
   const toggle = (id: string) => {
     setCollapsed((prev) => {
@@ -43,27 +44,27 @@ export function DataroomTree({
     });
   };
 
+  const rowClass =
+    "flex w-full items-center gap-1.5 rounded-md py-1.5 pr-2 text-left text-[13px] outline-none transition-[background-color,color] duration-[var(--dur-fast)] ease-[var(--ease-out-soft)] hover:bg-[var(--row-hover)] focus-visible:bg-[var(--row-hover)] focus-visible:ring-2 focus-visible:ring-[var(--row-ring)]";
+
   const render = (items: ViewerTreeNode[], depth: number) =>
     items.map((node) => {
       const pad = 8 + depth * 14;
       if (node.kind === "folder") {
         const isOpen = !collapsed.has(node.id);
+        const panelId = `${uid}-${node.id}`;
         return (
           <li key={`f-${node.id}`}>
             <button
               type="button"
               onClick={() => toggle(node.id)}
-              className="flex w-full items-center gap-1.5 rounded-md py-1.5 pr-2 text-left text-[13px] transition-colors"
+              aria-expanded={isOpen}
+              aria-controls={panelId}
+              className={rowClass}
               style={{ paddingLeft: pad, color: palette.text }}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.backgroundColor = palette.hoverBg)
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.backgroundColor = "transparent")
-              }
             >
               <ChevronRight
-                className="size-3.5 shrink-0 transition-transform"
+                className="size-3.5 shrink-0 transition-transform duration-[var(--dur)] ease-[var(--ease-out-quint)]"
                 style={{
                   color: palette.subtle,
                   transform: isOpen ? "rotate(90deg)" : undefined,
@@ -76,7 +77,25 @@ export function DataroomTree({
               />
               <span className="min-w-0 truncate font-medium">{node.name}</span>
             </button>
-            {isOpen && <ul>{render(node.children, depth + 1)}</ul>}
+            {/*
+             * grid-template-rows 1fr -> 0fr animates the children's own height
+             * without measuring it, so a folder unfolds instead of snapping.
+             * Kept mounted (inert when closed) so the transition has something
+             * to animate and collapsed rows stay out of the tab order.
+             */}
+            <div
+              id={panelId}
+              inert={!isOpen}
+              className="grid transition-[grid-template-rows,opacity] duration-[var(--dur)] ease-[var(--ease-out-quint)]"
+              style={{
+                gridTemplateRows: isOpen ? "1fr" : "0fr",
+                opacity: isOpen ? 1 : 0,
+              }}
+            >
+              <ul className="min-h-0 overflow-hidden">
+                {render(node.children, depth + 1)}
+              </ul>
+            </div>
           </li>
         );
       }
@@ -86,22 +105,23 @@ export function DataroomTree({
           <Link
             href={node.href}
             prefetch={false}
-            className="flex items-center gap-1.5 rounded-md py-1.5 pr-2 text-[13px] transition-colors"
+            className={`${rowClass} relative`}
             style={{
               paddingLeft: pad + 18,
               color: active ? palette.accent : palette.text,
               backgroundColor: active ? palette.activeBg : undefined,
-            }}
-            onMouseEnter={(e) => {
-              if (!active)
-                e.currentTarget.style.backgroundColor = palette.hoverBg;
-            }}
-            onMouseLeave={(e) => {
-              if (!active)
-                e.currentTarget.style.backgroundColor = "transparent";
+              fontWeight: active ? 500 : undefined,
             }}
             aria-current={active ? "page" : undefined}
           >
+            {/* The file being read gets a spine on the leading edge. */}
+            {active && (
+              <span
+                aria-hidden
+                className="absolute inset-y-1 left-0 w-[2px] rounded-full"
+                style={{ backgroundColor: palette.accent }}
+              />
+            )}
             <FileText
               className="size-3.5 shrink-0"
               strokeWidth={1.5}
@@ -113,5 +133,17 @@ export function DataroomTree({
       );
     });
 
-  return <ul className="space-y-px">{render(nodes, 0)}</ul>;
+  return (
+    <ul
+      className="space-y-px"
+      style={
+        {
+          "--row-hover": palette.hoverBg,
+          "--row-ring": `color-mix(in oklab, ${palette.accent} 45%, transparent)`,
+        } as React.CSSProperties
+      }
+    >
+      {render(nodes, 0)}
+    </ul>
+  );
 }

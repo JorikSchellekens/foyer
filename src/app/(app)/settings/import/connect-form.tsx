@@ -8,10 +8,12 @@ import {
   ChevronDown,
   ExternalLink,
   KeyRound,
+  Loader2,
   ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Collapsible,
   CollapsibleContent,
@@ -61,25 +63,41 @@ export function ConnectForm() {
 
   return (
     <div className="max-w-2xl space-y-6">
-      <section className="rounded-lg border bg-card p-5">
-        <h2 className="flex items-center gap-1.5 text-sm font-medium">
+      <section className="rounded-lg border bg-card p-5 shadow-[var(--shadow-hairline)]">
+        <Label
+          htmlFor="pm-api-token"
+          className="flex items-center gap-1.5 text-sm font-medium"
+        >
           <KeyRound className="size-4" /> Papermark API token
-        </h2>
-        <p className="mt-1 text-xs text-muted-foreground">
+        </Label>
+        <p id="pm-api-token-hint" className="mt-1 text-xs text-muted-foreground">
           In Papermark, go to Settings &rarr; API Tokens and create a token with
           read access. It is used to read your documents, datarooms, links and
           their settings.
         </p>
         <Input
+          id="pm-api-token"
           className="mt-3 font-mono text-sm"
           placeholder="pm_live_..."
           value={apiToken}
           autoComplete="off"
           spellCheck={false}
+          aria-invalid={error?.field === "apiToken"}
+          aria-describedby={
+            error?.field === "apiToken"
+              ? "pm-api-token-error"
+              : "pm-api-token-hint"
+          }
           onChange={(e) => setApiToken(e.target.value)}
         />
         {error?.field === "apiToken" && (
-          <p className="mt-2 text-xs text-destructive">{error.message}</p>
+          <p
+            id="pm-api-token-error"
+            role="alert"
+            className="mt-2 text-xs text-destructive"
+          >
+            {error.message}
+          </p>
         )}
         <a
           href="https://www.papermark.com/docs/api/getting-started"
@@ -91,12 +109,15 @@ export function ConnectForm() {
         </a>
       </section>
 
-      <section className="rounded-lg border bg-card p-5">
-        <h2 className="flex items-center gap-1.5 text-sm font-medium">
+      <section className="rounded-lg border bg-card p-5 shadow-[var(--shadow-hairline)]">
+        <Label
+          htmlFor="pm-cookie"
+          className="flex items-center gap-1.5 text-sm font-medium"
+        >
           <ShieldCheck className="size-4" /> Session cookie
           <span className="font-normal text-muted-foreground">- optional</span>
-        </h2>
-        <p className="mt-1 text-xs text-muted-foreground">
+        </Label>
+        <p id="pm-cookie-hint" className="mt-1 text-xs text-muted-foreground">
           Papermark&rsquo;s API deliberately serves no file contents, only
           metadata. With a session cookie Foyer can pull the original files
           across for you automatically. Without one, everything else still
@@ -104,23 +125,37 @@ export function ConnectForm() {
         </p>
 
         <Input
+          id="pm-cookie"
           className="mt-3 font-mono text-sm"
           placeholder="__Secure-next-auth.session-token=..."
           value={cookie}
           autoComplete="off"
           spellCheck={false}
+          aria-invalid={error?.field === "sessionCookie"}
+          aria-describedby={
+            error?.field === "sessionCookie"
+              ? "pm-cookie-error"
+              : "pm-cookie-hint"
+          }
           onChange={(e) => setCookie(e.target.value)}
         />
         {error?.field === "sessionCookie" && (
-          <p className="mt-2 text-xs text-destructive">{error.message}</p>
+          <p
+            id="pm-cookie-error"
+            role="alert"
+            className="mt-2 text-xs text-destructive"
+          >
+            {error.message}
+          </p>
         )}
 
         <Collapsible className="mt-3">
-          <CollapsibleTrigger className="group flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-            <ChevronDown className="size-3 transition-transform group-data-[state=open]:rotate-180" />
+          <CollapsibleTrigger className="group focus-ring flex items-center gap-1 rounded-md text-xs text-muted-foreground transition-colors hover:text-foreground">
+            <ChevronDown className="size-3 transition-transform duration-[var(--dur)] ease-[var(--ease-out-quint)] group-data-open:rotate-180" />
             How do I find this?
           </CollapsibleTrigger>
-          <CollapsibleContent className="mt-2 rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
+          <CollapsibleContent className="overflow-hidden duration-[var(--dur)] ease-[var(--ease-out-quint)] data-closed:animate-collapsible-up data-open:animate-collapsible-down">
+            <div className="mt-2 rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
             <ol className="list-decimal space-y-1 pl-4">
               <li>Open Papermark in your browser and sign in.</li>
               <li>
@@ -141,6 +176,7 @@ export function ConnectForm() {
               account, so treat it like a password and sign out of Papermark
               afterwards to invalidate it.
             </p>
+            </div>
           </CollapsibleContent>
         </Collapsible>
       </section>
@@ -153,8 +189,9 @@ export function ConnectForm() {
 
       <div className="flex items-center gap-3">
         <Button onClick={submit} disabled={busy || !apiToken.trim()}>
-          {busy ? "Checking..." : "Connect"}
-          <ArrowRight className="size-4" />
+          {busy && <Loader2 className="size-4 animate-spin" />}
+          {busy ? "Checking…" : "Connect"}
+          {!busy && <ArrowRight className="size-4" />}
         </Button>
         <p className="text-xs text-muted-foreground">
           Nothing is imported yet. You will see exactly what will happen before

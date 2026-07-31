@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
 import { paintHeat } from "./mouse-heatmap";
+import { Skeleton } from "@/components/ui/skeleton";
 
 /**
  * Attention overlay on continuous documents (Word, plain text): the file is
@@ -21,6 +21,7 @@ export function ContentHeatmap({
   const [html, setHtml] = useState<string | null>(null);
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState(false);
+  const [painted, setPainted] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
 
@@ -65,6 +66,7 @@ export function ContentHeatmap({
       ctx.scale(dpr, dpr);
       ctx.clearRect(0, 0, w, h);
       paintHeat(ctx, w, h, samples);
+      setPainted(true);
     };
     paint();
     const obs = new ResizeObserver(paint);
@@ -79,16 +81,23 @@ export function ContentHeatmap({
       </p>
     );
   if (!ready)
+    // Document-shaped skeleton at the real column width: the conversion runs in
+    // the browser, so this is on screen for a beat on larger files.
     return (
-      <div className="flex items-center gap-2 py-12 text-sm text-muted-foreground">
-        <Loader2 className="size-4 animate-spin" /> Rendering document…
+      <div
+        aria-busy
+        className="max-w-2xl space-y-3 rounded-md border bg-card p-8"
+      >
+        {[92, 100, 78, 96, 64, 100, 86].map((w, i) => (
+          <Skeleton key={i} className="h-3" style={{ width: `${w}%` }} />
+        ))}
       </div>
     );
 
   return (
     <div
       ref={wrapRef}
-      className="relative max-w-2xl overflow-hidden rounded-md border bg-white shadow-sm"
+      className="reveal relative max-w-2xl overflow-hidden rounded-md border bg-white shadow-[var(--shadow-hairline)]"
     >
       {html !== null ? (
         <article
@@ -102,7 +111,8 @@ export function ContentHeatmap({
       )}
       <canvas
         ref={overlayRef}
-        className="pointer-events-none absolute inset-0 h-full w-full"
+        data-painted={painted}
+        className="pointer-events-none absolute inset-0 h-full w-full opacity-0 transition-opacity duration-[var(--dur-reveal)] ease-[var(--ease-out-soft)] data-[painted=true]:opacity-100"
       />
       <style jsx global>{`
         .content-heat-doc {

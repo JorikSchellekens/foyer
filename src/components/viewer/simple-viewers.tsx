@@ -1,19 +1,34 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { FileWarning } from "lucide-react";
 import { DocumentLoading } from "./document-loading";
 
+/** Paper on a dark desk. The elevation tokens are tuned for light surfaces,
+ * so the viewer's own chrome needs a shadow with enough weight to read. */
+const sheetShadow =
+  "shadow-[0_1px_2px_rgb(0_0_0/0.45),0_18px_44px_-14px_rgb(0_0_0/0.6)]";
+
 export function ImageViewer({ fileUrl, name }: { fileUrl: string; name: string }) {
+  const [loaded, setLoaded] = useState(false);
   return (
-    <div className="flex min-h-full items-center justify-center p-6">
+    <div className="relative flex min-h-full items-center justify-center p-4 sm:p-6">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         data-track-page
         src={fileUrl}
         alt={name}
-        className="max-h-[85vh] max-w-full rounded shadow-2xl"
+        onLoad={() => setLoaded(true)}
+        className={`max-h-[85vh] max-w-full rounded transition-opacity duration-[var(--dur-slow)] ease-[var(--ease-out-soft)] ${sheetShadow} ${
+          loaded ? "opacity-100" : "opacity-0"
+        }`}
         draggable={false}
       />
+      {!loaded && (
+        <div className="absolute inset-0">
+          <DocumentLoading label="Loading image…" />
+        </div>
+      )}
     </div>
   );
 }
@@ -26,12 +41,13 @@ export function VideoViewer({
   allowDownload: boolean;
 }) {
   return (
-    <div className="flex min-h-full items-center justify-center p-6">
+    <div className="flex min-h-full items-center justify-center p-4 sm:p-6">
       <video
         src={fileUrl}
         controls
         controlsList={allowDownload ? undefined : "nodownload"}
-        className="max-h-[85vh] max-w-full rounded shadow-2xl"
+        playsInline
+        className={`max-h-[85vh] max-w-full rounded bg-black ${sheetShadow}`}
       />
     </div>
   );
@@ -39,8 +55,8 @@ export function VideoViewer({
 
 export function AudioViewer({ fileUrl, name }: { fileUrl: string; name: string }) {
   return (
-    <div className="flex min-h-full items-center justify-center p-6">
-      <div className="w-full max-w-lg rounded-xl bg-white/5 p-8 text-center">
+    <div className="flex min-h-full items-center justify-center p-4 sm:p-6">
+      <div className="reveal-up w-full max-w-lg rounded-xl border border-white/10 bg-white/[0.04] p-8 text-center">
         <p className="mb-6 font-display text-2xl italic text-white/90">{name}</p>
         <audio src={fileUrl} controls className="w-full" />
       </div>
@@ -60,10 +76,13 @@ export function TextViewer({ fileUrl }: { fileUrl: string }) {
 
   if (error)
     return <Message text="This document could not be displayed." />;
-  if (content === null) return <Spinner />;
+  if (content === null) return <DocumentLoading label="Loading text…" />;
   return (
-    <div className="mx-auto max-w-3xl px-6 py-10">
-      <pre data-track-page className="whitespace-pre-wrap rounded-lg bg-white p-8 font-mono text-[13px] leading-relaxed text-neutral-900 shadow-2xl">
+    <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-10">
+      <pre
+        data-track-page
+        className={`reveal overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-white p-6 font-mono text-[13px] leading-relaxed text-neutral-900 sm:p-8 ${sheetShadow}`}
+      >
         {content}
       </pre>
     </div>
@@ -92,12 +111,12 @@ export function DocxViewer({ fileUrl }: { fileUrl: string }) {
   }, [fileUrl]);
 
   if (error) return <Message text="This document could not be converted for preview. Try downloading it instead." />;
-  if (html === null) return <Spinner />;
+  if (html === null) return <DocumentLoading label="Converting document…" />;
   return (
-    <div className="mx-auto max-w-3xl px-6 py-10">
+    <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-10">
       <article
         data-track-page
-        className="prose-docx rounded-lg bg-white p-10 text-neutral-900 shadow-2xl"
+        className={`prose-docx reveal rounded-lg bg-white p-6 text-neutral-900 sm:p-10 ${sheetShadow}`}
         dangerouslySetInnerHTML={{ __html: html }}
       />
       <style jsx global>{`
@@ -154,23 +173,29 @@ export function SheetViewer({ fileUrl }: { fileUrl: string }) {
   }, [fileUrl]);
 
   if (error) return <Message text="This spreadsheet could not be displayed." />;
-  if (sheets === null) return <Spinner />;
+  if (sheets === null) return <DocumentLoading label="Reading spreadsheet…" />;
 
   const sheet = sheets[active];
   const colCount = Math.max(...sheet.rows.map((r) => r.length), 1);
 
   return (
-    <div className="flex h-full flex-col px-6 py-6">
+    <div className="flex h-full flex-col px-4 py-4 sm:px-6 sm:py-6">
       {sheets.length > 1 && (
-        <div className="mb-3 flex gap-1 overflow-x-auto">
+        <div
+          role="tablist"
+          aria-label="Sheets"
+          className="mb-3 flex gap-1 overflow-x-auto pb-0.5"
+        >
           {sheets.map((s, i) => (
             <button
               key={s.name}
+              role="tab"
+              aria-selected={i === active}
               onClick={() => setActive(i)}
-              className={`whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium outline-none transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out-soft)] focus-visible:ring-2 focus-visible:ring-white/50 ${
                 i === active
                   ? "bg-white text-neutral-900"
-                  : "bg-white/10 text-white/70 hover:bg-white/20"
+                  : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
               }`}
             >
               {s.name}
@@ -178,12 +203,24 @@ export function SheetViewer({ fileUrl }: { fileUrl: string }) {
           ))}
         </div>
       )}
-      <div data-track-page className="flex-1 overflow-auto rounded-lg bg-white shadow-2xl">
+      <div
+        data-track-page
+        className={`reveal flex-1 overflow-auto overscroll-contain rounded-lg bg-white ${sheetShadow}`}
+      >
         <table className="min-w-full border-collapse font-mono text-xs text-neutral-900">
           <tbody>
             {sheet.rows.map((row, ri) => (
-              <tr key={ri} className={ri === 0 ? "bg-neutral-100 font-semibold" : ri % 2 ? "bg-neutral-50/60" : ""}>
-                <td className="sticky left-0 border border-neutral-200 bg-neutral-100 px-2 py-1 text-right text-[10px] text-neutral-400">
+              <tr
+                key={ri}
+                className={
+                  ri === 0
+                    ? "bg-neutral-100 font-semibold"
+                    : ri % 2
+                      ? "bg-neutral-50/60"
+                      : ""
+                }
+              >
+                <td className="sticky left-0 border border-neutral-200 bg-neutral-100 px-2 py-1 text-right text-[10px] tabular text-neutral-400">
                   {ri + 1}
                 </td>
                 {Array.from({ length: colCount }).map((_, ci) => (
@@ -203,10 +240,16 @@ export function SheetViewer({ fileUrl }: { fileUrl: string }) {
   );
 }
 
-function Spinner() {
-  return <DocumentLoading />;
-}
-
 function Message({ text }: { text: string }) {
-  return <p className="py-24 text-center text-sm text-white/60">{text}</p>;
+  return (
+    <div className="flex size-full min-h-72 items-center justify-center p-8">
+      <div className="reveal max-w-xs text-center">
+        <FileWarning
+          className="mx-auto size-7 text-white/25"
+          strokeWidth={1.25}
+        />
+        <p className="mt-3 text-sm leading-relaxed text-white/55">{text}</p>
+      </div>
+    </div>
+  );
 }

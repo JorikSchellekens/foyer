@@ -38,7 +38,23 @@ const Toaster = ({ ...props }: ToasterProps) => {
       }
       toastOptions={{
         classNames: {
-          toast: "cn-toast",
+          // Sonner ships its own font stack and drop shadow on the toast
+          // element, so those two need to be forced back onto the palette.
+          toast:
+            "group/toast font-sans! shadow-[var(--shadow-overlay)]! ring-1 ring-foreground/10",
+          title: "text-sm font-medium",
+          description: "text-muted-foreground!",
+          actionButton:
+            "rounded-md! bg-primary! text-primary-foreground! transition-colors duration-[var(--dur-fast)]",
+          cancelButton:
+            "rounded-md! bg-muted! text-muted-foreground! transition-colors duration-[var(--dur-fast)] hover:text-foreground!",
+          closeButton:
+            "border-border! bg-popover! text-muted-foreground! transition-colors duration-[var(--dur-fast)] hover:text-foreground!",
+          success: "[&_[data-icon]]:text-primary",
+          error: "[&_[data-icon]]:text-destructive",
+          warning: "[&_[data-icon]]:text-[var(--chart-4)]",
+          info: "[&_[data-icon]]:text-muted-foreground",
+          loading: "[&_[data-icon]]:text-muted-foreground",
         },
       }}
       {...props}

@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { History, Loader2, RotateCcw, Upload } from "lucide-react";
+import { Loader2, RotateCcw, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { uploadNewVersion, restoreVersion } from "../actions";
 
@@ -18,6 +18,8 @@ export function VersionUploadButton({ documentId }: { documentId: string }) {
         ref={input}
         type="file"
         hidden
+        aria-hidden
+        tabIndex={-1}
         onChange={async (e) => {
           const file = e.target.files?.[0];
           if (!file) return;
@@ -63,13 +65,17 @@ export function VersionUploadButton({ documentId }: { documentId: string }) {
           }
         }}
       />
-      <Button onClick={() => input.current?.click()} disabled={busy}>
+      <Button
+        onClick={() => input.current?.click()}
+        disabled={busy}
+        aria-busy={busy}
+      >
         {busy ? (
-          <Loader2 className="size-4 animate-spin" />
+          <Loader2 className="size-4 animate-spin" aria-hidden />
         ) : (
-          <Upload className="size-4" />
+          <Upload className="size-4" aria-hidden />
         )}
-        New version
+        {busy ? "Uploading" : "New version"}
       </Button>
     </>
   );
@@ -83,22 +89,34 @@ export function RestoreVersionButton({
   versionId: string;
 }) {
   const router = useRouter();
+  const [busy, setBusy] = useState(false);
   return (
     <Button
       variant="ghost"
       size="sm"
       className="h-7 text-xs"
+      disabled={busy}
       onClick={async () => {
-        const res = await restoreVersion(documentId, versionId);
-        if (res && "error" in res && res.error) {
-          toast.error(res.error);
-          return;
+        setBusy(true);
+        try {
+          const res = await restoreVersion(documentId, versionId);
+          if (res && "error" in res && res.error) {
+            toast.error(res.error);
+            return;
+          }
+          toast.success("Version restored");
+          router.refresh();
+        } finally {
+          setBusy(false);
         }
-        toast.success("Version restored");
-        router.refresh();
       }}
     >
-      <RotateCcw className="size-3" /> Make current
+      {busy ? (
+        <Loader2 className="size-3 animate-spin" aria-hidden />
+      ) : (
+        <RotateCcw className="size-3" aria-hidden />
+      )}
+      Make current
     </Button>
   );
 }

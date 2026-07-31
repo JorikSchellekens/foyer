@@ -15,12 +15,7 @@ import { ExportButton } from "@/components/shell/export-button";
 import { PageDwell } from "@/components/analytics/page-dwell";
 import { getEditorContext, toEditorLink, linkUrl } from "@/lib/link-helpers";
 import { teamMemberEmails, externalViews } from "@/lib/internal-views";
-import {
-  formatBytes,
-  formatDuration,
-  formatDateTime,
-  timeAgo,
-} from "@/lib/format";
+import { formatBytes, formatDuration, formatDateTime } from "@/lib/format";
 import { docTypeLabel } from "@/lib/doc-types";
 import { VersionUploadButton, RestoreVersionButton } from "./version-upload";
 import { DocumentTitle } from "./title-editor";
@@ -139,6 +134,7 @@ export default async function DocumentPage({
       views: agg.count,
     }))
     .sort((a, b) => a.pageNumber - b.pageNumber);
+  const showDwell = pages.length > 0 || !!doc.currentVersion?.numPages;
 
   const createLinkButton = (
     <LinkEditor
@@ -163,11 +159,14 @@ export default async function DocumentPage({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Link href="/documents" className="hover:text-foreground">
+              <Link
+                href="/documents"
+                className="underline-grow transition-colors duration-[var(--dur)] hover:text-foreground"
+              >
                 Documents
               </Link>
-              <ChevronRight className="size-3" />
-              <span>{doc.name}</span>
+              <ChevronRight className="size-3" aria-hidden />
+              <span className="truncate">{doc.name}</span>
             </div>
             <div className="mt-1 flex items-center gap-3">
               <FileIcon type={doc.type} className="size-6" />
@@ -206,7 +205,7 @@ export default async function DocumentPage({
       </div>
 
       <div className="space-y-8 px-4 sm:px-8 py-6">
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="reveal grid grid-cols-2 gap-4 lg:grid-cols-4">
           <Stat label="Views" value={doc.views.length} />
           <Stat label="Unique visitors" value={uniqueEmails.size} />
           <Stat label="Total time" value={formatDuration(totalTime)} />
@@ -287,7 +286,7 @@ export default async function DocumentPage({
                   <Link
                     key={r.id}
                     href={`/signatures/${r.id}`}
-                    className="flex items-center gap-4 rounded-md border bg-card px-4 py-3 transition-colors hover:bg-accent/50"
+                    className="hover-raise press flex items-center gap-4 rounded-md border bg-card px-4 py-3 hover:border-primary/40"
                   >
                     <PenLine className="size-4 shrink-0 text-muted-foreground" />
                     <div className="min-w-0 flex-1">
@@ -310,29 +309,37 @@ export default async function DocumentPage({
           </section>
         )}
 
-        {pages.length > 0 && (
-          <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* A paged document shows the dwell card even with no visits yet: the
+            empty state explains what will appear there. */}
+        <section
+          className={
+            showDwell
+              ? "grid grid-cols-1 items-start gap-6 lg:grid-cols-2"
+              : undefined
+          }
+        >
+          {showDwell && (
             <div className="rounded-lg border bg-card p-5">
-              <h2 className="mb-4 font-display text-xl">Reading time by page</h2>
+              <div className="mb-4 flex items-baseline justify-between gap-3">
+                <h2 className="font-display text-xl">Reading time by page</h2>
+                {pages.length > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    average per page
+                  </span>
+                )}
+              </div>
               <PageDwell
                 pages={pages}
                 versionId={doc.currentVersion?.id}
                 isPdf={doc.type === "PDF"}
               />
             </div>
-            <div className="rounded-lg border bg-card p-5">
-              <h2 className="mb-4 font-display text-xl">Version history</h2>
-              <VersionList doc={doc} />
-            </div>
-          </section>
-        )}
-
-        {pages.length === 0 && (
-          <section className="rounded-lg border bg-card p-5">
+          )}
+          <div className="rounded-lg border bg-card p-5">
             <h2 className="mb-4 font-display text-xl">Version history</h2>
             <VersionList doc={doc} />
-          </section>
-        )}
+          </div>
+        </section>
 
         <section>
           <div className="mb-3 flex items-center justify-between">
@@ -387,7 +394,7 @@ function VersionList({
       {doc.versions.map((v) => (
         <div
           key={v.id}
-          className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-muted/50"
+          className="flex items-center gap-3 rounded-md px-2 py-2 transition-colors duration-[var(--dur)] ease-[var(--ease-out-soft)] hover:bg-muted/50"
         >
           <Badge
             variant={v.id === doc.currentVersionId ? "default" : "secondary"}
@@ -405,10 +412,11 @@ function VersionList({
           </div>
           <Link
             href={`/documents/${doc.id}/preview?version=${v.id}`}
-            className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-            title="Preview this version"
+            className="focus-ring rounded-md p-1.5 text-muted-foreground transition-colors duration-[var(--dur-fast)] hover:bg-muted hover:text-foreground"
+            title={`Preview version ${v.versionNumber}`}
+            aria-label={`Preview version ${v.versionNumber}`}
           >
-            <Eye className="size-3.5" />
+            <Eye className="size-3.5" aria-hidden />
           </Link>
           {v.id !== doc.currentVersionId && (
             <RestoreVersionButton documentId={doc.id} versionId={v.id} />

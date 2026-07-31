@@ -60,6 +60,7 @@ export function ReadingTrajectory({
   const mouseRef = useRef({ x: 0, y: 0 });
   const [plotW, setPlotW] = useState(640);
   const [hover, setHover] = useState<number | null>(null);
+  const [hoverSeg, setHoverSeg] = useState<number | null>(null);
   const [aspect, setAspect] = useState<number | null>(null); // page w/h
   const [ready, setReady] = useState(false); // gate the draw-in until measured
   const [failed, setFailed] = useState<Set<number>>(new Set());
@@ -75,12 +76,6 @@ export function ReadingTrajectory({
     []
   );
 
-  const A = aspect ?? 8.5 / 11; // US Letter portrait until the first page loads
-  const thumb = fit(A, 48, 44);
-  const ROW = thumb.h + 12;
-  const RAIL = thumb.w + 26; // page number + gaps
-  const preview = fit(A, PREVIEW_W, 210);
-
   const segs = useMemo(
     () => [...trail].filter((s) => s.d >= 0).sort((a, b) => a.t - b.t),
     [trail]
@@ -89,6 +84,15 @@ export function ReadingTrajectory({
     () => segs.reduce((m, s) => Math.max(m, s.p), 1),
     [segs]
   );
+
+  const A = aspect ?? 8.5 / 11; // US Letter portrait until the first page loads
+  // Long documents get a shorter rail: 200 rows at full thumbnail height is a
+  // scroll marathon, and the shape of the path is what matters at that length.
+  const dense = maxSeen > 32;
+  const thumb = dense ? fit(A, 26, 22) : fit(A, 48, 44);
+  const ROW = thumb.h + (dense ? 6 : 12);
+  const RAIL = thumb.w + 26; // page number + gaps
+  const preview = fit(A, PREVIEW_W, 210);
   const pages = useMemo(
     () => Array.from({ length: maxSeen }, (_, i) => i + 1),
     [maxSeen]
@@ -180,7 +184,10 @@ export function ReadingTrajectory({
     const s = Math.round(ms / 1000);
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
   };
-  const delay = (i: number) => (0.12 + i * 0.035).toFixed(3);
+  // The draw reads as a story only if it finishes: cap the whole cascade at
+  // about a second however many segments there are.
+  const step = Math.min(0.035, 1 / Math.max(segs.length, 1));
+  const delay = (i: number) => (0.1 + i * step).toFixed(3);
 
   const seenBefore = new Set<number>();
   const drawn = placed.map((s, i) => {
@@ -211,7 +218,10 @@ export function ReadingTrajectory({
       className="relative"
       style={{ height: totalH }}
       onMouseMove={track}
-      onMouseLeave={() => setHover(null)}
+      onMouseLeave={() => {
+        setHover(null);
+        setHoverSeg(null);
+      }}
     >
       {pages.map((p) => {
         const v = visited.get(p);
@@ -224,6 +234,7 @@ export function ReadingTrajectory({
             onMouseEnter={(e) => {
               track(e);
               setHover(p);
+              setHoverSeg(null);
             }}
           >
             <div
@@ -313,7 +324,7 @@ export function ReadingTrajectory({
                   opacity: back ? 0.9 : 0.5,
                   strokeDasharray: back ? "3 3" : undefined,
                   animation: animate
-                    ? `traj-fade .35s ease ${delay(i)}s both`
+                    ? `traj-fade var(--dur) var(--ease-out-soft) ${delay(i)}s both`
                     : undefined,
                 }}
               />
@@ -322,8 +333,18 @@ export function ReadingTrajectory({
         {ready &&
           drawn.map(({ s, i, width, repeat, len }) => {
             const active = hover === s.p;
+            // Highlight by dimming the rest, never by glowing the hovered one:
+            // a halo would be the only decorative light in the app. Pages that
+            // were never opened have nothing to highlight, so they dim nothing.
+            const dim = hover != null && visited.has(hover) && !active;
             return (
-              <g key={`s${i}`}>
+              <g
+                key={`s${i}`}
+                style={{
+                  opacity: dim ? 0.32 : 1,
+                  transition: "opacity var(--dur-fast) var(--ease-out-soft)",
+                }}
+              >
                 <line
                   x1={x(s.x0)}
                   y1={yRow(s.p)}
@@ -332,27 +353,24 @@ export function ReadingTrajectory({
                   strokeLinecap="round"
                   style={{
                     stroke: "var(--primary)",
-                    strokeWidth: width,
+                    strokeWidth: active ? width + 1.5 : width,
                     strokeDasharray: animate ? len : undefined,
                     strokeDashoffset: animate ? len : undefined,
                     animation: animate
-                      ? `traj-draw .5s ease ${delay(i)}s forwards`
-                      : undefined,
-                    filter: active
-                      ? "drop-shadow(0 0 5px color-mix(in oklab, var(--primary) 60%, transparent))"
+                      ? `traj-draw var(--dur-reveal) var(--ease-out-quint) ${delay(i)}s forwards`
                       : undefined,
                   }}
                 />
                 <circle
                   cx={x(s.x0)}
                   cy={yRow(s.p)}
-                  r={active ? 5 : 3}
+                  r={hoverSeg === i ? 5 : 3}
                   style={{
                     fill: "var(--card)",
                     stroke: repeat ? "var(--chart-4)" : "var(--primary)",
                     strokeWidth: 1.6,
                     animation: animate
-                      ? `traj-fade .3s ease ${delay(i)}s both`
+                      ? `traj-fade var(--dur-fast) var(--ease-out-soft) ${delay(i)}s both`
                       : undefined,
                   }}
                 />
@@ -369,26 +387,42 @@ export function ReadingTrajectory({
               stroke: "var(--chart-4)",
               strokeWidth: 1.6,
               animation: animate
-                ? `traj-fade .4s ease ${delay(drawn.length)}s both`
+                ? `traj-fade var(--dur) var(--ease-out-soft) ${delay(drawn.length)}s both`
                 : undefined,
             }}
           />
         )}
+        {/* Hit layer. Each dwell run gets a band, and each dot a generous
+            circle, so a 6px mark is still reachable with a mouse. */}
         {drawn.map(({ s, i, len }) => (
-          <line
-            key={`h${i}`}
-            x1={x(s.x0)}
-            y1={yRow(s.p)}
-            x2={x(s.x0) + Math.max(len, 6)}
-            y2={yRow(s.p)}
-            stroke="transparent"
-            strokeWidth={ROW}
-            className="pointer-events-auto cursor-pointer"
-            onMouseEnter={(e) => {
-              track(e);
-              setHover(s.p);
-            }}
-          />
+          <g key={`h${i}`}>
+            <line
+              x1={x(s.x0)}
+              y1={yRow(s.p)}
+              x2={x(s.x0) + Math.max(len, 6)}
+              y2={yRow(s.p)}
+              stroke="transparent"
+              strokeWidth={Math.max(ROW, 20)}
+              className="pointer-events-auto cursor-pointer"
+              onMouseEnter={(e) => {
+                track(e);
+                setHover(s.p);
+                setHoverSeg(i);
+              }}
+            />
+            <circle
+              cx={x(s.x0)}
+              cy={yRow(s.p)}
+              r={12}
+              fill="transparent"
+              className="pointer-events-auto cursor-pointer"
+              onMouseEnter={(e) => {
+                track(e);
+                setHover(s.p);
+                setHoverSeg(i);
+              }}
+            />
+          </g>
         ))}
       </svg>
 
@@ -396,8 +430,12 @@ export function ReadingTrajectory({
       {hover != null && visited.get(hover) && (
         <div
           ref={peekRef}
-          className="pointer-events-none absolute left-0 top-0 z-40 rounded-lg border bg-card p-2 shadow-xl"
-          style={{ animation: reduce ? undefined : "traj-pop .14s ease both" }}
+          className="pointer-events-none absolute left-0 top-0 z-40 rounded-lg border bg-popover p-2 shadow-[var(--shadow-float)]"
+          style={{
+            animation: reduce
+              ? undefined
+              : "traj-pop var(--dur-fast) var(--ease-out-quint) both",
+          }}
         >
           <div
             className="overflow-hidden rounded border bg-card"
@@ -427,31 +465,38 @@ export function ReadingTrajectory({
               </div>
             )}
           </div>
-          <div className="mt-1.5 flex items-baseline justify-between gap-3 px-0.5">
-            <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-              Page {hover}
-            </span>
-            <span className="font-mono text-sm tabular-nums text-primary">
-              {fmt(visited.get(hover)!.dwell)}
-              {visited.get(hover)!.visits > 1 && (
-                <span style={{ color: "var(--chart-4)" }}>
-                  {" "}
-                  · {visited.get(hover)!.visits}×
-                </span>
+          <div className="mt-2 px-0.5" style={{ width: preview.w }}>
+            <div className="flex items-baseline justify-between gap-3">
+              {/* Value first: the reader already knows which page they hovered. */}
+              <span className="font-mono text-sm tabular text-foreground">
+                {fmt(visited.get(hover)!.dwell)}
+              </span>
+              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                Page {hover}
+              </span>
+            </div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground">
+              {visited.get(hover)!.visits > 1
+                ? `${visited.get(hover)!.visits} separate stops`
+                : "read once"}
+              {hoverSeg != null && placed[hoverSeg] && (
+                <> · this stop at {fmtClock(placed[hoverSeg].x0)}</>
               )}
-            </span>
+            </div>
           </div>
         </div>
       )}
     </div>
   );
 
+  // Short reads do not need five ticks: they would all round to the same value.
+  const ticks = T < 60_000 ? [0, 0.5, 1] : [0, 0.25, 0.5, 0.75, 1];
   const axis = (
     <div className="relative mt-1 h-4" style={{ marginLeft: RAIL }}>
-      {[0, 0.25, 0.5, 0.75, 1].map((f) => (
+      {ticks.map((f) => (
         <span
           key={f}
-          className="absolute font-mono text-[10px] tabular-nums text-muted-foreground"
+          className="absolute font-mono text-[10px] tabular text-muted-foreground"
           style={{
             left: `${f * 100}%`,
             transform:
@@ -470,11 +515,61 @@ export function ReadingTrajectory({
 
   return (
     <>
+      {/* Axis captions read as a sentence: page, down the rail; time, across. */}
+      <div className="mb-1.5 flex items-baseline justify-between text-[10px] uppercase tracking-wide text-muted-foreground">
+        <span>Page</span>
+        <span>Cumulative reading time &rarr;</span>
+      </div>
       {grid}
       {axis}
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5">
+          <svg width="18" height="6" aria-hidden>
+            <line
+              x1="0"
+              y1="3"
+              x2="18"
+              y2="3"
+              stroke="var(--primary)"
+              strokeWidth="4"
+              strokeLinecap="round"
+            />
+          </svg>
+          time on a page (thicker is longer)
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <svg width="18" height="6" aria-hidden>
+            <line
+              x1="0"
+              y1="3"
+              x2="18"
+              y2="3"
+              stroke="var(--chart-4)"
+              strokeWidth="1.6"
+              strokeDasharray="3 3"
+            />
+          </svg>
+          back to an earlier page
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <svg width="14" height="14" aria-hidden>
+            <circle
+              cx="7"
+              cy="7"
+              r="5"
+              fill="none"
+              stroke="var(--chart-4)"
+              strokeWidth="1.6"
+            />
+          </svg>
+          where they stopped
+        </span>
+      </div>
       {numPages > maxSeen && (
-        <p className="mt-3 text-xs text-muted-foreground">
-          Pages {maxSeen + 1}&ndash;{numPages} were never opened.
+        <p className="mt-2 text-xs text-muted-foreground">
+          {numPages - maxSeen === 1
+            ? `Page ${numPages} was never opened.`
+            : `Pages ${maxSeen + 1} to ${numPages} were never opened.`}
         </p>
       )}
     </>

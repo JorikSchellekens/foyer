@@ -29,6 +29,8 @@ import { switchTeam } from "@/app/(app)/actions";
 import { FoyerLogo } from "@/components/brand/logo";
 import { NotificationBell } from "@/components/shell/notification-bell";
 import { ThemeToggle } from "@/components/shell/theme-toggle";
+import { Kbd } from "@/components/shell/kbd";
+import { navIconClasses, navItemClasses } from "@/components/shell/nav-item";
 
 export const NAV = [
   { href: "/dashboard", label: "Overview", icon: LayoutGrid },
@@ -38,6 +40,23 @@ export const NAV = [
   { href: "/signatures", label: "Signatures", icon: PenLine },
   { href: "/visitors", label: "Visitors", icon: Users },
 ];
+
+/**
+ * Team switcher and search share one control treatment: card face, hairline
+ * that firms up on hover, same height as a nav row.
+ */
+const CONTROL = cn(
+  "focus-ring press flex w-full items-center gap-2 rounded-md border bg-card px-2.5 py-2 text-left text-sm",
+  "transition-[background-color,border-color] duration-[var(--dur-fast)] ease-[var(--ease-out-soft)]",
+  "hover:border-input hover:bg-accent data-[state=open]:border-input data-[state=open]:bg-accent"
+);
+
+/** Footer icon buttons: 32px hit target, quiet until hovered. */
+const FOOTER_ICON = cn(
+  "focus-ring inline-flex size-8 items-center justify-center rounded-md text-muted-foreground",
+  "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out-soft)]",
+  "hover:bg-sidebar-accent hover:text-sidebar-foreground"
+);
 
 export function Sidebar({
   teams,
@@ -50,11 +69,18 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const active = teams.find((t) => t.id === activeTeamId) ?? teams[0];
+  const settingsActive = pathname.startsWith("/settings");
 
   return (
-    <aside className="flex w-60 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground max-md:hidden">
-      <div className="flex items-center justify-between px-5 pb-2 pt-5">
-        <Link href="/dashboard" aria-label="Foyer">
+    // Sticky and viewport-tall: left to stretch, the column matches the whole
+    // document and the footer row sinks off the bottom of long pages.
+    <aside className="sticky top-0 flex h-dvh w-60 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground max-md:hidden">
+      <div className="flex items-center justify-between gap-2 px-5 pb-2 pt-5">
+        <Link
+          href="/dashboard"
+          aria-label="Foyer"
+          className="focus-ring press rounded-sm"
+        >
           <FoyerLogo size="md" />
         </Link>
         <NotificationBell />
@@ -62,18 +88,20 @@ export function Sidebar({
 
       <div className="px-3 pb-2">
         <DropdownMenu>
-          <DropdownMenuTrigger className="flex w-full items-center gap-2 rounded-md border bg-card px-2.5 py-2 text-left text-sm hover:bg-accent">
-            <span className="flex size-6 items-center justify-center rounded bg-primary/10 font-mono text-[11px] font-semibold text-primary">
+          <DropdownMenuTrigger className={CONTROL}>
+            <span className="flex size-6 shrink-0 items-center justify-center rounded bg-primary/10 font-mono text-[11px] font-semibold text-primary">
               {initials(active.name)}
             </span>
             <span className="flex-1 truncate font-medium">{active.name}</span>
-            <ChevronsUpDown className="size-3.5 text-muted-foreground" />
+            <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-52">
             {teams.map((t) => (
               <DropdownMenuItem key={t.id} onClick={() => switchTeam(t.id)}>
                 <span className="flex-1 truncate">{t.name}</span>
-                {t.id === active.id && <Check className="size-4" />}
+                {t.id === active.id && (
+                  <Check className="size-4 text-primary" />
+                )}
               </DropdownMenuItem>
             ))}
             <DropdownMenuSeparator />
@@ -90,17 +118,18 @@ export function Sidebar({
         <button
           type="button"
           onClick={() => window.dispatchEvent(new Event("foyer:open-command"))}
-          className="flex w-full items-center gap-2 rounded-md border bg-card px-2.5 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className={cn(CONTROL, "text-muted-foreground hover:text-foreground")}
         >
-          <Search className="size-3.5" />
+          <Search className="size-3.5 shrink-0" />
           <span className="flex-1">Search</span>
-          <kbd className="rounded border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-            ⌘K
-          </kbd>
+          <Kbd>⌘K</Kbd>
         </button>
       </div>
 
-      <nav className="flex-1 space-y-0.5 px-3 py-3">
+      <nav
+        aria-label="Main"
+        className="flex-1 space-y-0.5 overflow-y-auto px-3 py-3"
+      >
         {NAV.map((item) => {
           const isActive =
             pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -108,14 +137,13 @@ export function Sidebar({
             <Link
               key={item.href}
               href={item.href}
-              className={cn(
-                "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
-                isActive
-                  ? "bg-sidebar-accent font-medium text-sidebar-foreground"
-                  : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
-              )}
+              aria-current={isActive ? "page" : undefined}
+              className={navItemClasses({ active: isActive })}
             >
-              <item.icon className="size-4" strokeWidth={1.75} />
+              <item.icon
+                className={navIconClasses(isActive)}
+                strokeWidth={isActive ? 2 : 1.75}
+              />
               {item.label}
             </Link>
           );
@@ -125,29 +153,32 @@ export function Sidebar({
       <div className="space-y-0.5 border-t px-3 py-3">
         <Link
           href="/settings"
-          className={cn(
-            "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
-            pathname.startsWith("/settings")
-              ? "bg-sidebar-accent font-medium"
-              : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
-          )}
+          aria-current={settingsActive ? "page" : undefined}
+          className={navItemClasses({ active: settingsActive })}
         >
-          <Settings className="size-4" strokeWidth={1.75} />
+          <Settings
+            className={navIconClasses(settingsActive)}
+            strokeWidth={settingsActive ? 2 : 1.75}
+          />
           Settings
         </Link>
-        <div className="flex items-center justify-between gap-2 px-2.5 pt-2">
-          <span className="truncate text-xs text-muted-foreground">
+        <div className="flex items-center justify-between gap-2 pl-3 pr-0.5 pt-1">
+          <span
+            className="truncate text-xs text-muted-foreground"
+            title={userEmail}
+          >
             {userEmail}
           </span>
-          <div className="flex items-center gap-0.5">
-            <ThemeToggle />
+          <div className="flex shrink-0 items-center">
+            <ThemeToggle className={FOOTER_ICON} />
             <form action="/api/auth/logout" method="post">
               <button
                 type="submit"
                 title="Sign out"
-                className="rounded p-1 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+                aria-label="Sign out"
+                className={FOOTER_ICON}
               >
-                <LogOut className="size-3.5" />
+                <LogOut className="size-4" />
               </button>
             </form>
           </div>

@@ -1,6 +1,8 @@
-import { Link2 } from "lucide-react";
+import Link from "next/link";
+import { FileText, FolderLock, Link2 } from "lucide-react";
 import { requireTeam } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shell/page-header";
 import { EmptyState } from "@/components/shell/empty-state";
 import { LinksTable } from "@/components/links/links-table";
@@ -84,8 +86,19 @@ export default async function LinksPage() {
           <EmptyState
             icon={Link2}
             title="No links yet"
-            description="Create a link from any document or data room to start sharing, and every visit will be tracked here."
-          />
+            description="Links are created from a document or a data room. Make one and every visit to it is tracked here."
+          >
+            <Button asChild variant="outline">
+              <Link href="/documents">
+                <FileText className="size-4" /> Pick a document
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/datarooms">
+                <FolderLock className="size-4" /> Pick a data room
+              </Link>
+            </Button>
+          </EmptyState>
         ) : (
           <LinksTable rows={rows} ctx={editorCtx} />
         )}

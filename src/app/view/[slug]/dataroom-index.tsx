@@ -28,6 +28,13 @@ function luminance(hex: string) {
   return (r * 299 + g * 587 + b * 114) / 1000;
 }
 
+/** Hairline action in the visitor's own colour scheme, quiet until hovered. */
+const ghostAction =
+  "press inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium outline-none transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out-soft)] hover:bg-current/5 focus-visible:ring-2 focus-visible:ring-current/30";
+
+/** Cap the mount cascade: a 200-file data room should not ripple for 8s. */
+const MAX_STAGGER = 12;
+
 type Entry =
   | {
       kind: "folder";
@@ -120,6 +127,7 @@ export async function DataroomIndex({
     }
   };
   walk(null, "", 0);
+  const docCount = entries.filter((e) => e.kind === "document").length;
 
   const useBrandBg = branding?.applyBgToDataroom ?? false;
   const bg = useBrandBg ? brand.backgroundColor : "#fafaf8";
@@ -163,7 +171,10 @@ export async function DataroomIndex({
       {previewToken && <PreviewBanner />}
       {link.watermark && session.email && <Watermark text={session.email} />}
       {brand.bannerUrl && (
-        <div className="h-44 w-full overflow-hidden sm:h-56">
+        <div
+          className="h-32 w-full overflow-hidden border-b sm:h-56"
+          style={{ borderColor: hairline }}
+        >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={brand.bannerUrl} alt="" className="h-full w-full object-cover" />
         </div>
@@ -174,8 +185,8 @@ export async function DataroomIndex({
         trackToken={trackToken}
         preview={!!previewToken}
       >
-        <div className="mx-auto max-w-3xl px-6 pb-20 pt-10 lg:max-w-5xl">
-          <header className="flex flex-wrap items-center justify-between gap-4">
+        <div className="mx-auto max-w-3xl px-5 pb-[max(5rem,env(safe-area-inset-bottom))] pt-10 sm:px-6 lg:max-w-5xl">
+          <header className="reveal flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               {brand.logoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -200,7 +211,7 @@ export async function DataroomIndex({
               {link.enableIndexFile && (
                 <a
                   href={`/api/view/download/${slug}?index=1`}
-                  className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-black/5 dark:hover:bg-white/10"
+                  className={ghostAction}
                   style={{ borderColor: hairline }}
                 >
                   <ListOrdered className="size-3.5" /> Index PDF
@@ -209,7 +220,7 @@ export async function DataroomIndex({
               {link.allowDownload && (
                 <a
                   href={`/api/view/download/${slug}`}
-                  className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-black/5 dark:hover:bg-white/10"
+                  className={ghostAction}
                   style={{ borderColor: hairline }}
                 >
                   <Download className="size-3.5" /> Download all
@@ -220,7 +231,7 @@ export async function DataroomIndex({
                   href={branding.ctaUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-85"
+                  className="press inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-white outline-none transition-opacity duration-[var(--dur-fast)] hover:opacity-85 focus-visible:ring-2 focus-visible:ring-current/40"
                   style={{ backgroundColor: brand.brandColor }}
                 >
                   {branding.ctaLabel} <ExternalLink className="size-3" />
@@ -229,25 +240,38 @@ export async function DataroomIndex({
             </div>
           </header>
 
-          <div className="mt-12">
-            <h1 className="font-display text-4xl leading-tight tracking-tight sm:text-5xl">
+          <div className="reveal-up mt-12">
+            <h1 className="font-display text-4xl leading-[1.08] tracking-tight sm:text-5xl">
               {dataroom.name}
             </h1>
             {dataroom.description && (
-              <p className="mt-2 max-w-xl text-sm" style={{ color: subtle }}>
+              <p
+                className="mt-3 max-w-xl text-sm leading-relaxed"
+                style={{ color: subtle }}
+              >
                 {dataroom.description}
               </p>
             )}
-            <div
-              className="mt-6 h-px w-24"
-              style={{ backgroundColor: brand.brandColor }}
-            />
+            <div className="mt-6 flex items-center gap-3">
+              <div
+                className="h-px w-24"
+                style={{ backgroundColor: brand.brandColor }}
+              />
+              {docCount > 0 && (
+                <span
+                  className="font-mono text-[11px] tabular"
+                  style={{ color: subtle }}
+                >
+                  {docCount} {docCount === 1 ? "document" : "documents"}
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="mt-10 lg:grid lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-10">
             {entries.length > 0 && (
               <aside className="hidden lg:block">
-                <div className="sticky top-8">
+                <div className="sticky top-8 max-h-[calc(100vh-4rem)] overflow-y-auto overscroll-contain pr-1">
                   <p
                     className="mb-3 font-mono text-[10px] uppercase tracking-[0.18em]"
                     style={{ color: subtle }}
@@ -273,17 +297,20 @@ export async function DataroomIndex({
             )}
             <div className="min-w-0">
             {entries.length === 0 ? (
-              <p className="text-sm" style={{ color: subtle }}>
+              <p className="reveal text-sm" style={{ color: subtle }}>
                 Nothing has been shared with you here yet.
               </p>
             ) : (
               <ol className="space-y-0.5">
-                {entries.map((entry) =>
-                  entry.kind === "folder" ? (
+                {entries.map((entry, i) => {
+                  const stagger = {
+                    "--i": Math.min(i, MAX_STAGGER),
+                  } as React.CSSProperties;
+                  return entry.kind === "folder" ? (
                     <li
                       key={entry.key}
-                      className="flex items-baseline gap-3 pb-1 pt-6 first:pt-0"
-                      style={{ paddingLeft: entry.depth * 24 }}
+                      className="stagger-item flex items-baseline gap-3 pb-1.5 pt-7 first:pt-0"
+                      style={{ ...stagger, paddingLeft: entry.depth * 24 }}
                     >
                       <span
                         className="font-mono text-xs tabular"
@@ -294,13 +321,18 @@ export async function DataroomIndex({
                       <span className="font-display text-xl italic">
                         {entry.name}
                       </span>
+                      <span
+                        aria-hidden
+                        className="h-px flex-1"
+                        style={{ backgroundColor: hairline }}
+                      />
                     </li>
                   ) : (
-                    <li key={entry.key}>
+                    <li key={entry.key} className="stagger-item" style={stagger}>
                       <Link
                         href={`/view/${slug}/d/${entry.itemId}${previewQuery}`}
                         prefetch={false}
-                        className="group flex items-baseline rounded-md px-2 py-2 transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
+                        className="group flex items-baseline gap-0 rounded-md px-2 py-2 outline-none transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out-soft)] hover:bg-current/5 focus-visible:bg-current/5 focus-visible:ring-2 focus-visible:ring-current/25 max-sm:flex-wrap"
                         style={{ marginLeft: entry.depth * 24 - 8 }}
                       >
                         <span
@@ -309,7 +341,7 @@ export async function DataroomIndex({
                         >
                           {entry.number}
                         </span>
-                        <span className="min-w-0 truncate text-[15px] font-medium group-hover:underline group-hover:decoration-current/30 group-hover:underline-offset-4">
+                        <span className="underline-grow min-w-0 truncate text-[15px] font-medium group-hover:[background-size:100%_1px] group-focus-visible:[background-size:100%_1px]">
                           {entry.name}
                         </span>
                         <span className="leader-dots max-sm:hidden" aria-hidden />
@@ -319,10 +351,18 @@ export async function DataroomIndex({
                         >
                           {entry.meta || "view"}
                         </span>
+                        {/* On a phone the leaders have nowhere to run: the file
+                            details drop to their own line instead. */}
+                        <span
+                          className="w-full pl-10 font-mono text-[11px] tabular sm:hidden"
+                          style={{ color: subtle }}
+                        >
+                          {entry.meta || "view"}
+                        </span>
                       </Link>
                     </li>
-                  )
-                )}
+                  );
+                })}
               </ol>
             )}
             </div>

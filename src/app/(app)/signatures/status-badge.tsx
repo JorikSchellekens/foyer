@@ -1,17 +1,65 @@
+import {
+  Ban,
+  Check,
+  CircleDashed,
+  Clock,
+  Eye,
+  Send,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
-const STYLES: Record<string, string> = {
-  DRAFT: "bg-muted text-muted-foreground",
-  SENT: "bg-blue-500/10 text-blue-700 dark:text-blue-400",
-  COMPLETED: "bg-primary/10 text-primary",
-  DECLINED: "bg-destructive/10 text-destructive",
-  VOIDED: "bg-muted text-muted-foreground",
-  EXPIRED: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+/**
+ * Envelope statuses (draft/sent/completed/declined/voided/expired) and signer
+ * statuses (pending/sent/viewed/signed/declined) share this badge. Colour stays
+ * inside the palette - green accent, oxblood, muted - so each state also gets
+ * its own glyph and border treatment: shape carries the meaning, hue only
+ * reinforces it.
+ */
+const STATES: Record<string, { icon: LucideIcon; className: string }> = {
+  DRAFT: {
+    icon: CircleDashed,
+    className: "border-dashed border-input text-muted-foreground",
+  },
+  PENDING: {
+    icon: CircleDashed,
+    className: "border-dashed border-input text-muted-foreground",
+  },
+  SENT: { icon: Send, className: "border-input text-foreground" },
+  VIEWED: { icon: Eye, className: "border-input text-foreground" },
+  SIGNED: {
+    icon: Check,
+    className: "border-primary/30 bg-primary/10 text-primary",
+  },
+  COMPLETED: {
+    icon: Check,
+    className: "border-primary/30 bg-primary/10 text-primary",
+  },
+  DECLINED: {
+    icon: X,
+    className: "border-destructive/30 bg-destructive/10 text-destructive",
+  },
+  VOIDED: {
+    icon: Ban,
+    className: "border-border bg-muted text-muted-foreground",
+  },
+  EXPIRED: {
+    icon: Clock,
+    className: "border-dashed border-input text-muted-foreground",
+  },
 };
 
 export function StatusBadge({ status }: { status: string }) {
+  const state = STATES[status];
+  const Icon = state?.icon;
   return (
-    <Badge variant="outline" className={`border-0 ${STYLES[status] ?? ""}`}>
+    <Badge
+      variant="outline"
+      className={cn("gap-1 font-medium tracking-[0.01em]", state?.className)}
+    >
+      {Icon && <Icon aria-hidden strokeWidth={2.25} />}
       {status.charAt(0) + status.slice(1).toLowerCase()}
     </Badge>
   );

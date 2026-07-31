@@ -14,10 +14,24 @@ import { formatDuration } from "@/lib/format";
 
 export const metadata = { title: "Overview" };
 
+/**
+ * The 30-day window, read off the clock once per request. Kept out of the
+ * component body: reading the clock during render is impure, and every day in
+ * the series has to come from the same instant anyway.
+ */
+function thirtyDayWindow() {
+  const now = Date.now();
+  const days: string[] = [];
+  for (let i = 29; i >= 0; i--) {
+    days.push(new Date(now - i * 86400_000).toISOString().slice(0, 10));
+  }
+  return { since30: new Date(now - 30 * 86400_000), days };
+}
+
 export default async function DashboardPage() {
   const ctx = await requireTeam();
   const teamId = ctx.team.id;
-  const since30 = new Date(Date.now() - 30 * 86400_000);
+  const { since30, days } = thirtyDayWindow();
 
   const [docCount, dataroomCount, linkCount, viewerCount, recentViews, views30] =
     await Promise.all([
@@ -41,10 +55,7 @@ export default async function DashboardPage() {
       }),
     ]);
 
-  const byDay = new Map<string, number>();
-  for (let i = 29; i >= 0; i--) {
-    byDay.set(new Date(Date.now() - i * 86400_000).toISOString().slice(0, 10), 0);
-  }
+  const byDay = new Map<string, number>(days.map((d) => [d, 0]));
   for (const v of views30) {
     const key = v.startedAt.toISOString().slice(0, 10);
     if (byDay.has(key)) byDay.set(key, (byDay.get(key) ?? 0) + 1);
@@ -96,12 +107,16 @@ export default async function DashboardPage() {
                   icon: Eye,
                 },
               ].map((step, i) => (
-                <li key={step.href}>
+                <li
+                  key={step.href}
+                  className="stagger-item"
+                  style={{ "--i": i } as React.CSSProperties}
+                >
                   <Link
                     href={step.href}
-                    className="group flex items-center gap-4 rounded-lg border bg-card px-4 py-3 transition-colors hover:border-primary/40"
+                    className="group hover-raise press flex items-center gap-4 rounded-lg border bg-card px-4 py-3 hover:border-primary/40"
                   >
-                    <span className="font-mono text-sm text-primary">
+                    <span className="font-mono text-sm tabular text-primary">
                       0{i + 1}
                     </span>
                     <step.icon
@@ -116,7 +131,7 @@ export default async function DashboardPage() {
                         {step.caption}
                       </span>
                     </span>
-                    <ArrowRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                    <ArrowRight className="size-4 text-muted-foreground transition-transform duration-[var(--dur)] ease-[var(--ease-out-quint)] group-hover:translate-x-0.5" />
                   </Link>
                 </li>
               ))}
@@ -134,7 +149,7 @@ export default async function DashboardPage() {
               }))}
             />
 
-            <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+            <div className="reveal grid grid-cols-2 gap-4 lg:grid-cols-5">
               <Stat label="Documents" value={docCount} />
               <Stat label="Data rooms" value={dataroomCount} />
               <Stat label="Active links" value={linkCount} />
@@ -148,13 +163,13 @@ export default async function DashboardPage() {
             <HotLeads leads={leads} />
 
             <div className="rounded-lg border bg-card p-5">
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-sm font-medium">Visits, last 30 days</h2>
+              <div className="mb-4 flex items-baseline justify-between gap-3">
+                <h2 className="font-display text-xl">Visits, last 30 days</h2>
                 <Link
                   href="/visitors"
-                  className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                  className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors duration-[var(--dur)] hover:text-foreground"
                 >
-                  <Users className="size-3.5" /> All visitors
+                  <Users className="size-3.5" aria-hidden /> All visitors
                 </Link>
               </div>
               <VisitsChart
@@ -166,13 +181,13 @@ export default async function DashboardPage() {
             </div>
 
             <section>
-              <div className="mb-3 flex items-center justify-between">
+              <div className="mb-3 flex items-baseline justify-between gap-3">
                 <h2 className="font-display text-xl">Latest visits</h2>
                 <Link
                   href="/links"
-                  className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                  className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors duration-[var(--dur)] hover:text-foreground"
                 >
-                  <Link2 className="size-3.5" /> Manage links
+                  <Link2 className="size-3.5" aria-hidden /> Manage links
                 </Link>
               </div>
               <ViewsTable

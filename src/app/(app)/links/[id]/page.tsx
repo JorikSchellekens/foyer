@@ -135,7 +135,7 @@ export default async function LinkAnalyticsPage({
       </div>
 
       <div className="space-y-8 px-4 sm:px-8 py-6">
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="reveal grid grid-cols-2 gap-4 lg:grid-cols-4">
           <Stat label="Views" value={link.views.length} />
           <Stat label="Unique visitors" value={uniqueEmails.size} />
           <Stat label="Total time" value={formatDuration(totalTime)} />
@@ -149,7 +149,12 @@ export default async function LinkAnalyticsPage({
 
         {pages.length > 0 && (
           <section className="max-w-2xl rounded-lg border bg-card p-5">
-            <h2 className="mb-4 font-display text-xl">Reading time by page</h2>
+            <div className="mb-4 flex items-baseline justify-between gap-3">
+              <h2 className="font-display text-xl">Reading time by page</h2>
+              <span className="text-xs text-muted-foreground">
+                average per page
+              </span>
+            </div>
             <PageDwell
               pages={pages}
               versionId={link.document?.currentVersion?.id}
@@ -158,12 +163,20 @@ export default async function LinkAnalyticsPage({
           </section>
         )}
 
+        {pages.length === 0 && !isDataroom && link.views.length > 0 && (
+          <p className="rounded-lg border border-dashed px-6 py-8 text-center text-sm text-muted-foreground">
+            No page-level timing yet: it appears once a visitor spends time
+            inside the document.
+          </p>
+        )}
+
         <section>
           <div className="mb-3 flex items-baseline justify-between gap-3">
             <h2 className="font-display text-xl">Who viewed this link</h2>
             {downloads > 0 && (
               <span className="text-xs text-muted-foreground">
-                {downloads} download{downloads === 1 ? "" : "s"}
+                <span className="font-mono tabular">{downloads}</span> download
+                {downloads === 1 ? "" : "s"}
               </span>
             )}
           </div>

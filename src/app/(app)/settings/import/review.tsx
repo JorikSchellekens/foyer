@@ -208,6 +208,7 @@ export function Review({
                         type="password"
                         className="h-8 w-44"
                         placeholder="New password"
+                        aria-label={`New password for ${l.name}`}
                         disabled={skipped}
                         value={passwords[l.id] ?? ""}
                         onChange={(e) =>
@@ -374,6 +375,7 @@ export function Review({
                 value={wrapFolderName}
                 onChange={(e) => setWrapFolderName(e.target.value)}
                 placeholder="Folder name"
+                aria-label="Name of the folder to import into"
               />
             )}
           </div>

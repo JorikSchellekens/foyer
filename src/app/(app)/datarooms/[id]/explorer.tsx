@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronRight, Folder, FolderOpen, Home } from "lucide-react";
 import type { DocumentType } from "@prisma/client";
@@ -95,23 +96,27 @@ export function DataroomExplorer({
 
   const renderNode = (node: ExplorerNode, depth: number) => {
     if (node.kind === "doc") {
+      const href = `/documents/${node.documentId}`;
       return (
         <li key={`d-${node.itemId}`}>
           <div
-            role="button"
-            tabIndex={0}
             draggable
             onDragStart={(e) => startDocDrag(e, node.itemId)}
-            onClick={() => router.push(`/documents/${node.documentId}`)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter")
-                router.push(`/documents/${node.documentId}`);
-            }}
-            className="flex w-full cursor-pointer items-center gap-1.5 rounded-md py-1.5 pr-2 text-[13px] text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+            onClick={() => router.push(href)}
+            className="flex w-full cursor-pointer items-center gap-1.5 rounded-md py-1.5 pr-2 text-[13px] text-muted-foreground transition-colors duration-[var(--dur-fast)] hover:bg-muted/60 hover:text-foreground"
             style={{ paddingLeft: 26 + depth * 14 }}
           >
             <FileIcon type={node.type} className="size-3.5 shrink-0" />
-            <span className="min-w-0 truncate">{node.name}</span>
+            {/* draggable={false} keeps the anchor from shadowing the row's own
+                drag source; the row stays the thing you pick up. */}
+            <Link
+              href={href}
+              draggable={false}
+              onClick={(e) => e.stopPropagation()}
+              className="focus-ring min-w-0 truncate rounded-sm"
+            >
+              {node.name}
+            </Link>
           </div>
         </li>
       );
@@ -119,40 +124,34 @@ export function DataroomExplorer({
     const isOpen = open.has(node.id);
     const isCurrent = node.id === currentFolderId;
     const FolderGlyph = isOpen ? FolderOpen : Folder;
+    const href = `/datarooms/${dataroomId}?folder=${node.id}`;
     return (
       <li key={`f-${node.id}`}>
         <div
-          role="button"
-          tabIndex={0}
           draggable
           onDragStart={(e) => startFolderDrag(e, node.id)}
-          onClick={() =>
-            router.push(`/datarooms/${dataroomId}?folder=${node.id}`)
-          }
-          onKeyDown={(e) => {
-            if (e.key === "Enter")
-              router.push(`/datarooms/${dataroomId}?folder=${node.id}`);
-          }}
+          onClick={() => router.push(href)}
           {...dropProps(node.id, node.id)}
           className={cn(
-            "flex w-full cursor-pointer items-center gap-1 rounded-md py-1.5 pr-2 text-[13px] transition-colors hover:bg-muted/60",
+            "flex w-full cursor-pointer items-center gap-1 rounded-md py-1.5 pr-2 text-[13px] transition-[background-color,box-shadow] duration-[var(--dur-fast)] hover:bg-muted/60",
             isCurrent && "bg-muted font-medium",
-            dropTarget === node.id && "ring-2 ring-primary/60 bg-primary/5"
+            dropTarget === node.id && "bg-primary/5 ring-2 ring-primary/60"
           )}
           style={{ paddingLeft: 4 + depth * 14 }}
         >
           <button
             type="button"
-            className="rounded p-0.5 hover:bg-muted"
+            className="focus-ring rounded p-0.5 transition-colors hover:bg-muted"
             onClick={(e) => {
               e.stopPropagation();
               toggle(node.id);
             }}
-            aria-label={isOpen ? "Collapse folder" : "Expand folder"}
+            aria-expanded={isOpen}
+            aria-label={`${isOpen ? "Collapse" : "Expand"} ${node.name}`}
           >
             <ChevronRight
               className={cn(
-                "size-3.5 text-muted-foreground transition-transform",
+                "size-3.5 text-muted-foreground transition-transform duration-[var(--dur)] ease-[var(--ease-out-quint)]",
                 isOpen && "rotate-90"
               )}
             />
@@ -161,7 +160,15 @@ export function DataroomExplorer({
             className="size-3.5 shrink-0 text-[#b7791f]"
             strokeWidth={1.5}
           />
-          <span className="min-w-0 truncate">{node.name}</span>
+          <Link
+            href={href}
+            draggable={false}
+            aria-current={isCurrent ? "page" : undefined}
+            onClick={(e) => e.stopPropagation()}
+            className="focus-ring min-w-0 truncate rounded-sm"
+          >
+            {node.name}
+          </Link>
         </div>
         {isOpen && (
           <ul>{node.children.map((c) => renderNode(c, depth + 1))}</ul>
@@ -173,21 +180,24 @@ export function DataroomExplorer({
   return (
     <nav aria-label="Data room explorer" className="text-sm">
       <div
-        role="button"
-        tabIndex={0}
         onClick={() => router.push(`/datarooms/${dataroomId}`)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") router.push(`/datarooms/${dataroomId}`);
-        }}
         {...dropProps("root", null)}
         className={cn(
-          "flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] font-medium transition-colors hover:bg-muted/60",
+          "flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] font-medium transition-[background-color,box-shadow] duration-[var(--dur-fast)] hover:bg-muted/60",
           currentFolderId === null && "bg-muted",
-          dropTarget === "root" && "ring-2 ring-primary/60 bg-primary/5"
+          dropTarget === "root" && "bg-primary/5 ring-2 ring-primary/60"
         )}
       >
-        <Home className="size-3.5 text-muted-foreground" />
-        All files
+        <Home className="size-3.5 shrink-0 text-muted-foreground" />
+        <Link
+          href={`/datarooms/${dataroomId}`}
+          draggable={false}
+          aria-current={currentFolderId === null ? "page" : undefined}
+          onClick={(e) => e.stopPropagation()}
+          className="focus-ring rounded-sm"
+        >
+          All files
+        </Link>
       </div>
       <ul className="mt-1">{nodes.map((n) => renderNode(n, 0))}</ul>
     </nav>

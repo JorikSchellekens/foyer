@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { MessageCircleQuestion, CornerDownRight } from "lucide-react";
+import { MessageCircleQuestion, CornerDownRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { EmptyState } from "@/components/shell/empty-state";
 import { timeAgo, initials } from "@/lib/format";
@@ -36,10 +37,25 @@ export function QaTab({
       />
     );
 
+  const open = questions.filter((q) => !q.answer).length;
   return (
     <div className="max-w-2xl space-y-4">
-      {questions.map((q) => (
-        <QuestionCard key={q.id} dataroomId={dataroomId} q={q} />
+      <p className="flex items-baseline font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+        <span className="shrink-0">
+          {open > 0 ? "Awaiting an answer" : "All answered"}
+        </span>
+        <span aria-hidden className="leader-dots text-muted-foreground/60" />
+        <span className="shrink-0 tabular">
+          {open} / {questions.length}
+        </span>
+      </p>
+      {questions.map((q, i) => (
+        <QuestionCard
+          key={q.id}
+          dataroomId={dataroomId}
+          q={q}
+          index={i}
+        />
       ))}
     </div>
   );
@@ -48,16 +64,37 @@ export function QaTab({
 function QuestionCard({
   dataroomId,
   q,
+  index,
 }: {
   dataroomId: string;
   q: QuestionData;
+  index: number;
 }) {
   const router = useRouter();
   const [draft, setDraft] = useState("");
   const [answering, setAnswering] = useState(false);
 
+  async function post() {
+    if (!draft.trim()) return;
+    setAnswering(true);
+    try {
+      const res = await answerQuestion(dataroomId, q.id, draft);
+      if (res && "error" in res && res.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Answer posted");
+      router.refresh();
+    } finally {
+      setAnswering(false);
+    }
+  }
+
   return (
-    <div className="rounded-lg border bg-card p-4">
+    <div
+      className="stagger-item rounded-lg border bg-card p-4 shadow-[var(--shadow-hairline)]"
+      style={{ "--i": Math.min(index, 10) } as React.CSSProperties}
+    >
       <div className="flex items-start gap-3">
         <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-secondary font-mono text-[10px] font-semibold">
           {q.viewerEmail ? initials(q.viewerEmail) : "?"}
@@ -84,33 +121,37 @@ function QuestionCard({
               </div>
             </div>
           ) : (
-            <form
-              className="mt-3 space-y-2"
-              action={async () => {
-                if (!draft.trim()) return;
-                setAnswering(true);
-                try {
-                  const res = await answerQuestion(dataroomId, q.id, draft);
-                  if (res && "error" in res && res.error) {
-                    toast.error(res.error);
-                    return;
-                  }
-                  toast.success("Answer posted");
-                  router.refresh();
-                } finally {
-                  setAnswering(false);
-                }
-              }}
-            >
+            <form className="mt-3 space-y-2" action={post}>
+              <Label htmlFor={`answer-${q.id}`} className="sr-only">
+                Answer this question
+              </Label>
               <Textarea
+                id={`answer-${q.id}`}
                 rows={2}
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  // Enter belongs to the textarea; the modifier posts.
+                  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                    e.preventDefault();
+                    void post();
+                  }
+                }}
                 placeholder="Write an answer…"
               />
-              <Button size="sm" type="submit" disabled={answering || !draft.trim()}>
-                Post answer
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  type="submit"
+                  disabled={answering || !draft.trim()}
+                >
+                  {answering && <Loader2 className="size-3.5 animate-spin" />}
+                  {answering ? "Posting…" : "Post answer"}
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  Visible to everyone with access to this room.
+                </span>
+              </div>
             </form>
           )}
         </div>

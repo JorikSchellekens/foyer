@@ -17,15 +17,18 @@ export type AccessRequestRow = {
   createdAt: string;
 };
 
+type Busy = { id: string; kind: "grant" | "dismiss" };
+
 export function AccessRequests({ requests }: { requests: AccessRequestRow[] }) {
   const router = useRouter();
   const [rows, setRows] = useState(requests);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [busy, setBusy] = useState<Busy | null>(null);
+  const [settled, setSettled] = useState<string | null>(null);
 
   if (rows.length === 0) return null;
 
   async function act(id: string, kind: "grant" | "dismiss") {
-    setBusyId(id);
+    setBusy({ id, kind });
     try {
       if (kind === "grant") {
         const res = await grantAccessRequest(id);
@@ -38,58 +41,74 @@ export function AccessRequests({ requests }: { requests: AccessRequestRow[] }) {
         await dismissAccessRequest(id);
         toast.success("Request dismissed");
       }
-      setRows((prev) => prev.filter((r) => r.id !== id));
-      router.refresh();
+      // Let the row fade before it leaves, so the decision has a visible end.
+      setSettled(id);
+      setTimeout(() => {
+        setRows((prev) => prev.filter((r) => r.id !== id));
+        setSettled(null);
+        router.refresh();
+      }, 180);
     } finally {
-      setBusyId(null);
+      setBusy(null);
     }
   }
 
   return (
-    <section className="rounded-lg border border-primary/30 bg-primary/[0.03] p-5">
-      <div className="mb-4 flex items-center gap-2">
-        <KeyRound className="size-4 text-primary" />
-        <h2 className="text-sm font-medium">Access requests</h2>
-        <span className="text-xs text-muted-foreground">
-          · {rows.length} pending
+    <section className="reveal rounded-lg border border-primary/30 bg-primary/[0.03] p-5">
+      <div className="mb-4 flex items-baseline gap-2">
+        <KeyRound className="size-4 translate-y-0.5 text-primary" aria-hidden />
+        <h2 className="font-display text-xl">Access requests</h2>
+        <span className="font-mono text-xs tabular text-muted-foreground">
+          {rows.length} pending
         </span>
       </div>
       <ul className="divide-y">
-        {rows.map((r) => (
-          <li
-            key={r.id}
-            className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
-          >
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium">{r.email}</div>
-              <div className="truncate text-xs text-muted-foreground">
-                {r.linkName}
-                {r.note ? ` · ${r.note}` : ""}
+        {rows.map((r) => {
+          const rowBusy = busy?.id === r.id;
+          return (
+            <li
+              key={r.id}
+              data-settled={settled === r.id}
+              className="flex items-center gap-3 py-2.5 transition-opacity duration-[var(--dur)] ease-[var(--ease-out-soft)] first:pt-0 last:pb-0 data-[settled=true]:opacity-0"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium">{r.email}</div>
+                <div className="truncate text-xs text-muted-foreground">
+                  {r.linkName}
+                  {r.note ? ` · ${r.note}` : ""}
+                </div>
               </div>
-            </div>
-            <button
-              type="button"
-              disabled={busyId === r.id}
-              onClick={() => act(r.id, "dismiss")}
-              className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent disabled:opacity-50"
-            >
-              <X className="size-3.5" /> Dismiss
-            </button>
-            <button
-              type="button"
-              disabled={busyId === r.id}
-              onClick={() => act(r.id, "grant")}
-              className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-            >
-              {busyId === r.id ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <Check className="size-3.5" />
-              )}
-              Grant
-            </button>
-          </li>
-        ))}
+              <button
+                type="button"
+                disabled={rowBusy}
+                onClick={() => act(r.id, "dismiss")}
+                aria-label={`Dismiss the request from ${r.email}`}
+                className="press focus-ring inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs text-muted-foreground transition-colors duration-[var(--dur-fast)] hover:bg-accent hover:text-foreground disabled:opacity-50"
+              >
+                {rowBusy && busy?.kind === "dismiss" ? (
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                ) : (
+                  <X className="size-3.5" aria-hidden />
+                )}
+                Dismiss
+              </button>
+              <button
+                type="button"
+                disabled={rowBusy}
+                onClick={() => act(r.id, "grant")}
+                aria-label={`Grant access to ${r.email}`}
+                className="press focus-ring inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground shadow-[var(--shadow-raise)] transition-opacity duration-[var(--dur-fast)] hover:opacity-90 disabled:opacity-50"
+              >
+                {rowBusy && busy?.kind === "grant" ? (
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                ) : (
+                  <Check className="size-3.5" aria-hidden />
+                )}
+                Grant
+              </button>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );

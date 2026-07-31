@@ -50,7 +50,10 @@ function BreadcrumbLink({
   return (
     <Comp
       data-slot="breadcrumb-link"
-      className={cn("transition-colors hover:text-foreground", className)}
+      className={cn(
+        "rounded-sm transition-colors duration-[var(--dur-fast)] outline-none hover:text-foreground focus-visible:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50",
+        className
+      )}
       {...props}
     />
   )
@@ -82,9 +85,7 @@ function BreadcrumbSeparator({
       className={cn("[&>svg]:size-3.5", className)}
       {...props}
     >
-      {children ?? (
-        <ChevronRightIcon />
-      )}
+      {children ?? <ChevronRightIcon />}
     </li>
   )
 }
@@ -104,8 +105,7 @@ function BreadcrumbEllipsis({
       )}
       {...props}
     >
-      <MoreHorizontalIcon
-      />
+      <MoreHorizontalIcon />
       <span className="sr-only">More</span>
     </span>
   )

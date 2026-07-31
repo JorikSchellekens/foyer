@@ -77,7 +77,11 @@ export function RunProgress({ record }: { record: ActiveImport }) {
             {done} / {total}
           </span>
         </div>
-        <Progress value={pct} className="mt-3" />
+        <Progress
+          value={pct}
+          className="mt-3"
+          aria-label="Import progress"
+        />
         <p className="mt-3 min-h-4 truncate text-xs text-muted-foreground">
           {running
             ? (current ?? "Working...")

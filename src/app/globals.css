@@ -287,6 +287,20 @@
     animation: shimmer 1.6s var(--ease-in-out-soft) infinite;
   }
 
+  /*
+   * The viewer's chrome is permanently dark regardless of the visitor's theme,
+   * so .shimmer (which mixes its sheen from --foreground) inverts and vanishes
+   * there. This variant fixes the tone to a pale sheen.
+   */
+  .shimmer-on-dark::after {
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgb(255 255 255 / 0.07),
+      transparent
+    );
+  }
+
   /* Numbers that change in place (live counts, durations). */
   .tick-in {
     animation: tick-in var(--dur) var(--ease-out-quint) both;

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { UsersRound } from "lucide-react";
+import { Loader2, UsersRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -36,14 +36,29 @@ export function AccessTab({
   canManage: boolean;
 }) {
   return (
-    <div className="space-y-4">
-      <p className="max-w-2xl text-sm text-muted-foreground">
+    <div className="max-w-3xl space-y-4">
+      <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
         Who on your team can open and change this data room. Owners and admins
         always have full access. A member with no scoped access sees every room;
         grant a level here and they are limited to just the rooms you choose.
-        View lets them read, Edit lets them change contents, Manage lets them
-        delete the room.
       </p>
+
+      {/* The three levels stated once, so the per-row select does not have to
+          carry an explanation each time it appears. */}
+      <dl className="grid grid-cols-1 gap-x-6 gap-y-1 rounded-lg border bg-muted/30 px-4 py-3 text-xs sm:grid-cols-3">
+        {(
+          [
+            ["View", "Read the room and its files"],
+            ["Edit", "Add, remove and reorder contents"],
+            ["Manage", "Everything, including deleting the room"],
+          ] as const
+        ).map(([level, meaning]) => (
+          <div key={level}>
+            <dt className="font-medium">{level}</dt>
+            <dd className="text-muted-foreground">{meaning}</dd>
+          </div>
+        ))}
+      </dl>
 
       {members.length === 0 ? (
         <EmptyState
@@ -53,12 +68,13 @@ export function AccessTab({
         />
       ) : (
         <div className="space-y-1.5">
-          {members.map((m) => (
+          {members.map((m, i) => (
             <MemberRow
               key={m.id}
               dataroomId={dataroomId}
               member={m}
               canManage={canManage}
+              index={i}
             />
           ))}
         </div>
@@ -71,10 +87,12 @@ function MemberRow({
   dataroomId,
   member,
   canManage,
+  index,
 }: {
   dataroomId: string;
   member: MemberAccess;
   canManage: boolean;
+  index: number;
 }) {
   const router = useRouter();
   const [level, setLevel] = useState(member.level);
@@ -84,8 +102,11 @@ function MemberRow({
   const unrestricted = !member.restricted && level === "NONE";
 
   return (
-    <div className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3">
-      <span className="flex size-8 items-center justify-center rounded-full bg-primary/10 font-mono text-[11px] font-semibold text-primary">
+    <div
+      className="stagger-item flex items-center gap-3 rounded-lg border bg-card px-4 py-3 shadow-[var(--shadow-hairline)]"
+      style={{ "--i": Math.min(index, 10) } as React.CSSProperties}
+    >
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-[11px] font-semibold text-primary">
         {initials(member.name ?? member.email)}
       </span>
       <div className="min-w-0 flex-1">
@@ -131,8 +152,17 @@ function MemberRow({
           }}
           disabled={saving}
         >
-          <SelectTrigger className="h-8 w-32 text-xs">
-            <SelectValue />
+          <SelectTrigger
+            className="h-8 w-32 shrink-0 text-xs"
+            aria-label={`Access level for ${member.email}`}
+          >
+            {saving ? (
+              <span className="flex items-center gap-1.5 text-muted-foreground">
+                <Loader2 className="size-3 animate-spin" /> Saving…
+              </span>
+            ) : (
+              <SelectValue />
+            )}
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="NONE">No access</SelectItem>

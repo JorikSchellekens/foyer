@@ -4,7 +4,7 @@ import { requireTeam } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { PageHeader } from "@/components/shell/page-header";
 import { EmptyState } from "@/components/shell/empty-state";
-import { timeAgo, pluralize } from "@/lib/format";
+import { formatDateTime, timeAgo, pluralize } from "@/lib/format";
 import { teamMemberEmails, externalViews } from "@/lib/internal-views";
 import { ShareButton } from "@/components/links/quick-share";
 import { NewDataroomDialog } from "./new-dataroom";
@@ -53,24 +53,33 @@ export default async function DataroomsPage() {
           </EmptyState>
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {datarooms.map((dr) => (
+            {datarooms.map((dr, i) => (
               <Link
                 key={dr.id}
                 href={`/datarooms/${dr.id}`}
-                className="group relative rounded-lg border bg-card p-5 transition-colors hover:border-primary/40"
+                // .hover-raise owns the transform transition here, so no .press:
+                // its transition shorthand would reset the shadow/border easing.
+                className="stagger-item hover-raise group relative flex flex-col rounded-lg border bg-card p-5 outline-none hover:border-primary/40 focus-visible:border-primary/40 focus-visible:ring-3 focus-visible:ring-ring"
+                // Cap the cascade: a wall of rooms should not ripple for seconds.
+                style={{ "--i": Math.min(i, 10) } as React.CSSProperties}
               >
                 <div className="flex items-start justify-between">
                   <FolderLock
                     className="size-5 text-primary"
                     strokeWidth={1.5}
+                    aria-hidden
                   />
                   <div className="flex items-center gap-1">
-                    <span className="text-xs text-muted-foreground">
+                    <time
+                      dateTime={dr.updatedAt.toISOString()}
+                      title={formatDateTime(dr.updatedAt)}
+                      className="font-mono text-xs text-muted-foreground tabular"
+                    >
                       {timeAgo(dr.updatedAt)}
-                    </span>
+                    </time>
                     <ShareButton
                       target={{ type: "DATAROOM", id: dr.id }}
-                      className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                      className="opacity-0 transition-opacity duration-[var(--dur)] ease-[var(--ease-out-soft)] group-hover:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100"
                     />
                   </div>
                 </div>
@@ -82,17 +91,19 @@ export default async function DataroomsPage() {
                     {dr.description}
                   </p>
                 )}
-                <div className="mt-4 flex items-center gap-4 text-xs text-muted-foreground">
-                  <span className="inline-flex items-center gap-1">
-                    <FileText className="size-3.5" />
+                {/* Counts pinned to the card foot so a grid of cards keeps one
+                    baseline whether or not a room has a description. */}
+                <div className="mt-4 flex items-center gap-4 font-mono text-xs text-muted-foreground tabular md:mt-auto md:pt-4">
+                  <span className="inline-flex items-center gap-1.5">
+                    <FileText className="size-3.5" aria-hidden />
                     {pluralize(dr._count.documents, "file")}
                   </span>
-                  <span className="inline-flex items-center gap-1">
-                    <Link2 className="size-3.5" />
+                  <span className="inline-flex items-center gap-1.5">
+                    <Link2 className="size-3.5" aria-hidden />
                     {pluralize(dr._count.links, "link")}
                   </span>
-                  <span className="inline-flex items-center gap-1">
-                    <Eye className="size-3.5" />
+                  <span className="inline-flex items-center gap-1.5">
+                    <Eye className="size-3.5" aria-hidden />
                     {pluralize(dr._count.views, "visit")}
                   </span>
                 </div>
