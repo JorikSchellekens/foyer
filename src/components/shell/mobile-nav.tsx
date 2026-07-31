@@ -16,6 +16,7 @@ import { initials } from "@/lib/format";
 import { switchTeam } from "@/app/(app)/actions";
 import { FoyerLogo } from "@/components/brand/logo";
 import { ThemeToggle } from "@/components/shell/theme-toggle";
+import { NotificationBell } from "@/components/shell/notification-bell";
 import { navIconClasses, navItemClasses } from "@/components/shell/nav-item";
 import { NAV } from "./sidebar";
 
@@ -183,6 +184,9 @@ export function MobileNav({
       >
         <Search className="size-4" />
       </button>
+      {/* Same reach as the desktop sidebar's: notifications are the one thing
+          you check on a phone, and the sidebar that holds them is hidden. */}
+      <NotificationBell className={BAR_ICON} align="end" />
       <ThemeToggle className={BAR_ICON} />
     </header>
   );

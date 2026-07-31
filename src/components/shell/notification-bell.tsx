@@ -33,22 +33,52 @@ const ICON: Record<string, typeof Bell> = {
   access_requested: KeyRound,
 };
 
-export function NotificationBell() {
+/**
+ * The desktop sidebar and the mobile header each carry a bell and CSS decides
+ * which one the visitor sees - but both mount, at every viewport. Sharing the
+ * in-flight request means the hidden twin costs nothing instead of doubling
+ * the notification load on every page.
+ */
+let inFlight: ReturnType<typeof loadNotifications> | null = null;
+
+function loadShared() {
+  if (!inFlight) {
+    inFlight = loadNotifications();
+    inFlight.finally(() => {
+      inFlight = null;
+    });
+  }
+  return inFlight;
+}
+
+export function NotificationBell({
+  className,
+  /** "end" where the bell sits at the right edge, so the panel opens inward. */
+  align = "start",
+}: {
+  className?: string;
+  align?: "start" | "end";
+}) {
   const router = useRouter();
   const [rows, setRows] = useState<NotificationRow[]>([]);
   const [unread, setUnread] = useState(0);
 
   async function refresh() {
-    const data = await loadNotifications();
+    const data = await loadShared();
     setRows(data.rows);
     setUnread(data.unread);
   }
 
   useEffect(() => {
-    loadNotifications().then((data) => {
+    let alive = true;
+    loadShared().then((data) => {
+      if (!alive) return;
       setRows(data.rows);
       setUnread(data.unread);
     });
+    return () => {
+      alive = false;
+    };
   }, []);
 
   async function onOpenChange(open: boolean) {
@@ -69,7 +99,8 @@ export function NotificationBell() {
           "focus-ring relative inline-flex size-8 items-center justify-center rounded-md text-muted-foreground",
           "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out-soft)]",
           "hover:bg-sidebar-accent hover:text-sidebar-foreground",
-          "data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-foreground"
+          "data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-foreground",
+          className
         )}
         title="Notifications"
         aria-label={
@@ -88,7 +119,7 @@ export function NotificationBell() {
           </span>
         )}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-80 p-0">
+      <DropdownMenuContent align={align} className="w-80 max-w-[calc(100vw-1.5rem)] p-0">
         <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
           <span className="text-sm font-medium">Notifications</span>
           {unread > 0 && (
