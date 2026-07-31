@@ -14,7 +14,7 @@ function safeEqual(a: string, b: string): boolean {
  * reminders. Hit daily by an external scheduler, same contract as
  * /api/cron/digest:
  *
- *   curl -H "authorization: Bearer $CRON_SECRET" https://foyer.boop.it/api/cron/signatures
+ *   curl -H "authorization: Bearer $CRON_SECRET" https://data.boop.it/api/cron/signatures
  */
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET;

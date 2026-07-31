@@ -25,6 +25,7 @@ services:
       S3_BUCKET: foyer
       S3_FORCE_PATH_STYLE: "true"
       CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
+      LEGACY_APP_HOSTS: ${LEGACY_APP_HOSTS:-}
     depends_on:
       db:
         condition: service_healthy

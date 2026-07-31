@@ -14,7 +14,7 @@ function safeEqual(a: string, b: string): boolean {
  * Weekly engagement digest. Meant to be hit by a scheduler (Coolify cron,
  * GitHub Actions, cron-job.org, etc.) once a week with the shared secret:
  *
- *   curl -H "authorization: Bearer $CRON_SECRET" https://foyer.boop.it/api/cron/digest
+ *   curl -H "authorization: Bearer $CRON_SECRET" https://data.boop.it/api/cron/digest
  *
  * Refuses to run unless CRON_SECRET is set and matches, so the endpoint is not
  * publicly triggerable.

@@ -1,21 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
 
 /**
+ * Hosts the app used to answer on. They still resolve here, so send them to
+ * the current one permanently rather than letting the custom-domain rewrite
+ * below mistake them for a viewer domain. Comma-separated, bare hosts.
+ */
+const LEGACY_HOSTS = (process.env.LEGACY_APP_HOSTS ?? "")
+  .split(",")
+  .map((h) => h.trim().toLowerCase())
+  .filter(Boolean);
+
+/**
  * Custom domains serve only the viewer: dataroom.acme.com/<slug> is rewritten
  * to /view/<slug>; the app itself stays on the primary host.
  */
 export function middleware(req: NextRequest) {
   const host = req.headers.get("host") ?? "";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const appHost = (() => {
     try {
-      return new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000")
-        .host;
+      return new URL(appUrl).host;
     } catch {
       return "localhost:3000";
     }
   })();
 
   const hostname = host.split(":")[0];
+
+  if (LEGACY_HOSTS.includes(hostname)) {
+    const { pathname, search } = req.nextUrl;
+    return NextResponse.redirect(new URL(`${pathname}${search}`, appUrl), 301);
+  }
+
   const isPrimary =
     host === appHost ||
     hostname === "localhost" ||

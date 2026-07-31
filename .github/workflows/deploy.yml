@@ -1,7 +1,10 @@
 name: Deploy to Coolify
 
 # Autodeploys pushes to main onto the boop-dev Coolify instance
-# (https://foyer.boop.it). Uses a deploy-scoped Coolify token.
+# (https://data.boop.it). Uses a deploy-scoped Coolify token.
+#
+# The old host, foyer.boop.it, still resolves here and is 301'd to data.boop.it
+# by the middleware; it is listed in the LEGACY_APP_HOSTS env var in Coolify.
 
 on:
   push:
