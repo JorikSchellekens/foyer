@@ -14,6 +14,7 @@ export function ImageHeatmap({
   const wrapRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const [loaded, setLoaded] = useState(false);
+  const [painted, setPainted] = useState(false);
 
   useEffect(() => {
     if (!loaded) return;
@@ -31,6 +32,7 @@ export function ImageHeatmap({
       ctx.scale(dpr, dpr);
       ctx.clearRect(0, 0, w, h);
       paintHeat(ctx, w, h, samples);
+      setPainted(true);
     };
     paint();
     const obs = new ResizeObserver(paint);
@@ -41,7 +43,7 @@ export function ImageHeatmap({
   return (
     <div
       ref={wrapRef}
-      className="relative inline-block max-w-xl overflow-hidden rounded-md border shadow-sm"
+      className="reveal relative inline-block max-w-xl overflow-hidden rounded-md border shadow-[var(--shadow-hairline)]"
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
@@ -52,7 +54,8 @@ export function ImageHeatmap({
       />
       <canvas
         ref={overlayRef}
-        className="pointer-events-none absolute inset-0 h-full w-full"
+        data-painted={painted}
+        className="pointer-events-none absolute inset-0 h-full w-full opacity-0 transition-opacity duration-[var(--dur-reveal)] ease-[var(--ease-out-soft)] data-[painted=true]:opacity-100"
       />
     </div>
   );

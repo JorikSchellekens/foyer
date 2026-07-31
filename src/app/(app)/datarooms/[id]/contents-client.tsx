@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -30,6 +31,16 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -43,12 +54,14 @@ import { TableCell, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { FileIcon } from "@/components/shell/file-icon";
 import {
-  putWithProgress,
+  presignAndPut,
+  relativeDirOf,
   useLeaveGuard,
   UploadingOverlay,
+  type UploadFileState,
   type UploadProgress,
 } from "@/components/upload/uploader";
-import { formatBytes, timeAgo, pluralize } from "@/lib/format";
+import { formatBytes, formatDateTime, timeAgo, pluralize } from "@/lib/format";
 import {
   addDocumentsToDataroom,
   addNotionToDataroom,
@@ -59,7 +72,6 @@ import {
   reorderDataroomContents,
   uploadIntoDataroom,
 } from "../actions";
-import type { UploadedFile } from "@/app/(app)/documents/actions";
 import {
   DR_DOC_MIME,
   DR_FOLDER_MIME,
@@ -108,8 +120,9 @@ export function CrumbDropLink({
         if (await handleMoveDrop(e, dataroomId, folderId)) router.refresh();
       }}
       className={cn(
+        "focus-ring rounded-sm transition-[background-color,box-shadow] duration-[var(--dur-fast)] ease-[var(--ease-out-soft)]",
         className,
-        over && "rounded-sm bg-primary/10 ring-2 ring-primary/60"
+        over && "bg-primary/10 ring-2 ring-primary/60"
       )}
     >
       {children}
@@ -128,6 +141,7 @@ export function NewDrFolderButton({
 }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
   const router = useRouter();
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -136,32 +150,57 @@ export function NewDrFolderButton({
           <FolderPlus className="size-4" /> New folder
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent
+        className="sm:max-w-sm"
+        onInteractOutside={(e) => {
+          if (name.trim()) e.preventDefault();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>New folder</DialogTitle>
+          <DialogDescription>
+            Folders are what your visitors see as the index of this room.
+          </DialogDescription>
         </DialogHeader>
         <form
           action={async () => {
-            const res = await createDataroomFolder(dataroomId, name, parentId);
-            if (res?.error) {
-              toast.error(res.error);
-              return;
+            setBusy(true);
+            try {
+              const res = await createDataroomFolder(
+                dataroomId,
+                name,
+                parentId
+              );
+              if (res?.error) {
+                toast.error(res.error);
+                return;
+              }
+              toast.success(`Created ${name}`);
+              setOpen(false);
+              setName("");
+              router.refresh();
+            } finally {
+              setBusy(false);
             }
-            setOpen(false);
-            setName("");
-            router.refresh();
           }}
           className="space-y-4"
         >
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Financials"
-            autoFocus
-            required
-          />
+          <div className="space-y-1.5">
+            <Label htmlFor="dr-folder-name">Folder name</Label>
+            <Input
+              id="dr-folder-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Financials"
+              autoFocus
+              required
+            />
+          </div>
           <DialogFooter>
-            <Button type="submit">Create folder</Button>
+            <Button type="submit" disabled={busy || !name.trim()}>
+              {busy && <Loader2 className="size-4 animate-spin" />}
+              {busy ? "Creating…" : "Create folder"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -260,66 +299,40 @@ export function DataroomUploadButtons({
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
 
+  // Shares the library uploader's transfer loop, so a dataroom upload gets the
+  // same per-file progress and the same "one bad file does not sink the batch"
+  // behaviour rather than a second, weaker implementation of both.
   async function handle(fileList: FileList) {
-    const files = Array.from(fileList).filter(
-      (f) => f.size > 0 && !f.name.startsWith(".")
-    );
+    const files = Array.from(fileList)
+      .filter((f) => f.size > 0 && !f.name.startsWith("."))
+      .map((file) => ({ file, relativeDir: relativeDirOf(file) }));
     if (!files.length) return;
-    setProgress({ done: 0, total: files.length, pct: 0 });
+    const states: UploadFileState[] = files.map(({ file }) => ({
+      name: file.name,
+      size: file.size,
+      pct: 0,
+      status: "queued",
+    }));
+    let failures = 0;
+    setProgress({ done: 0, total: files.length, pct: 0, files: [...states] });
     try {
-      const res = await fetch("/api/upload/presign", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          files: files.map((f) => ({
-            name: f.name,
-            contentType: f.type || "application/octet-stream",
-          })),
-        }),
-      });
-      if (!res.ok) throw new Error("Could not prepare the upload.");
-      const { files: signed } = await res.json();
-
-      const totalBytes = files.reduce((s, f) => s + f.size, 0) || 1;
-      const loaded = new Array(files.length).fill(0);
-      const uploads: UploadedFile[] = [];
-      let done = 0;
-      const report = () => {
-        const sum = loaded.reduce((s: number, n: number) => s + n, 0);
-        setProgress({
-          done,
-          total: files.length,
-          pct: Math.min(100, Math.round((sum / totalBytes) * 100)),
-        });
-      };
-      let next = 0;
-      const runOne = async () => {
-        while (next < files.length) {
-          const i = next++;
-          await putWithProgress(signed[i].url, files[i], (b) => {
-            loaded[i] = b;
-            report();
-          });
-          const rel = (files[i] as File & { webkitRelativePath?: string })
-            .webkitRelativePath;
-          const relDir = rel ? rel.split("/").slice(0, -1).join("/") : "";
-          uploads.push({
-            key: signed[i].key,
-            name: files[i].name,
-            size: files[i].size,
-            contentType: files[i].type || "application/octet-stream",
-            relativeDir: relDir,
-          });
-          done++;
-          report();
+      const uploads = await presignAndPut(
+        files,
+        (done, pct) =>
+          setProgress({ done, total: files.length, pct, files: [...states] }),
+        (i, s) => {
+          states[i] = { ...states[i], ...s };
+          if (s.status === "failed") failures += 1;
         }
-      };
-      await Promise.all(Array.from({ length: 4 }, runOne));
-
+      );
       const result = await uploadIntoDataroom(dataroomId, uploads, folderId);
       if (result && "error" in result && result.error)
         throw new Error(result.error);
-      toast.success(`Added ${files.length} file${files.length === 1 ? "" : "s"}`);
+      if (failures > 0)
+        toast.warning(
+          `Added ${pluralize(uploads.length, "file")}. ${failures} did not upload; try those again.`
+        );
+      else toast.success(`Added ${pluralize(uploads.length, "file")}`);
       router.refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Upload failed.");
@@ -408,11 +421,18 @@ export function AddFromLibraryDialog({
             new versions.
           </DialogDescription>
         </DialogHeader>
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search documents…"
-        />
+        <div className="space-y-1.5">
+          <Label htmlFor="library-search" className="sr-only">
+            Search documents
+          </Label>
+          <Input
+            id="library-search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search documents…"
+            autoFocus
+          />
+        </div>
         <ScrollArea className="h-64 rounded-md border">
           <div className="p-1.5">
             {filtered.length === 0 && (
@@ -448,6 +468,14 @@ export function AddFromLibraryDialog({
           </div>
         </ScrollArea>
         <DialogFooter>
+          <span
+            aria-live="polite"
+            className="mr-auto self-center text-xs text-muted-foreground tabular"
+          >
+            {selected.size > 0
+              ? `${pluralize(selected.size, "document")} selected`
+              : `${pluralize(filtered.length, "document")} available`}
+          </span>
           <Button
             disabled={selected.size === 0 || busy}
             onClick={async () => {
@@ -470,7 +498,8 @@ export function AddFromLibraryDialog({
               }
             }}
           >
-            Add {selected.size > 0 ? selected.size : ""} selected
+            {busy && <Loader2 className="size-4 animate-spin" />}
+            {busy ? "Adding…" : "Add to data room"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -625,12 +654,13 @@ export function ContentsRows({
 
   return (
     <>
-      {order.map((item) =>
+      {order.map((item, i) =>
         item.kind === "folder" ? (
           <FolderRowView
             key={rowKey(item)}
             dataroomId={dataroomId}
             folder={item}
+            index={i}
             {...dragProps(item)}
           />
         ) : (
@@ -638,6 +668,7 @@ export function ContentsRows({
             key={rowKey(item)}
             doc={item}
             dataroomId={dataroomId}
+            index={i}
             {...dragProps(item)}
           />
         )
@@ -659,30 +690,33 @@ type RowDragProps = {
 function FolderRowView({
   dataroomId,
   folder,
+  index,
   dragging,
   zone,
   ...drag
 }: {
   dataroomId: string;
   folder: Extract<DrItem, { kind: "folder" }>;
+  index: number;
 } & RowDragProps) {
   const router = useRouter();
   const [renameOpen, setRenameOpen] = useState(false);
+  const [removeOpen, setRemoveOpen] = useState(false);
   const [name, setName] = useState(folder.name);
+  const href = `/datarooms/${dataroomId}?folder=${folder.id}`;
   return (
     <TableRow
       className={cn(
-        "group cursor-pointer",
+        "stagger-item group cursor-pointer",
         dragging && "opacity-40",
         zone === "into" && "bg-primary/5 ring-2 ring-inset ring-primary/60",
         zone === "before" && "border-t-2 border-t-primary",
         zone === "after" && "border-b-2 border-b-primary"
       )}
+      style={{ "--i": Math.min(index, 10) } as React.CSSProperties}
       draggable
       {...drag}
-      onClick={() =>
-        router.push(`/datarooms/${dataroomId}?folder=${folder.id}`)
-      }
+      onClick={() => router.push(href)}
     >
       <TableCell>
         <div className="flex items-center gap-2.5">
@@ -690,11 +724,21 @@ function FolderRowView({
             className="size-4 shrink-0 cursor-grab text-muted-foreground/40 transition-colors group-hover:text-muted-foreground active:cursor-grabbing"
             onClick={(e) => e.stopPropagation()}
           />
-          <Folder className="size-4 text-[#b7791f]" strokeWidth={1.5} />
-          <span className="font-medium">{folder.name}</span>
+          <Folder className="size-4 shrink-0 text-[#b7791f]" strokeWidth={1.5} />
+          {/* A real link so the keyboard can reach it; the row keeps its
+              click-anywhere behaviour for the mouse. draggable={false} stops
+              the anchor's native drag from stealing the row's onDragStart. */}
+          <Link
+            href={href}
+            draggable={false}
+            onClick={(e) => e.stopPropagation()}
+            className="focus-ring underline-grow rounded-sm font-medium"
+          >
+            {folder.name}
+          </Link>
         </div>
       </TableCell>
-      <TableCell className="text-muted-foreground">
+      <TableCell className="text-muted-foreground tabular">
         {pluralize(folder.itemCount, "item")}
       </TableCell>
       <TableCell />
@@ -703,8 +747,8 @@ function FolderRowView({
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
-              size="icon"
-              className="size-7"
+              size="icon-sm"
+              aria-label={`Actions for ${folder.name}`}
               onClick={(e) => e.stopPropagation()}
             >
               <MoreHorizontal className="size-4" />
@@ -717,10 +761,7 @@ function FolderRowView({
             <DropdownMenuSeparator />
             <DropdownMenuItem
               variant="destructive"
-              onClick={async () => {
-                await deleteDataroomFolder(dataroomId, folder.id);
-                router.refresh();
-              }}
+              onClick={() => setRemoveOpen(true)}
             >
               <Trash2 className="size-4" /> Remove folder
             </DropdownMenuItem>
@@ -742,17 +783,49 @@ function FolderRowView({
               }}
               className="space-y-4"
             >
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                autoFocus
-              />
+              <div className="space-y-1.5">
+                <Label htmlFor={`rename-${folder.id}`}>Folder name</Label>
+                <Input
+                  id={`rename-${folder.id}`}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  autoFocus
+                />
+              </div>
               <DialogFooter>
-                <Button type="submit">Save name</Button>
+                <Button type="submit" disabled={!name.trim()}>
+                  Save name
+                </Button>
               </DialogFooter>
             </form>
           </DialogContent>
         </Dialog>
+        <AlertDialog open={removeOpen} onOpenChange={setRemoveOpen}>
+          <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove “{folder.name}”?</AlertDialogTitle>
+              <AlertDialogDescription>
+                The folder and the {pluralize(folder.itemCount, "item")} inside
+                it leave this data room, and visitors stop seeing them. The
+                documents themselves stay in your library.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Keep folder</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-white hover:bg-destructive/90"
+                onClick={async () => {
+                  await deleteDataroomFolder(dataroomId, folder.id);
+                  toast.success(`Removed ${folder.name}`);
+                  router.refresh();
+                }}
+              >
+                Remove folder
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </TableCell>
     </TableRow>
   );
@@ -761,25 +834,29 @@ function FolderRowView({
 function DocRowView({
   doc,
   dataroomId,
+  index,
   dragging,
   zone,
   ...drag
 }: {
   doc: Extract<DrItem, { kind: "doc" }>;
   dataroomId: string;
+  index: number;
 } & RowDragProps) {
   const router = useRouter();
+  const href = `/documents/${doc.documentId}`;
   return (
     <TableRow
       className={cn(
-        "group cursor-pointer transition-colors",
+        "stagger-item group cursor-pointer transition-colors",
         dragging && "opacity-40",
         zone === "before" && "border-t-2 border-t-primary",
         zone === "after" && "border-b-2 border-b-primary"
       )}
+      style={{ "--i": Math.min(index, 10) } as React.CSSProperties}
       draggable
       {...drag}
-      onClick={() => router.push(`/documents/${doc.documentId}`)}
+      onClick={() => router.push(href)}
     >
       <TableCell>
         <div className="flex items-center gap-2.5">
@@ -788,21 +865,38 @@ function DocRowView({
             onClick={(e) => e.stopPropagation()}
           />
           <FileIcon type={doc.type} />
-          <span className="font-medium">{doc.name}</span>
+          {/* See FolderRowView: link for the keyboard, draggable={false} so the
+              row's own drag source is not shadowed by the anchor's. */}
+          <Link
+            href={href}
+            draggable={false}
+            onClick={(e) => e.stopPropagation()}
+            className="focus-ring underline-grow min-w-0 truncate rounded-sm font-medium"
+          >
+            {doc.name}
+          </Link>
         </div>
       </TableCell>
-      <TableCell className="text-muted-foreground">
+      <TableCell
+        className="font-mono text-xs text-muted-foreground tabular"
+        title={doc.type === "NOTION" ? undefined : `${doc.size} bytes`}
+      >
         {doc.type === "NOTION" ? "Notion" : formatBytes(doc.size)}
       </TableCell>
-      <TableCell className="text-xs text-muted-foreground">
+      <TableCell
+        className="text-xs text-muted-foreground"
+        title={formatDateTime(doc.addedAt)}
+      >
         added {timeAgo(doc.addedAt)}
       </TableCell>
-      <TableCell className="text-right">
+      <TableCell className="text-right whitespace-nowrap">
+        {/* Reserved space: the secondary action fades in rather than appearing,
+            so hovering a row never reflows it. */}
         <Button
           variant="ghost"
-          size="icon"
-          className="size-7 opacity-0 transition-opacity group-hover:opacity-100"
-          title="Preview"
+          size="icon-sm"
+          aria-label={`Preview ${doc.name}`}
+          className="opacity-0 transition-opacity duration-[var(--dur-fast)] group-hover:opacity-100 focus-visible:opacity-100"
           onClick={(e) => {
             e.stopPropagation();
             router.push(`/documents/${doc.documentId}/preview`);
@@ -812,13 +906,13 @@ function DocRowView({
         </Button>
         <Button
           variant="ghost"
-          size="icon"
-          className="size-7"
-          title="Remove from data room"
+          size="icon-sm"
+          aria-label={`Remove ${doc.name} from this data room`}
+          className="text-muted-foreground hover:text-destructive"
           onClick={async (e) => {
             e.stopPropagation();
             await removeFromDataroom(dataroomId, doc.id);
-            toast.success("Removed from data room");
+            toast.success(`Removed ${doc.name} from this data room`);
             router.refresh();
           }}
         >

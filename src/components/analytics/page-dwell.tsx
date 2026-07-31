@@ -51,9 +51,11 @@ export function PageDwell({
 
   if (pages.length === 0)
     return (
-      <p className="px-1 py-6 text-sm text-muted-foreground">
-        Page-level timing appears after the first visit.
-      </p>
+      <div className="rounded-md border border-dashed px-4 py-8 text-center">
+        <p className="text-sm text-muted-foreground">
+          Page-level timing appears after the first visit.
+        </p>
+      </div>
     );
 
   const max = Math.max(...pages.map((p) => p.avgSeconds), 1);
@@ -61,9 +63,11 @@ export function PageDwell({
   const A = aspect ?? 8.5 / 11; // US Letter portrait until the first loads
   const H = 54;
   const W = Math.round(H * A);
+  // Keep the whole strip inside one reveal, however many pages there are.
+  const step = Math.min(0.025, 0.9 / pages.length);
 
   return (
-    <div className="space-y-0.5">
+    <ul className="space-y-0.5">
       {pages.map((p, i) => {
         const pct = Math.max(
           (p.avgSeconds / max) * 100,
@@ -71,15 +75,15 @@ export function PageDwell({
         );
         const hot = p.pageNumber === topPage.pageNumber && p.avgSeconds > 0;
         return (
-          <div
+          <li
             key={p.pageNumber}
-            className="group flex items-center gap-3 rounded-lg px-2 py-1.5 transition-colors hover:bg-accent/40"
+            className="group flex items-center gap-3 rounded-lg px-2 py-1.5 transition-colors duration-[var(--dur)] ease-[var(--ease-out-soft)] hover:bg-accent/40"
           >
-            <span className="w-6 shrink-0 text-right font-mono text-[11px] tabular-nums text-muted-foreground transition-colors group-hover:text-foreground">
+            <span className="w-6 shrink-0 text-right font-mono text-[11px] tabular text-muted-foreground transition-colors group-hover:text-foreground">
               {p.pageNumber}
             </span>
             <div
-              className="shrink-0 overflow-hidden rounded-md border bg-card shadow-sm transition group-hover:border-primary/60 group-hover:shadow-md"
+              className="shrink-0 overflow-hidden rounded-md border bg-card transition duration-[var(--dur)] ease-[var(--ease-out-soft)] group-hover:border-primary/60 group-hover:shadow-[var(--shadow-raise)]"
               style={{ width: W, height: H }}
             >
               {hasThumbs ? (
@@ -107,7 +111,7 @@ export function PageDwell({
             <div className="min-w-0 flex-1">
               <div className="mb-1.5 flex items-baseline justify-between gap-2">
                 <span
-                  className={`font-mono text-sm tabular-nums ${
+                  className={`font-mono text-sm tabular ${
                     hot ? "text-primary" : "text-foreground"
                   }`}
                 >
@@ -115,26 +119,35 @@ export function PageDwell({
                   <span className="ml-1 text-[11px] font-normal text-muted-foreground">
                     avg
                   </span>
+                  {/* The longest-read page is named, not just tinted. */}
+                  {hot && pages.length > 1 && (
+                    <span className="ml-1.5 text-[11px] font-normal uppercase tracking-wide text-primary">
+                      longest
+                    </span>
+                  )}
                 </span>
                 <span className="shrink-0 text-xs text-muted-foreground">
                   {p.views} {p.views === 1 ? "reader" : "readers"}
                 </span>
               </div>
-              <div className="h-2 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-2 overflow-hidden rounded-full bg-muted"
+                aria-hidden
+              >
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-primary/70 to-primary"
+                  className="h-full rounded-full bg-primary"
                   style={{
                     width: `${reduce || shown ? pct : 0}%`,
                     transition: reduce
                       ? undefined
-                      : `width .6s cubic-bezier(.22,.61,.36,1) ${(0.05 + i * 0.025).toFixed(3)}s`,
+                      : `width var(--dur-reveal) var(--ease-out-quint) ${(0.05 + i * step).toFixed(3)}s`,
                   }}
                 />
               </div>
             </div>
-          </div>
+          </li>
         );
       })}
-    </div>
+    </ul>
   );
 }

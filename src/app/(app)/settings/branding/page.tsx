@@ -1,6 +1,7 @@
 import { requireTeam } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { BrandingForm } from "@/components/branding/branding-form";
+import { SettingsIntro } from "../section";
 
 export default async function BrandingSettingsPage() {
   const ctx = await requireTeam();
@@ -9,14 +10,11 @@ export default async function BrandingSettingsPage() {
   });
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="font-display text-xl">Global branding</h2>
-        <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-          Applied to every direct link and data room. Each data room can
-          override this on its own Branding tab.
-        </p>
-      </div>
+    <div className="space-y-6">
+      <SettingsIntro
+        title="Global branding"
+        description="Applied to every direct link and data room. Each data room can override this on its own Branding tab."
+      />
       <BrandingForm
         initial={
           branding

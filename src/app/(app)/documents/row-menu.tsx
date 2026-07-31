@@ -55,13 +55,17 @@ export function RowMenu({
           <Button
             variant="ghost"
             size="icon"
-            className="size-7"
+            aria-label={`More actions for ${name}`}
             onClick={(e) => e.stopPropagation()}
           >
             <MoreHorizontal className="size-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+        <DropdownMenuContent
+          align="end"
+          sideOffset={4}
+          onClick={(e) => e.stopPropagation()}
+        >
           {extraItems && (
             <>
               {extraItems}
@@ -87,7 +91,7 @@ export function RowMenu({
           onClick={(e) => e.stopPropagation()}
         >
           <DialogHeader>
-            <DialogTitle>Rename</DialogTitle>
+            <DialogTitle className="truncate">Rename “{name}”</DialogTitle>
           </DialogHeader>
           <form
             action={async () => {
@@ -98,6 +102,7 @@ export function RowMenu({
             className="space-y-4"
           >
             <Input
+              aria-label="New name"
               value={value}
               onChange={(e) => setValue(e.target.value)}
               autoFocus

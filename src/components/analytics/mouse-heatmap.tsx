@@ -1,6 +1,34 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+
+/**
+ * The attention ramp: one hue, pale green to library green. Single-hue
+ * sequential so intensity reads as order (and survives colour-vision
+ * deficiency and greyscale print); a rainbow would invent categories that the
+ * data does not have. Stops are the chart tokens' light-mode values, because
+ * the heat is always painted over a light page render, never over the app
+ * surface.
+ */
+const HEAT_STOPS: [number, number, number][] = [
+  [163, 196, 181], // --chart-3
+  [78, 139, 116], // --chart-2
+  [23, 91, 71], // --chart-1
+];
+const HEAT_MAX_ALPHA = 0.62; // the page underneath must stay readable
+
+function heatColor(t: number) {
+  const p = t * (HEAT_STOPS.length - 1);
+  const i = Math.min(Math.floor(p), HEAT_STOPS.length - 2);
+  const k = p - i;
+  const a = HEAT_STOPS[i];
+  const b = HEAT_STOPS[i + 1];
+  return [
+    a[0] + (b[0] - a[0]) * k,
+    a[1] + (b[1] - a[1]) * k,
+    a[2] + (b[2] - a[2]) * k,
+  ] as const;
+}
 
 /**
  * Paint attention density onto a canvas sized w×h (CSS pixels). Exported so
@@ -30,35 +58,51 @@ export function paintHeat(
     hctx.fill();
   }
 
-  // colorize alpha -> green→amber→oxblood ramp
+  // colorize accumulated alpha through the single-hue green ramp
   const img = hctx.getImageData(0, 0, w, h);
   const out = ctx.createImageData(w, h);
   for (let i = 0; i < img.data.length; i += 4) {
     const a = img.data[i + 3] / 255;
     if (a <= 0.02) continue;
     const t = Math.min(a * 1.8, 1);
-    let r: number, g: number, b: number;
-    if (t < 0.5) {
-      const k = t / 0.5;
-      r = 23 + (183 - 23) * k;
-      g = 91 + (121 - 91) * k;
-      b = 71 + (31 - 71) * k;
-    } else {
-      const k = (t - 0.5) / 0.5;
-      r = 183 + (147 - 183) * k;
-      g = 121 + (50 - 121) * k;
-      b = 31;
-    }
+    const [r, g, b] = heatColor(t);
     out.data[i] = r;
     out.data[i + 1] = g;
     out.data[i + 2] = b;
-    out.data[i + 3] = Math.min(t * 210, 210);
+    // Alpha climbs with intensity too, so the faintest attention is a wash.
+    out.data[i + 3] = Math.round(Math.pow(t, 0.85) * HEAT_MAX_ALPHA * 255);
   }
   const overlay = document.createElement("canvas");
   overlay.width = w;
   overlay.height = h;
   overlay.getContext("2d")!.putImageData(out, 0, 0);
   ctx.drawImage(overlay, 0, 0);
+}
+
+/**
+ * The ramp, spelled out. Attention maps encode one thing - how long the cursor
+ * lingered - and the reader has no way to know that from the wash alone.
+ */
+export function HeatLegend({ className = "" }: { className?: string }) {
+  return (
+    <div
+      className={`flex items-center gap-2 text-xs text-muted-foreground ${className}`}
+    >
+      <span>Cursor dwell</span>
+      <span className="text-[11px]">brief</span>
+      <span
+        aria-hidden
+        className="h-2 w-24 rounded-full border"
+        style={{
+          background: `linear-gradient(90deg, ${HEAT_STOPS.map(
+            ([r, g, b], i) =>
+              `rgb(${r} ${g} ${b} / ${(0.25 + 0.6 * (i / (HEAT_STOPS.length - 1))).toFixed(2)})`
+          ).join(", ")})`,
+        }}
+      />
+      <span className="text-[11px]">sustained</span>
+    </div>
+  );
 }
 
 /**
@@ -73,6 +117,7 @@ export function MouseHeatmap({
   aspect?: number;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [painted, setPainted] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -101,7 +146,14 @@ export function MouseHeatmap({
     }
 
     paintHeat(ctx, w, h, samples);
+    setPainted(true);
   }, [samples, aspect]);
 
-  return <canvas ref={canvasRef} className="w-full rounded-md" />;
+  return (
+    <canvas
+      ref={canvasRef}
+      className="w-full rounded-md border opacity-0 transition-opacity duration-[var(--dur-reveal)] ease-[var(--ease-out-soft)] data-[painted=true]:opacity-100"
+      data-painted={painted}
+    />
+  );
 }

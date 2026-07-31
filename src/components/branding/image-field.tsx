@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { toast } from "sonner";
 import { ImageIcon, Loader2, Upload } from "lucide-react";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 
 export async function uploadImage(file: File): Promise<string | null> {
   if (file.size > 2 * 1024 * 1024) {
@@ -48,56 +49,100 @@ export function ImageField({
   wide?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
+  const [over, setOver] = useState(false);
+  const inputId = useId();
+
+  async function take(file: File | undefined) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("That is not an image file.");
+      return;
+    }
+    setBusy(true);
+    const key = await uploadImage(file);
+    setBusy(false);
+    if (key) onChange(key);
+  }
+
   return (
     <div className="space-y-1.5">
-      <Label>{label}</Label>
+      <Label htmlFor={inputId}>{label}</Label>
       <div className="flex items-center gap-3">
-        <div
-          className={`flex items-center justify-center overflow-hidden rounded-md border bg-muted/40 ${
+        {/* The preview doubles as a drop target: dragging a logo onto the
+            thumbnail is the obvious gesture, so accept it. */}
+        <label
+          htmlFor={inputId}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setOver(true);
+          }}
+          onDragLeave={() => setOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setOver(false);
+            void take(e.dataTransfer.files?.[0]);
+          }}
+          className={cn(
+            "relative flex shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-md border bg-muted/40 transition-[border-color,background-color,box-shadow] duration-[var(--dur)] ease-[var(--ease-out-soft)] hover:border-input",
+            over && "border-primary bg-accent",
             wide ? "h-16 w-40" : "size-16"
-          }`}
+          )}
         >
           {value ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={`/api/assets/${value}`}
               alt=""
-              className="h-full w-full object-contain"
+              className="reveal h-full w-full object-contain"
             />
           ) : (
-            <ImageIcon className="size-5 text-muted-foreground/50" />
+            <ImageIcon
+              className="size-5 text-muted-foreground/50"
+              strokeWidth={1.5}
+            />
           )}
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium hover:bg-accent">
+          {busy && (
+            <span className="absolute inset-0 flex items-center justify-center bg-background/70">
+              <Loader2 className="size-4 animate-spin text-primary" />
+            </span>
+          )}
+        </label>
+        <div className="flex flex-col items-start gap-1.5">
+          <label
+            htmlFor={inputId}
+            className="press focus-within:ring-3 focus-within:ring-ring/50 inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors duration-[var(--dur-fast)] hover:bg-accent"
+          >
             {busy ? (
               <Loader2 className="size-3.5 animate-spin" />
             ) : (
               <Upload className="size-3.5" />
             )}
-            Upload
+            {value ? "Replace" : "Upload"}
             <input
+              id={inputId}
               type="file"
               accept="image/*"
               hidden
+              disabled={busy}
               onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                setBusy(true);
-                const key = await uploadImage(file);
-                setBusy(false);
-                if (key) onChange(key);
+                await take(e.target.files?.[0]);
+                e.target.value = "";
               }}
             />
           </label>
           {value && (
             <button
               type="button"
-              className="text-left text-xs text-muted-foreground hover:text-destructive"
+              className="underline-grow text-left text-xs text-muted-foreground transition-colors hover:text-destructive"
               onClick={() => onChange(null)}
             >
               Remove
             </button>
+          )}
+          {!value && (
+            <span className="text-xs text-muted-foreground">
+              or drop an image
+            </span>
           )}
         </div>
       </div>

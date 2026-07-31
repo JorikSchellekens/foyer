@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { Download, CheckCircle2, Clock } from "lucide-react";
 import { db } from "@/lib/db";
+import { formatDateTime } from "@/lib/format";
 import { getSignerSession } from "@/lib/sign-session";
 import { recordSignerView, signersUpNow, getFullRequest } from "@/lib/signing";
 import { FoyerLogo } from "@/components/brand/logo";
@@ -22,17 +23,19 @@ function Shell({
 }) {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-muted/40 p-6">
-      {brandLogoUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={brandLogoUrl}
-          alt={teamName ?? ""}
-          className="h-9 max-w-40 object-contain"
-        />
-      ) : (
-        <FoyerLogo size="md" />
-      )}
-      <div className="w-full max-w-md rounded-lg border bg-card p-8 text-center shadow-sm">
+      <div className="reveal">
+        {brandLogoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={brandLogoUrl}
+            alt={teamName ?? ""}
+            className="h-9 max-w-40 object-contain"
+          />
+        ) : (
+          <FoyerLogo size="md" />
+        )}
+      </div>
+      <div className="reveal-up w-full max-w-md rounded-xl border bg-card p-8 text-center shadow-[var(--shadow-raise)]">
         {children}
       </div>
       {brandLogoUrl && (
@@ -137,10 +140,39 @@ export default async function SignPage({
       <Shell {...brand}>
         <CheckCircle2 className="mx-auto size-8 text-primary" />
         <p className="mt-3 font-display text-xl">You have signed</p>
-        <p className="mt-2 text-sm text-muted-foreground">
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           We will email you the final copy of <strong>{request.title}</strong>{" "}
           once all parties have signed.
         </p>
+        {/* The receipt: what was signed, by whom, when. */}
+        <dl className="mt-5 divide-y rounded-lg border text-left text-sm">
+          <div className="flex items-baseline justify-between gap-3 px-3 py-2">
+            <dt className="text-muted-foreground">Signed by</dt>
+            <dd className="min-w-0 truncate">{signer.email}</dd>
+          </div>
+          {signer.signedAt && (
+            <div className="flex items-baseline justify-between gap-3 px-3 py-2">
+              <dt className="text-muted-foreground">Signed at</dt>
+              <dd className="font-mono text-xs tabular">
+                {formatDateTime(signer.signedAt)}
+              </dd>
+            </div>
+          )}
+          <div className="flex items-baseline justify-between gap-3 px-3 py-2">
+            <dt className="text-muted-foreground">Awaiting</dt>
+            <dd className="tabular">
+              {(() => {
+                const left = request.signers.filter(
+                  (s) => s.role === "SIGNER" && s.status !== "SIGNED"
+                ).length;
+                return left === 0
+                  ? "no one"
+                  : `${left} other ${left === 1 ? "signer" : "signers"}`;
+              })()}
+            </dd>
+          </div>
+        </dl>
+        {downloadButton}
         {portalLink}
       </Shell>
     );

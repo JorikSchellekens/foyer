@@ -12,11 +12,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatDuration, timeAgo, initials } from "@/lib/format";
+import { formatDateTime, formatDuration, timeAgo, initials } from "@/lib/format";
 import { teamMemberEmails } from "@/lib/internal-views";
 import { ExportButton } from "@/components/shell/export-button";
 
 export const metadata = { title: "Visitors" };
+
+/** Column heads recede so the visitor column reads as the primary axis. */
+const HEAD = "h-9 text-xs font-medium text-muted-foreground";
+/** Secondary metrics: mono and tabular so the columns align optically. */
+const NUM = "py-2.5 font-mono text-[0.8125rem] text-muted-foreground tabular";
 
 export default async function VisitorsPage() {
   const ctx = await requireTeam();
@@ -75,42 +80,62 @@ export default async function VisitorsPage() {
           <div className="rounded-lg border bg-card">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Visitor</TableHead>
-                  <TableHead className="w-28">Visits</TableHead>
-                  <TableHead className="w-32">Documents</TableHead>
-                  <TableHead className="w-32">Time spent</TableHead>
-                  <TableHead className="w-32 text-right">Last seen</TableHead>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className={HEAD}>Visitor</TableHead>
+                  <TableHead className={`${HEAD} w-28`}>Visits</TableHead>
+                  <TableHead className={`${HEAD} w-32`}>Documents</TableHead>
+                  <TableHead className={`${HEAD} w-32`}>Time spent</TableHead>
+                  <TableHead className={`${HEAD} w-32 text-right`}>
+                    Last seen
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map((v) => (
-                  <TableRow key={v.id}>
-                    <TableCell>
+                {rows.map((v, i) => (
+                  <TableRow
+                    key={v.id}
+                    className="stagger-item"
+                    // Cap the cascade: a long list should not ripple for seconds.
+                    style={{ "--i": Math.min(i, 10) } as React.CSSProperties}
+                  >
+                    <TableCell className="py-2.5">
                       <Link
                         href={`/visitors/${v.id}`}
-                        className="flex items-center gap-2.5"
+                        className="group -mx-1 flex items-center gap-2.5 rounded-md px-1 py-0.5 outline-none focus-visible:ring-3 focus-visible:ring-ring"
                       >
-                        <span className="flex size-8 items-center justify-center rounded-full bg-primary/10 font-mono text-[11px] font-semibold text-primary">
+                        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-[11px] font-semibold text-primary">
                           {initials(v.email)}
                         </span>
-                        <span className="flex items-center gap-1.5">
-                          <span className="font-medium hover:underline">
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <span className="truncate font-medium group-hover:underline group-hover:decoration-primary/40 group-hover:underline-offset-4">
                             {v.email}
                           </span>
                           {v.verified && (
-                            <BadgeCheck className="size-3.5 text-primary" />
+                            <BadgeCheck
+                              role="img"
+                              aria-label="Email verified"
+                              className="size-3.5 shrink-0 text-primary"
+                            />
                           )}
                         </span>
                       </Link>
                     </TableCell>
-                    <TableCell className="tabular">{v.visits}</TableCell>
-                    <TableCell className="tabular">{v.documents}</TableCell>
-                    <TableCell className="font-mono text-sm tabular">
+                    <TableCell className={NUM}>{v.visits}</TableCell>
+                    <TableCell className={NUM}>{v.documents}</TableCell>
+                    <TableCell className={NUM}>
                       {formatDuration(v.totalTime)}
                     </TableCell>
-                    <TableCell className="text-right text-xs text-muted-foreground">
-                      {v.lastSeen ? timeAgo(v.lastSeen) : "—"}
+                    <TableCell className={`${NUM} text-right`}>
+                      {v.lastSeen ? (
+                        <time
+                          dateTime={v.lastSeen.toISOString()}
+                          title={formatDateTime(v.lastSeen)}
+                        >
+                          {timeAgo(v.lastSeen)}
+                        </time>
+                      ) : (
+                        <span aria-hidden>-</span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

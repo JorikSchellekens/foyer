@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { PageHeader } from "@/components/shell/page-header";
 import { EmptyState } from "@/components/shell/empty-state";
 import { Badge } from "@/components/ui/badge";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, timeAgo } from "@/lib/format";
 import { StatusBadge } from "./status-badge";
 import { SignatureUploadButton } from "./upload-button";
 
@@ -40,37 +40,63 @@ export default async function SignaturesPage() {
             <SignatureUploadButton />
           </EmptyState>
         ) : (
-          <div className="space-y-1">
-            {requests.map((r) => {
+          <ul className="space-y-1">
+            {requests.map((r, i) => {
               const signers = r.signers.filter((s) => s.role === "SIGNER");
               const signed = signers.filter((s) => s.status === "SIGNED").length;
+              const when = r.sentAt ?? r.createdAt;
               return (
-                <Link
+                <li
                   key={r.id}
-                  href={`/signatures/${r.id}`}
-                  className="flex items-center gap-4 rounded-md border bg-card px-4 py-3 transition-colors hover:bg-accent/50"
+                  className="stagger-item"
+                  // Cap the cascade: a long list should not ripple for seconds.
+                  style={{ "--i": Math.min(i, 10) } as React.CSSProperties}
                 >
-                  <PenLine className="size-4 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{r.title}</p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {r.document.name} ·{" "}
-                      {signers.map((s) => s.email).join(", ") || "no recipients yet"}
-                    </p>
-                  </div>
-                  {r.status === "SENT" && (
-                    <Badge variant="secondary" className="font-mono">
-                      {signed}/{signers.length} signed
-                    </Badge>
-                  )}
-                  <StatusBadge status={r.status} />
-                  <span className="hidden w-40 text-right font-mono text-xs text-muted-foreground sm:block">
-                    {formatDateTime(r.sentAt ?? r.createdAt)}
-                  </span>
-                </Link>
+                  <Link
+                    href={`/signatures/${r.id}`}
+                    className="group flex items-center gap-3 rounded-md border bg-card px-4 py-3 outline-none transition-[background-color,border-color,box-shadow] duration-[var(--dur)] ease-[var(--ease-out-soft)] hover:border-primary/30 hover:bg-muted/50 focus-visible:border-primary/40 focus-visible:ring-3 focus-visible:ring-ring"
+                  >
+                    <PenLine
+                      className="size-4 shrink-0 text-muted-foreground transition-colors duration-[var(--dur)] group-hover:text-primary"
+                      strokeWidth={1.5}
+                      aria-hidden
+                    />
+                    <div className="min-w-0 flex-1">
+                      {/* Dot leader carries the eye from the envelope title to
+                          its status, the way a book index does. */}
+                      <div className="flex items-baseline">
+                        <span className="min-w-0 truncate text-sm font-medium">
+                          {r.title}
+                        </span>
+                        <span className="leader-dots hidden sm:block" />
+                      </div>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {r.document.name} ·{" "}
+                        {signers.map((s) => s.email).join(", ") ||
+                          "no recipients yet"}
+                      </p>
+                    </div>
+                    {r.status === "SENT" && (
+                      <Badge
+                        variant="outline"
+                        className="border-input font-mono text-muted-foreground tabular"
+                      >
+                        {signed}/{signers.length} signed
+                      </Badge>
+                    )}
+                    <StatusBadge status={r.status} />
+                    <time
+                      dateTime={when.toISOString()}
+                      title={formatDateTime(when)}
+                      className="hidden w-24 shrink-0 text-right font-mono text-xs text-muted-foreground tabular sm:block"
+                    >
+                      {timeAgo(when)}
+                    </time>
+                  </Link>
+                </li>
               );
             })}
-          </div>
+          </ul>
         )}
       </div>
     </div>

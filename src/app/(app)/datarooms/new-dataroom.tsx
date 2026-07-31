@@ -53,7 +53,7 @@ export function NewDataroomDialog() {
               id="dr-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Series A — Due Diligence"
+              placeholder="Series A: Due Diligence"
               autoFocus
               required
             />

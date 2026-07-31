@@ -1,9 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { FileSignature, Plus, Trash2, Upload } from "lucide-react";
+import {
+  Check,
+  FileSignature,
+  Loader2,
+  Plus,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,11 +26,23 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   RadioGroup,
   RadioGroupItem,
 } from "@/components/ui/radio-group";
 import { EmptyState } from "@/components/shell/empty-state";
+import { cn } from "@/lib/utils";
 import { pluralize } from "@/lib/format";
+import { SettingsIntro } from "../section";
 import { saveAgreement, deleteAgreement } from "../actions";
 
 type AgreementRow = {
@@ -38,26 +57,32 @@ type AgreementRow = {
   links: number;
 };
 
+const TYPE_LABEL: Record<AgreementRow["type"], string> = {
+  EMBEDDED: "signature flow",
+  LINK: "linked document",
+  TEXT: "text",
+};
+
 export function AgreementsClient({
   agreements,
 }: {
   agreements: AgreementRow[];
 }) {
   const [editing, setEditing] = useState<AgreementRow | null | "new">(null);
+  const [deleting, setDeleting] = useState<AgreementRow | null>(null);
   const router = useRouter();
 
   return (
     <div className="max-w-2xl space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <p className="text-sm text-muted-foreground">
-          Agreements gate a link behind a signature: visitors sign before they
-          see anything, and every signature is recorded with name, email, IP
-          and timestamp.
-        </p>
-        <Button onClick={() => setEditing("new")}>
-          <Plus className="size-4" /> New agreement
-        </Button>
-      </div>
+      <SettingsIntro
+        title="Agreements"
+        description="Agreements gate a link behind a signature: visitors sign before they see anything, and every signature is recorded with name, email, IP and timestamp."
+        action={
+          <Button onClick={() => setEditing("new")}>
+            <Plus className="size-4" /> New agreement
+          </Button>
+        }
+      />
 
       {agreements.length === 0 ? (
         <EmptyState
@@ -67,17 +92,21 @@ export function AgreementsClient({
         />
       ) : (
         <div className="space-y-1.5">
-          {agreements.map((a) => (
+          {agreements.map((a, i) => (
             <div
               key={a.id}
-              className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3"
+              className="stagger-item hover-raise flex items-center gap-3 rounded-lg border bg-card px-4 py-3 shadow-[var(--shadow-hairline)] hover:border-input"
+              style={{ "--i": i } as React.CSSProperties}
             >
-              <FileSignature className="size-4 text-primary" strokeWidth={1.5} />
+              <FileSignature
+                className="size-4 shrink-0 text-primary"
+                strokeWidth={1.5}
+              />
               <button
-                className="min-w-0 flex-1 text-left"
+                className="focus-ring min-w-0 flex-1 rounded-sm text-left"
                 onClick={() => setEditing(a)}
               >
-                <p className="truncate text-sm font-medium hover:underline">
+                <p className="underline-grow inline-block max-w-full truncate text-sm font-medium">
                   {a.name}
                 </p>
                 <p className="text-xs text-muted-foreground">
@@ -86,21 +115,14 @@ export function AgreementsClient({
                 </p>
               </button>
               <Badge variant="secondary" className="lowercase">
-                {a.type === "EMBEDDED"
-                  ? "signature flow"
-                  : a.type === "LINK"
-                    ? "linked document"
-                    : "text"}
+                {TYPE_LABEL[a.type]}
               </Badge>
               <Button
                 variant="ghost"
-                size="icon"
-                className="size-7 text-muted-foreground hover:text-destructive"
-                onClick={async () => {
-                  await deleteAgreement(a.id);
-                  toast.success("Agreement deleted");
-                  router.refresh();
-                }}
+                size="icon-sm"
+                aria-label={`Delete ${a.name}`}
+                className="text-muted-foreground hover:text-destructive"
+                onClick={() => setDeleting(a)}
               >
                 <Trash2 className="size-3.5" />
               </Button>
@@ -115,6 +137,41 @@ export function AgreementsClient({
           onClose={() => setEditing(null)}
         />
       )}
+
+      <AlertDialog
+        open={!!deleting}
+        onOpenChange={(o) => !o && setDeleting(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete “{deleting?.name}”?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleting && deleting.links > 0
+                ? `${pluralize(deleting.links, "link")} currently require this agreement and will stop asking for it. `
+                : ""}
+              {deleting && deleting.signatures > 0
+                ? `The ${pluralize(deleting.signatures, "signature")} already collected are kept as a record.`
+                : "No signatures have been collected against it."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep agreement</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              onClick={async () => {
+                const id = deleting?.id;
+                setDeleting(null);
+                if (!id) return;
+                await deleteAgreement(id);
+                toast.success("Agreement deleted");
+                router.refresh();
+              }}
+            >
+              Delete agreement
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -127,6 +184,7 @@ function AgreementEditor({
   onClose: () => void;
 }) {
   const router = useRouter();
+  const uid = useId();
   const [name, setName] = useState(agreement?.name ?? "Standard NDA");
   const [type, setType] = useState<"EMBEDDED" | "LINK" | "TEXT">(
     agreement?.type ?? "EMBEDDED"
@@ -140,6 +198,15 @@ function AgreementEditor({
   const [fileName, setFileName] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // Enough has been typed that an accidental click outside must not throw it
+  // away. Escape still closes: that is deliberate.
+  const dirty =
+    name !== (agreement?.name ?? "Standard NDA") ||
+    type !== (agreement?.type ?? "EMBEDDED") ||
+    externalUrl !== (agreement?.externalUrl ?? "") ||
+    content !== (agreement?.content ?? "") ||
+    !!fileKey;
 
   async function uploadPdf(file: File) {
     if (file.type !== "application/pdf") {
@@ -175,9 +242,38 @@ function AgreementEditor({
     }
   }
 
+  async function save() {
+    setSaving(true);
+    try {
+      const res = await saveAgreement({
+        id: agreement?.id,
+        name,
+        requireName,
+        type,
+        fileKey,
+        externalUrl: externalUrl || null,
+        content: content || null,
+      });
+      if (res && "error" in res && res.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(agreement ? "Agreement updated" : "Agreement created");
+      onClose();
+      router.refresh();
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent
+        className="sm:max-w-md"
+        onInteractOutside={(e) => {
+          if (dirty) e.preventDefault();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>
             {agreement ? "Edit agreement" : "Create a new agreement"}
@@ -188,13 +284,25 @@ function AgreementEditor({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!saving && !uploading && name.trim()) void save();
+          }}
+        >
           <div className="space-y-1.5">
-            <Label>Display name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} />
+            <Label htmlFor={`${uid}-name`}>Display name</Label>
+            <Input
+              id={`${uid}-name`}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              aria-invalid={!name.trim()}
+              autoFocus
+            />
           </div>
 
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex w-fit cursor-pointer items-center gap-2 text-sm">
             <Checkbox
               checked={requireName}
               onCheckedChange={(v) => setRequireName(v === true)}
@@ -202,61 +310,55 @@ function AgreementEditor({
             Require viewer&apos;s name
           </label>
 
-          <div className="space-y-1.5">
-            <Label>Agreement type</Label>
+          <fieldset className="space-y-1.5">
+            <legend className="text-sm leading-none font-medium">
+              Agreement type
+            </legend>
             <RadioGroup
               value={type}
               onValueChange={(v) => setType(v as typeof type)}
-              className="gap-2"
+              className="gap-2 pt-1"
             >
-              <label className="flex items-start gap-3 rounded-md border px-3 py-2.5 has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-accent">
-                <RadioGroupItem value="EMBEDDED" className="mt-0.5" />
-                <span>
-                  <span className="block text-sm font-medium">
-                    Embedded signature flow
-                  </span>
-                  <span className="block text-xs text-muted-foreground">
-                    Upload a PDF; visitors read it and draw their signature.
-                  </span>
-                </span>
-              </label>
-              <label className="flex items-start gap-3 rounded-md border px-3 py-2.5 has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-accent">
-                <RadioGroupItem value="LINK" className="mt-0.5" />
-                <span>
-                  <span className="block text-sm font-medium">
-                    Linked document
-                  </span>
-                  <span className="block text-xs text-muted-foreground">
-                    Point to an agreement hosted elsewhere.
-                  </span>
-                </span>
-              </label>
-              <label className="flex items-start gap-3 rounded-md border px-3 py-2.5 has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-accent">
-                <RadioGroupItem value="TEXT" className="mt-0.5" />
-                <span>
-                  <span className="block text-sm font-medium">
-                    Text content
-                  </span>
-                  <span className="block text-xs text-muted-foreground">
-                    Short terms shown inline.
-                  </span>
-                </span>
-              </label>
+              <TypeRow
+                value="EMBEDDED"
+                title="Embedded signature flow"
+                caption="Upload a PDF; visitors read it and draw their signature."
+              />
+              <TypeRow
+                value="LINK"
+                title="Linked document"
+                caption="Point to an agreement hosted elsewhere."
+              />
+              <TypeRow
+                value="TEXT"
+                title="Text content"
+                caption="Short terms shown inline."
+              />
             </RadioGroup>
-          </div>
+          </fieldset>
 
           {type === "EMBEDDED" && (
-            <div className="space-y-1.5">
-              <Label>Agreement PDF (max 30 MB)</Label>
-              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed px-4 py-6 text-sm text-muted-foreground hover:bg-muted/50">
-                <Upload className="size-4" />
+            <div className="reveal space-y-1.5">
+              <Label htmlFor={`${uid}-pdf`}>Agreement PDF (max 30 MB)</Label>
+              <label
+                htmlFor={`${uid}-pdf`}
+                className="flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed px-4 py-6 text-sm text-muted-foreground transition-[background-color,border-color] duration-[var(--dur)] hover:border-input hover:bg-muted/50"
+              >
+                {uploading ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : fileName ? (
+                  <Check className="size-4 text-primary" strokeWidth={2.5} />
+                ) : (
+                  <Upload className="size-4" />
+                )}
                 {uploading
                   ? "Uploading…"
                   : fileName ??
                     (agreement?.hasFile
-                      ? "PDF uploaded — choose a file to replace it"
-                      : "Choose file to upload or drag and drop")}
+                      ? "PDF uploaded: choose a file to replace it"
+                      : "Choose a file, or drag and drop")}
                 <input
+                  id={`${uid}-pdf`}
                   type="file"
                   accept="application/pdf"
                   hidden
@@ -268,19 +370,23 @@ function AgreementEditor({
             </div>
           )}
           {type === "LINK" && (
-            <div className="space-y-1.5">
-              <Label>Agreement URL</Label>
+            <div className="reveal space-y-1.5">
+              <Label htmlFor={`${uid}-url`}>Agreement URL</Label>
               <Input
+                id={`${uid}-url`}
+                type="url"
                 value={externalUrl}
                 onChange={(e) => setExternalUrl(e.target.value)}
                 placeholder="https://yourcompany.com/nda.pdf"
+                spellCheck={false}
               />
             </div>
           )}
           {type === "TEXT" && (
-            <div className="space-y-1.5">
-              <Label>Agreement text</Label>
+            <div className="reveal space-y-1.5">
+              <Label htmlFor={`${uid}-content`}>Agreement text</Label>
               <Textarea
+                id={`${uid}-content`}
                 rows={5}
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
@@ -288,43 +394,52 @@ function AgreementEditor({
               />
             </div>
           )}
-        </div>
 
-        <DialogFooter>
-          <Button
-            disabled={saving || uploading || !name.trim()}
-            onClick={async () => {
-              setSaving(true);
-              try {
-                const res = await saveAgreement({
-                  id: agreement?.id,
-                  name,
-                  requireName,
-                  type,
-                  fileKey,
-                  externalUrl: externalUrl || null,
-                  content: content || null,
-                });
-                if (res && "error" in res && res.error) {
-                  toast.error(res.error);
-                  return;
-                }
-                toast.success(agreement ? "Agreement updated" : "Agreement created");
-                onClose();
-                router.refresh();
-              } finally {
-                setSaving(false);
-              }
-            }}
-          >
-            {saving
-              ? "Saving…"
-              : agreement
-                ? "Save changes"
-                : "Create agreement"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={saving || uploading || !name.trim()}>
+              {saving && <Loader2 className="size-4 animate-spin" />}
+              {saving
+                ? "Saving…"
+                : agreement
+                  ? "Save changes"
+                  : "Create agreement"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function TypeRow({
+  value,
+  title,
+  caption,
+}: {
+  value: string;
+  title: string;
+  caption: string;
+}) {
+  return (
+    <label
+      className={cn(
+        "press flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2.5 transition-[background-color,border-color,box-shadow] duration-[var(--dur)] ease-[var(--ease-out-soft)] hover:bg-muted/50",
+        "has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-accent has-[[data-state=checked]]:shadow-[var(--shadow-hairline)] has-focus-visible:border-ring"
+      )}
+    >
+      <RadioGroupItem value={value} className="mt-0.5" />
+      <span>
+        <span className="block text-sm font-medium">{title}</span>
+        <span className="block text-xs text-muted-foreground">{caption}</span>
+      </span>
+    </label>
   );
 }

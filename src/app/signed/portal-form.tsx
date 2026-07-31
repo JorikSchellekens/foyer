@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Loader2, MailCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,10 +15,13 @@ export function PortalEmailForm() {
 
   if (sent)
     return (
-      <p className="mt-4 rounded-md bg-primary/10 p-3 text-sm text-primary">
-        Check your inbox - if any documents were signed with that address, the
-        link will open them.
-      </p>
+      <div className="reveal-up mt-4 flex items-start gap-3 rounded-md border border-primary/25 bg-primary/5 p-3 text-sm text-primary">
+        <MailCheck className="mt-0.5 size-4 shrink-0" aria-hidden />
+        <p className="leading-relaxed">
+          Check your inbox - if any documents were signed with that address, the
+          link will open them.
+        </p>
+      </div>
     );
 
   return (
@@ -39,11 +42,14 @@ export function PortalEmailForm() {
         value={email}
         onChange={(e) => setEmail(e.target.value)}
         placeholder="you@company.com"
+        aria-label="Email address"
+        autoComplete="email"
+        inputMode="email"
         autoFocus
       />
-      <Button type="submit" disabled={busy}>
-        {busy && <Loader2 className="size-4 animate-spin" />}
-        Send link
+      <Button type="submit" disabled={busy} className="shrink-0">
+        {busy && <Loader2 className="size-4 animate-spin" aria-hidden />}
+        {busy ? "Sending" : "Send link"}
       </Button>
     </form>
   );
@@ -54,7 +60,7 @@ export function DifferentEmailButton() {
   return (
     <button
       type="button"
-      className="text-xs text-muted-foreground underline hover:text-foreground"
+      className="focus-ring underline-grow rounded text-xs text-muted-foreground transition-colors hover:text-foreground"
       onClick={async () => {
         await switchPortalEmail();
         router.refresh();

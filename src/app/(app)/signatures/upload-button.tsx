@@ -54,12 +54,18 @@ export function SignatureUploadButton() {
           if (file) handleFile(file);
         }}
       />
-      <Button onClick={() => fileInput.current?.click()} disabled={!!progress}>
+      <Button
+        onClick={() => fileInput.current?.click()}
+        disabled={!!progress}
+        aria-busy={!!progress}
+      >
         {progress ? (
           <Loader2 className="size-4 animate-spin" />
         ) : (
           <FileUp className="size-4" />
         )}
+        {/* Label stays put while uploading: the overlay carries the progress,
+            and the page header must not reflow around a changing width. */}
         Upload &amp; request signatures
       </Button>
       <UploadingOverlay progress={progress} />

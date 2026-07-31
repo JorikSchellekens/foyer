@@ -1,7 +1,10 @@
 "use client";
 
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { Check } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { SettingsIntro, SettingsRow, SettingsSection } from "../section";
 import { setNotificationPref } from "../actions";
 
 export function NotificationsClient({
@@ -16,44 +19,68 @@ export function NotificationsClient({
   }[];
 }) {
   const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [saved, setSaved] = useState<string | null>(null);
   const groups = [...new Set(items.map((i) => i.group))];
 
+  function toggle(key: string, value: boolean) {
+    setSaved(null);
+    startTransition(async () => {
+      await setNotificationPref(key, value);
+      setSaved(key);
+      router.refresh();
+    });
+  }
+
   return (
-    <div className="max-w-lg space-y-8">
-      <p className="text-sm text-muted-foreground">
-        Choose which email notifications you receive for this workspace. Your
-        teammates set their own.
-      </p>
-      {groups.map((group) => (
-        <section key={group}>
-          <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            {group}
-          </h2>
-          <div className="space-y-4">
-            {items
-              .filter((i) => i.group === group)
-              .map((item) => (
-                <div
-                  key={item.key}
-                  className="flex items-center justify-between gap-4"
-                >
-                  <div>
-                    <div className="text-sm font-medium">{item.title}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {item.caption}
-                    </div>
-                  </div>
+    <div className="max-w-2xl space-y-6">
+      <SettingsIntro
+        title="Notifications"
+        description="Which email notifications you receive for this workspace. Your teammates set their own."
+      />
+
+      {groups.map((group, gi) => (
+        <SettingsSection
+          key={group}
+          title={group}
+          bodyClassName="divide-y py-1"
+          footer={
+            gi === groups.length - 1
+              ? "Each switch saves as you flip it."
+              : undefined
+          }
+        >
+          {items
+            .filter((i) => i.group === group)
+            .map((item) => (
+              <SettingsRow
+                key={item.key}
+                htmlFor={`notify-${item.key}`}
+                descriptionId={`notify-${item.key}-hint`}
+                label={
+                  <span className="inline-flex items-center gap-1.5">
+                    {item.title}
+                    {saved === item.key && !pending && (
+                      <Check
+                        className="tick-in size-3 text-primary"
+                        strokeWidth={2.5}
+                        aria-label="Saved"
+                      />
+                    )}
+                  </span>
+                }
+                description={item.caption}
+                control={
                   <Switch
+                    id={`notify-${item.key}`}
+                    aria-describedby={`notify-${item.key}-hint`}
                     defaultChecked={item.enabled}
-                    onCheckedChange={async (v) => {
-                      await setNotificationPref(item.key, v);
-                      router.refresh();
-                    }}
+                    onCheckedChange={(v) => toggle(item.key, v)}
                   />
-                </div>
-              ))}
-          </div>
-        </section>
+                }
+              />
+            ))}
+        </SettingsSection>
       ))}
     </div>
   );

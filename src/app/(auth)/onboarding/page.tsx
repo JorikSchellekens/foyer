@@ -2,10 +2,13 @@ import { redirect } from "next/navigation";
 import { requireUser, setActiveTeam } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { slugify } from "@/lib/slug";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { FoyerLogo } from "@/components/brand/logo";
+import { WorkspaceForm } from "./workspace-form";
+
+export const metadata = { title: "New workspace" };
+
+/** Cascade steps for the arrival; .stagger-item reads --i. */
+const STEP = [0, 1, 2, 3, 4].map((i) => ({ "--i": i }) as React.CSSProperties);
 
 export default async function OnboardingPage() {
   const user = await requireUser();
@@ -32,35 +35,36 @@ export default async function OnboardingPage() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col bg-background">
-      <header className="px-8 py-6">
-        <FoyerLogo size="lg" />
-      </header>
-      <div className="flex flex-1 items-center justify-center px-6 pb-24">
+    <main className="flex min-h-svh flex-col bg-background">
+      <div className="flex flex-1 items-center justify-center px-6 pb-24 pt-16">
         <div className="w-full max-w-sm">
-          <h1 className="font-display text-4xl leading-tight tracking-tight">
+          <span className="stagger-item block" style={STEP[0]}>
+            <FoyerLogo size="lg" />
+          </span>
+          <h1
+            className="stagger-item mt-10 font-display text-4xl leading-[1.08] tracking-tight text-balance"
+            style={STEP[1]}
+          >
             Name your workspace
           </h1>
-          <p className="mt-3 text-sm text-muted-foreground">
-            Usually your company name. You can invite your team in a moment,
-            {" "}{user.email} is the owner.
+          <p
+            className="stagger-item mt-3 text-sm leading-relaxed text-muted-foreground"
+            style={STEP[2]}
+          >
+            Usually your company name. You can rename it later, and invite
+            people once you are inside.
           </p>
-          <form action={createTeam} className="mt-10 space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Workspace name</Label>
-              <Input
-                id="name"
-                name="name"
-                required
-                autoFocus
-                placeholder="Acme Inc"
-                maxLength={60}
-              />
-            </div>
-            <Button type="submit" className="w-full">
-              Create workspace
-            </Button>
-          </form>
+          <WorkspaceForm action={createTeam} />
+          {/* Dot-leader row: the book-index motif, used where there is a real
+              label and value to set against each other. */}
+          <p
+            className="stagger-item mt-6 flex items-baseline text-xs text-muted-foreground"
+            style={STEP[4]}
+          >
+            <span>Owner</span>
+            <span aria-hidden className="leader-dots" />
+            <span className="font-mono">{user.email}</span>
+          </p>
         </div>
       </div>
     </main>

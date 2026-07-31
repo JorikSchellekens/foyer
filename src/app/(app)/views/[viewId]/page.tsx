@@ -5,7 +5,7 @@ import { requireTeam } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Stat } from "@/components/shell/stat";
 import { PageDwell } from "@/components/analytics/page-dwell";
-import { MouseHeatmap } from "@/components/analytics/mouse-heatmap";
+import { MouseHeatmap, HeatLegend } from "@/components/analytics/mouse-heatmap";
 import { PageHeatmapGridLazy } from "@/components/analytics/page-heatmap-lazy";
 import { ReadingTrajectoryLazy } from "@/components/analytics/reading-trajectory-lazy";
 import type { TrailSeg } from "@/components/analytics/reading-trajectory";
@@ -138,20 +138,34 @@ export default async function ViewDetailPage({
       </div>
 
       <div className="space-y-8 px-4 sm:px-8 py-6">
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="reveal grid grid-cols-2 gap-4 lg:grid-cols-4">
           <Stat label="Time spent" value={formatDuration(view.totalDuration)} />
           <Stat
             label="Read"
-            value={view.completedPct ? `${view.completedPct}%` : "—"}
+            value={view.completedPct ? `${view.completedPct}%` : "-"}
+            hint={
+              view.completedPct
+                ? `${view.pageViews.length} of ${pageCount} pages`
+                : undefined
+            }
           />
-          <Stat label="Pages touched" value={view.pageViews.length || "—"} />
+          <Stat label="Pages touched" value={view.pageViews.length || "-"} />
           <Stat label="Downloaded" value={view.downloadedAt ? "Yes" : "No"} />
         </div>
 
         {trailData.length > 0 ? (
           <section className="rounded-lg border bg-card p-5">
-            <h2 className="mb-1 font-display text-xl">Reading trajectory</h2>
-            <p className="mb-5 text-sm text-muted-foreground">
+            <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+              <h2 className="font-display text-xl">Reading trajectory</h2>
+              <span className="text-xs text-muted-foreground">
+                <span className="font-mono tabular">
+                  {new Set(trailData.map((s) => s.p)).size}
+                </span>{" "}
+                of <span className="font-mono tabular">{pageCount}</span> pages
+                opened
+              </span>
+            </div>
+            <p className="mb-5 max-w-2xl text-sm text-muted-foreground">
               The path this visitor took through the document, laid out by
               reading time. Longer flat runs are longer dwell; a step back to an
               earlier page is a re-read. Hover a page for its thumbnail and time.
@@ -180,10 +194,14 @@ export default async function ViewDetailPage({
 
         {heatPages.length > 0 && (
           <section>
-            <h2 className="mb-1 font-display text-xl">Attention maps</h2>
-            <p className="mb-4 text-sm text-muted-foreground">
+            <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+              <h2 className="font-display text-xl">Attention maps</h2>
+              <HeatLegend />
+            </div>
+            <p className="mb-4 max-w-2xl text-sm text-muted-foreground">
               Where this visitor&apos;s cursor lingered, drawn over the page
-              they were reading. Warm areas received repeated attention.
+              they were reading. The deeper the green, the longer it stayed
+              there.
             </p>
             {canRenderPages ? (
               <PageHeatmapGridLazy
@@ -206,11 +224,19 @@ export default async function ViewDetailPage({
               />
             ) : (
               <div className="grid grid-cols-2 gap-6 md:grid-cols-3 xl:grid-cols-4">
-                {heatPages.map(([page, samples]) => (
-                  <figure key={page}>
+                {heatPages.map(([page, samples], i) => (
+                  <figure
+                    key={page}
+                    className="stagger-item"
+                    style={{ "--i": i } as React.CSSProperties}
+                  >
                     <MouseHeatmap samples={samples} />
-                    <figcaption className="mt-1.5 text-center font-mono text-xs text-muted-foreground">
-                      Page {page} · {samples.length} samples
+                    <figcaption className="mt-1.5 text-center text-xs text-muted-foreground">
+                      Page <span className="font-mono tabular">{page}</span> ·{" "}
+                      <span className="font-mono tabular">
+                        {samples.length}
+                      </span>{" "}
+                      cursor samples
                     </figcaption>
                   </figure>
                 ))}
@@ -220,10 +246,13 @@ export default async function ViewDetailPage({
         )}
 
         {view.pageViews.length === 0 && heatPages.length === 0 && (
-          <p className="rounded-lg border border-dashed px-6 py-10 text-center text-sm text-muted-foreground">
-            No page-level detail for this visit yet. It appears once the
-            visitor spends time inside the document.
-          </p>
+          <div className="rounded-lg border border-dashed px-6 py-12 text-center">
+            <p className="font-display text-lg">Nothing read yet</p>
+            <p className="mx-auto mt-1.5 max-w-sm text-sm text-muted-foreground">
+              Page-by-page timing and attention maps appear as soon as this
+              visitor spends time inside the document.
+            </p>
+          </div>
         )}
       </div>
     </div>

@@ -36,6 +36,10 @@ import {
   VideoViewer,
 } from "./simple-viewers";
 
+/** Quiet until touched, always reachable by keyboard: the chrome's own idiom. */
+const chromeBtn =
+  "rounded-md p-1.5 text-white/60 outline-none transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out-soft)] hover:bg-white/10 hover:text-white focus-visible:bg-white/10 focus-visible:text-white focus-visible:ring-2 focus-visible:ring-white/40";
+
 export type ViewerBrand = {
   teamName: string;
   brandColor: string;
@@ -118,6 +122,16 @@ export function DocumentViewer({
     [setPage]
   );
 
+  // Escape closes the overlaying contents pane, the expected way out of it.
+  useEffect(() => {
+    if (navOpen !== true) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setNavOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [navOpen]);
+
   useEffect(() => {
     if (!protection) return;
     const stop = (e: Event) => e.preventDefault();
@@ -137,18 +151,22 @@ export function DocumentViewer({
 
   return (
     <div
-      className={`flex h-screen flex-col bg-[#101418] ${
+      // 100dvh, not 100vh: on a phone the address bar would otherwise push the
+      // reading frame below the fold and make the whole page scroll.
+      className={`flex h-[100dvh] flex-col bg-[#101418] ${
         protection ? "protected-content" : ""
       }`}
     >
       {preview && <PreviewBanner text={previewText} />}
-      <header className="z-40 flex h-14 shrink-0 items-center gap-3 border-b border-white/10 bg-[#0c1013] px-4 text-white">
+      <header className="z-40 flex h-14 shrink-0 items-center gap-2 border-b border-white/10 bg-[#0c1013] px-3 text-white sm:gap-3 sm:px-4">
         {hasTree && (
           <button
             type="button"
             onClick={toggleNav}
-            className="rounded-md p-1.5 text-white/70 hover:bg-white/10 hover:text-white"
+            className={chromeBtn}
             title="Toggle contents"
+            aria-label="Toggle contents"
+            aria-expanded={navOpen ?? undefined}
           >
             <PanelLeft className="size-4" />
           </button>
@@ -156,8 +174,9 @@ export function DocumentViewer({
         {backHref && (
           <Link
             href={backHref}
-            className="rounded-md p-1.5 text-white/70 hover:bg-white/10 hover:text-white"
+            className={chromeBtn}
             title="Back to index"
+            aria-label="Back to index"
           >
             <ArrowLeft className="size-4" />
           </Link>
@@ -178,39 +197,41 @@ export function DocumentViewer({
           </span>
         )}
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">{doc.name}</p>
-          <p className="truncate text-[11px] text-white/50">
+          <p className="truncate text-sm font-medium leading-tight">{doc.name}</p>
+          <p className="truncate text-[11px] leading-tight text-white/45">
             {brand.teamName}
           </p>
         </div>
         {position && (
-          <div className="flex items-center gap-1 text-white/70">
+          <div className="flex items-center gap-0.5 text-white/70">
             {prevHref ? (
               <Link
                 href={prevHref}
-                className="rounded-md p-1.5 hover:bg-white/10 hover:text-white"
+                className={chromeBtn}
                 title="Previous document"
+                aria-label="Previous document"
               >
                 <ChevronLeft className="size-4" />
               </Link>
             ) : (
-              <span className="p-1.5 opacity-30">
+              <span className="p-1.5 opacity-20" aria-hidden>
                 <ChevronLeft className="size-4" />
               </span>
             )}
-            <span className="min-w-14 text-center font-mono text-[11px] tabular">
+            <span className="min-w-14 text-center font-mono text-[11px] tabular text-white/70">
               {position}
             </span>
             {nextHref ? (
               <Link
                 href={nextHref}
-                className="rounded-md p-1.5 hover:bg-white/10 hover:text-white"
+                className={chromeBtn}
                 title="Next document"
+                aria-label="Next document"
               >
                 <ChevronRight className="size-4" />
               </Link>
             ) : (
-              <span className="p-1.5 opacity-30">
+              <span className="p-1.5 opacity-20" aria-hidden>
                 <ChevronRight className="size-4" />
               </span>
             )}
@@ -221,7 +242,7 @@ export function DocumentViewer({
             href={brand.ctaUrl}
             target="_blank"
             rel="noreferrer"
-            className="hidden items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-85 sm:inline-flex"
+            className="press hidden items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-white outline-none transition-opacity duration-[var(--dur-fast)] hover:opacity-85 focus-visible:ring-2 focus-visible:ring-white/60 sm:inline-flex"
             style={{ backgroundColor: brand.brandColor }}
           >
             {brand.ctaLabel}
@@ -232,18 +253,33 @@ export function DocumentViewer({
           <a
             href={doc.downloadUrl}
             onClick={notifyDownload}
-            className="inline-flex items-center gap-1.5 rounded-md border border-white/20 px-3 py-1.5 text-xs font-medium text-white/90 hover:bg-white/10"
+            aria-label="Download"
+            className="press inline-flex items-center gap-1.5 rounded-md border border-white/15 px-2.5 py-1.5 text-xs font-medium text-white/85 outline-none transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out-soft)] hover:border-white/30 hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/40 sm:px-3"
           >
-            <Download className="size-3.5" /> Download
+            <Download className="size-3.5" />
+            <span className="max-sm:hidden">Download</span>
           </a>
         )}
       </header>
 
       <div className="relative flex min-h-0 flex-1">
+        {/* On small screens the contents pane overlays the document: give it a
+            scrim so tapping the page dismisses it. */}
+        {hasTree && navOpen === true && (
+          <button
+            type="button"
+            aria-label="Close contents"
+            onClick={() => setNavOpen(false)}
+            className="absolute inset-0 z-20 bg-black/40 duration-[var(--dur)] animate-in fade-in-0 lg:hidden"
+          />
+        )}
         {hasTree && navOpen !== false && (
           <aside
-            className={`absolute inset-y-0 left-0 z-30 w-72 shrink-0 overflow-y-auto border-r border-white/10 bg-[#0c1013] p-3 lg:static ${
-              navOpen === null ? "hidden lg:block" : ""
+            aria-label="Contents"
+            className={`absolute inset-y-0 left-0 z-30 w-72 shrink-0 overflow-y-auto overscroll-contain border-r border-white/10 bg-[#0c1013] p-3 shadow-[8px_0_32px_-16px_rgb(0_0_0/0.8)] lg:static lg:shadow-none ${
+              navOpen === null
+                ? "hidden lg:block"
+                : "duration-[var(--dur)] ease-[var(--ease-out-quint)] animate-in slide-in-from-left-4 lg:animate-none"
             }`}
           >
             <p className="mb-2 px-2 font-mono text-[10px] uppercase tracking-[0.18em] text-white/40">
@@ -287,7 +323,7 @@ function Body({
     return <NotionViewer recordMap={doc.recordMap} />;
   if (!doc.fileUrl)
     return (
-      <p className="py-24 text-center text-sm text-white/60">
+      <p className="px-6 py-24 text-center text-sm text-white/55">
         This document has no viewable content.
       </p>
     );
@@ -314,14 +350,12 @@ function Body({
       return <TextViewer fileUrl={doc.fileUrl} />;
     default:
       return (
-        <div className="flex flex-col items-center justify-center gap-3 py-24 text-white/70">
-          <p className="text-sm">
-            Preview is not available for this file type.
-          </p>
+        <div className="reveal flex flex-col items-center justify-center gap-4 px-6 py-24 text-white/70">
+          <p className="text-sm">Preview is not available for this file type.</p>
           {doc.downloadUrl && (
             <a
               href={doc.downloadUrl}
-              className="rounded-md border border-white/20 px-4 py-2 text-sm hover:bg-white/10"
+              className="press rounded-md border border-white/15 px-4 py-2 text-sm outline-none transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out-soft)] hover:border-white/30 hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/40"
             >
               Download the file
             </a>

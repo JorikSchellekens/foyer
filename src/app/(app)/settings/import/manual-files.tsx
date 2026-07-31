@@ -82,8 +82,8 @@ export function ManualFiles({
       </p>
 
       {progress ? (
-        <div className="mt-4">
-          <Progress value={progress.pct} />
+        <div className="mt-4" role="status" aria-live="polite">
+          <Progress value={progress.pct} aria-label="Upload progress" />
           <p className="mt-2 font-mono text-xs text-muted-foreground tabular">
             Uploading {progress.done}/{progress.total} - {progress.pct}%
           </p>

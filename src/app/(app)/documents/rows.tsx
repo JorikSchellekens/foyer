@@ -2,13 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Eye, Folder as FolderIcon } from "lucide-react";
 import type { DocumentType } from "@prisma/client";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { FileIcon } from "@/components/shell/file-icon";
-import { formatBytes, timeAgo, pluralize } from "@/lib/format";
+import { formatBytes, formatDateTime, timeAgo, pluralize } from "@/lib/format";
 import { docTypeLabel } from "@/lib/doc-types";
 import { RowMenu } from "./row-menu";
 import { RowCheckbox } from "./selection";
@@ -64,8 +65,9 @@ export function LibCrumbDropLink({
         if (await handleLibMoveDrop(e, folderId)) router.refresh();
       }}
       className={cn(
+        "rounded-sm outline-none transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out-soft)] focus-visible:ring-3 focus-visible:ring-ring",
         className,
-        over && "rounded-sm bg-primary/10 ring-2 ring-primary/60"
+        over && "bg-primary/10 ring-2 ring-primary/60"
       )}
     >
       {children}
@@ -73,19 +75,37 @@ export function LibCrumbDropLink({
   );
 }
 
+/** Row shell: click-anywhere, mount reveal; TableRow owns the hover wash. */
+const ROW = "stagger-item group cursor-pointer";
+/** The name is the row's real link, so keyboard users get a visible target. */
+const NAME_LINK =
+  "-mx-1 rounded-md px-1 outline-none focus-visible:ring-3 focus-visible:ring-ring";
+const META = "py-2.5 text-[0.8125rem] text-muted-foreground";
+/** Counts, sizes and dates: mono and tabular so the columns align optically. */
+const NUM = "py-2.5 font-mono text-[0.8125rem] text-muted-foreground tabular";
+
+/** Cap the cascade: a long library should not ripple for seconds. */
+function stagger(index: number) {
+  return { "--i": Math.min(index, 10) } as React.CSSProperties;
+}
+
 export function FolderRow({
   folder,
+  index = 0,
 }: {
   folder: { id: string; name: string; itemCount: number };
+  index?: number;
 }) {
   const router = useRouter();
   const [dropOver, setDropOver] = useState(false);
+  const href = `/documents?folder=${folder.id}`;
   return (
     <TableRow
       className={cn(
-        "cursor-pointer",
+        ROW,
         dropOver && "bg-primary/5 ring-2 ring-inset ring-primary/60"
       )}
+      style={stagger(index)}
       draggable
       onDragStart={(e) => startLibFolderDrag(e, folder.id)}
       onDragOver={(e) => {
@@ -100,23 +120,38 @@ export function FolderRow({
         setDropOver(false);
         if (await handleLibMoveDrop(e, folder.id)) router.refresh();
       }}
-      onClick={() => router.push(`/documents?folder=${folder.id}`)}
+      onClick={() => router.push(href)}
     >
-      <TableCell />
-      <TableCell>
+      {/* Selection column: folders are not selectable, so this stays a spacer. */}
+      <TableCell className="py-2.5" />
+      <TableCell className="py-2.5">
         <div className="flex items-center gap-2.5">
-          <FolderIcon className="size-4 text-[#b7791f]" strokeWidth={1.5} />
-          <span className="font-medium">{folder.name}</span>
+          <FolderIcon
+            className="size-4 shrink-0 text-[#b7791f]"
+            strokeWidth={1.5}
+            aria-hidden
+          />
+          <Link
+            href={href}
+            // The row is the drag source: an anchor is draggable by default and
+            // would hijack the gesture, so opt it out.
+            draggable={false}
+            onClick={(e) => e.stopPropagation()}
+            className={cn(NAME_LINK, "font-medium")}
+          >
+            {folder.name}
+          </Link>
         </div>
       </TableCell>
-      <TableCell className="text-muted-foreground">Folder</TableCell>
-      <TableCell className="text-muted-foreground">
+      <TableCell className={META}>Folder</TableCell>
+      <TableCell className={META}>
         {pluralize(folder.itemCount, "item")}
       </TableCell>
       <TableCell />
       <TableCell />
+      {/* Data rooms column: only documents belong to rooms. */}
       <TableCell />
-      <TableCell className="text-right">
+      <TableCell className="py-2.5 text-right">
         <RowMenu
           name={folder.name}
           onRename={async (n) => {
@@ -136,6 +171,7 @@ export function DocumentRow({
   doc,
   rooms,
   memberOf,
+  index = 0,
 }: {
   doc: {
     id: string;
@@ -148,47 +184,66 @@ export function DocumentRow({
   };
   rooms: RoomOption[];
   memberOf: RoomRef[];
+  index?: number;
 }) {
   const router = useRouter();
+  const href = `/documents/${doc.id}`;
   return (
     <TableRow
-      className="group cursor-pointer"
+      className={ROW}
+      style={stagger(index)}
       draggable
       onDragStart={(e) => startLibDocDrag(e, doc.id)}
-      onClick={() => router.push(`/documents/${doc.id}`)}
+      onClick={() => router.push(href)}
     >
-      <TableCell>
+      <TableCell className="py-2.5" onClick={(e) => e.stopPropagation()}>
         <RowCheckbox id={doc.id} />
       </TableCell>
-      <TableCell>
+      <TableCell className="py-2.5">
         <div className="flex items-center gap-2.5">
           <FileIcon type={doc.type} />
-          <span className="font-medium">{doc.name}</span>
+          <Link
+            href={href}
+            // The row is the drag source: an anchor is draggable by default and
+            // would hijack the gesture, so opt it out.
+            draggable={false}
+            onClick={(e) => e.stopPropagation()}
+            className={cn(NAME_LINK, "font-medium")}
+          >
+            {doc.name}
+          </Link>
         </div>
       </TableCell>
-      <TableCell className="text-muted-foreground">
-        {docTypeLabel(doc.type)}
+      <TableCell className={META}>{docTypeLabel(doc.type)}</TableCell>
+      <TableCell className={NUM}>
+        {doc.type === "NOTION" ? (
+          <span aria-hidden>-</span>
+        ) : (
+          formatBytes(doc.size)
+        )}
       </TableCell>
-      <TableCell className="text-muted-foreground">
-        {doc.type === "NOTION" ? "—" : formatBytes(doc.size)}
-      </TableCell>
-      <TableCell className="tabular text-muted-foreground">
-        {doc.linkCount}
-      </TableCell>
-      <TableCell className="tabular text-muted-foreground">
-        {doc.viewCount}
-      </TableCell>
-      <TableCell onClick={(e) => e.stopPropagation()}>
+      <TableCell className={NUM}>{doc.linkCount}</TableCell>
+      <TableCell className={NUM}>{doc.viewCount}</TableCell>
+      <TableCell className="py-2.5" onClick={(e) => e.stopPropagation()}>
         <DataroomCell documentId={doc.id} rooms={rooms} memberOf={memberOf} />
       </TableCell>
-      <TableCell className="text-right text-muted-foreground">
-        <div className="flex items-center justify-end gap-1">
-          <span className="text-xs">{timeAgo(doc.updatedAt)}</span>
+      <TableCell className="py-2.5 text-right">
+        <div className="flex items-center justify-end gap-0.5">
+          <time
+            dateTime={doc.updatedAt}
+            title={formatDateTime(doc.updatedAt)}
+            className="mr-1 font-mono text-xs text-muted-foreground tabular"
+          >
+            {timeAgo(doc.updatedAt)}
+          </time>
           <Button
             variant="ghost"
             size="icon"
-            className="size-7 opacity-0 transition-opacity group-hover:opacity-100"
+            aria-label={`Preview ${doc.name}`}
             title="Preview"
+            // Quiet until the row is engaged; the overflow menu stays put so
+            // there is always one visible way in, touch included.
+            className="opacity-0 transition-opacity duration-[var(--dur)] ease-[var(--ease-out-soft)] group-hover:opacity-100 focus-visible:opacity-100"
             onClick={(e) => {
               e.stopPropagation();
               router.push(`/documents/${doc.id}/preview`);

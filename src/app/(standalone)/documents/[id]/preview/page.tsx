@@ -63,8 +63,8 @@ export default async function DocumentPreviewPage({
       preview
       previewText={
         isOldVersion
-          ? `Internal preview of version ${version.versionNumber} - nothing is recorded.`
-          : "Internal preview - nothing is recorded."
+          ? `Internal look at version ${version.versionNumber}. Nothing is recorded.`
+          : "Internal look at your own document. Nothing is recorded."
       }
       brand={{
         teamName: ctx.team.name,

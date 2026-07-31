@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
-import { Loader2 } from "lucide-react";
 import { paintHeat } from "./mouse-heatmap";
+import { Skeleton } from "@/components/ui/skeleton";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 
@@ -26,15 +26,12 @@ export function PageHeatmapGrid({
   return (
     <Document
       file={fileUrl}
-      loading={
-        <div className="flex items-center gap-2 py-12 text-sm text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" /> Rendering pages…
-        </div>
-      }
+      // Hold the grid's shape while pdf.js works so the page never jumps.
+      loading={<HeatSkeletonGrid count={Math.min(pages.length, 3)} />}
       error={
-        <p className="py-12 text-sm text-muted-foreground">
-          The document could not be rendered; showing schematic maps is not
-          possible either without it.
+        <p className="rounded-md border border-dashed px-6 py-10 text-center text-sm text-muted-foreground">
+          The document could not be rendered, so its attention maps cannot be
+          drawn over the real pages.
         </p>
       }
     >
@@ -44,6 +41,20 @@ export function PageHeatmapGrid({
         ))}
       </div>
     </Document>
+  );
+}
+
+/** Page-shaped skeletons: same grid, same aspect, so nothing reflows. */
+function HeatSkeletonGrid({ count }: { count: number }) {
+  return (
+    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+      {Array.from({ length: Math.max(count, 1) }, (_, i) => (
+        <div key={i}>
+          <Skeleton className="aspect-[1/1.294] w-full border" />
+          <Skeleton className="mx-auto mt-1.5 h-3 w-24" />
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -58,6 +69,7 @@ function HeatPage({
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const [width, setWidth] = useState(320);
   const [rendered, setRendered] = useState(false);
+  const [painted, setPainted] = useState(false);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -81,13 +93,14 @@ function HeatPage({
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, w, h);
     paintHeat(ctx, w, h, samples);
+    setPainted(true);
   }, [rendered, samples, width]);
 
   return (
-    <figure>
+    <figure className="reveal">
       <div
         ref={wrapRef}
-        className="relative overflow-hidden rounded-md border shadow-sm"
+        className="relative overflow-hidden rounded-md border shadow-[var(--shadow-hairline)]"
       >
         <Page
           pageNumber={page}
@@ -96,13 +109,17 @@ function HeatPage({
           renderAnnotationLayer={false}
           onRenderSuccess={() => setRendered(true)}
         />
+        {/* The heat crossfades in over the finished page render. */}
         <canvas
           ref={overlayRef}
-          className="pointer-events-none absolute inset-0 h-full w-full"
+          data-painted={painted}
+          className="pointer-events-none absolute inset-0 h-full w-full opacity-0 transition-opacity duration-[var(--dur-reveal)] ease-[var(--ease-out-soft)] data-[painted=true]:opacity-100"
         />
       </div>
-      <figcaption className="mt-1.5 text-center font-mono text-xs text-muted-foreground">
-        Page {page} · {samples.length} samples
+      <figcaption className="mt-1.5 text-center text-xs text-muted-foreground">
+        Page <span className="font-mono tabular">{page}</span> ·{" "}
+        <span className="font-mono tabular">{samples.length}</span> cursor
+        samples
       </figcaption>
     </figure>
   );

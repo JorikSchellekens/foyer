@@ -45,17 +45,39 @@ export function LivePresenceProvider({
   return <LiveContext.Provider value={live}>{children}</LiveContext.Provider>;
 }
 
-/** A pulsing dot shown only while the given link is being viewed. */
+/**
+ * A quiet accent dot shown while the given link is being viewed.
+ *
+ * A viewer's heartbeat can land just outside a single poll window, which would
+ * blink the dot off and back on. Holding it for slightly longer than one poll
+ * after it leaves the set makes presence read as steady rather than twitchy.
+ */
 export function LiveDot({ linkId }: { linkId: string }) {
   const live = useContext(LiveContext);
-  if (!live.has(linkId)) return null;
+  const isLive = live.has(linkId);
+  const [shown, setShown] = useState(isLive);
+
+  useEffect(() => {
+    if (isLive) {
+      setShown(true);
+      return;
+    }
+    const handle = setTimeout(() => setShown(false), 12_000);
+    return () => clearTimeout(handle);
+  }, [isLive]);
+
+  if (!shown) return null;
   return (
     <span
-      className="relative inline-flex size-2 shrink-0"
+      className="relative inline-flex size-2 shrink-0 animate-[reveal_var(--dur-reveal)_var(--ease-out-quint)_both]"
       title="Being viewed now"
     >
-      <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500 opacity-75" />
-      <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+      <span className="sr-only">Being viewed now</span>
+      <span
+        aria-hidden
+        className="absolute inset-0 rounded-full motion-safe:animate-[pulse-ring_2s_var(--ease-out-soft)_infinite]"
+      />
+      <span aria-hidden className="relative size-2 rounded-full bg-primary" />
     </span>
   );
 }

@@ -19,6 +19,9 @@ import type { RoomOption, RoomRef } from "./dataroom-picker";
 
 export const metadata = { title: "Documents" };
 
+/** Column heads recede so the file name reads as the primary axis. */
+const HEAD = "h-9 text-xs font-medium text-muted-foreground";
+
 export default async function DocumentsPage({
   searchParams,
 }: {
@@ -120,7 +123,10 @@ export default async function DocumentsPage({
 
       <div className="px-4 sm:px-8 py-6">
         {crumbs.length > 0 && (
-          <nav className="mb-4 flex items-center gap-1 text-sm text-muted-foreground">
+          <nav
+            aria-label="Folder path"
+            className="reveal mb-4 flex items-center gap-1 text-sm text-muted-foreground"
+          >
             <LibCrumbDropLink
               folderId={null}
               href="/documents"
@@ -130,9 +136,11 @@ export default async function DocumentsPage({
             </LibCrumbDropLink>
             {crumbs.map((c, i) => (
               <span key={c.id} className="flex items-center gap-1">
-                <ChevronRight className="size-3.5" />
+                <ChevronRight className="size-3.5 shrink-0" aria-hidden />
                 {i === crumbs.length - 1 ? (
-                  <span className="text-foreground">{c.name}</span>
+                  <span className="px-1 font-medium text-foreground">
+                    {c.name}
+                  </span>
                 ) : (
                   <LibCrumbDropLink
                     folderId={c.id}
@@ -168,23 +176,26 @@ export default async function DocumentsPage({
             <div className="rounded-lg border bg-card">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10">
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className={`${HEAD} w-10`}>
                       <SelectAllCheckbox />
                     </TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead className="w-28">Type</TableHead>
-                    <TableHead className="w-24">Size</TableHead>
-                    <TableHead className="w-20">Links</TableHead>
-                    <TableHead className="w-20">Views</TableHead>
-                    <TableHead className="w-56">Data rooms</TableHead>
-                    <TableHead className="w-40 text-right">Updated</TableHead>
+                    <TableHead className={HEAD}>Name</TableHead>
+                    <TableHead className={`${HEAD} w-28`}>Type</TableHead>
+                    <TableHead className={`${HEAD} w-24`}>Size</TableHead>
+                    <TableHead className={`${HEAD} w-20`}>Links</TableHead>
+                    <TableHead className={`${HEAD} w-20`}>Views</TableHead>
+                    <TableHead className={`${HEAD} w-56`}>Data rooms</TableHead>
+                    <TableHead className={`${HEAD} w-40 text-right`}>
+                      Updated
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {folders.map((f) => (
+                  {folders.map((f, i) => (
                     <FolderRow
                       key={f.id}
+                      index={i}
                       folder={{
                         id: f.id,
                         name: f.name,
@@ -192,9 +203,10 @@ export default async function DocumentsPage({
                       }}
                     />
                   ))}
-                  {documents.map((d) => (
+                  {documents.map((d, i) => (
                     <DocumentRow
                       key={d.id}
+                      index={folders.length + i}
                       rooms={rooms}
                       memberOf={memberships[d.id] ?? []}
                       doc={{
