@@ -191,8 +191,13 @@ async function signAs(
   await page.waitForSelector("text=requests your signature");
   await page.waitForSelector('[data-sign-field]');
 
-  // adopt via a signature box
-  await page.locator('button:has-text("Sign here")').first().click();
+  // Adopt via a signature box. Query the accessible name rather than the
+  // visible text: the box shows a short "Sign" so it survives a narrow field,
+  // and the full intent lives in the label.
+  await page
+    .getByRole("button", { name: /Add your (signature|initials)/ })
+    .first()
+    .click();
   await page.waitForSelector("text=Adopt your signature");
   await page.fill('input[placeholder="Your full name"]', typedName);
   await page.click('button:has-text("Adopt and apply")');

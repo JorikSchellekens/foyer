@@ -197,7 +197,7 @@ export function DocumentRow({
       onClick={() => router.push(href)}
     >
       <TableCell className="py-2.5" onClick={(e) => e.stopPropagation()}>
-        <RowCheckbox id={doc.id} />
+        <RowCheckbox id={doc.id} name={doc.name} />
       </TableCell>
       <TableCell className="py-2.5">
         <div className="flex items-center gap-2.5">

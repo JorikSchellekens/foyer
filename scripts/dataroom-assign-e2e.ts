@@ -221,7 +221,10 @@ async function main() {
 
   // ---- document detail page: shows rooms, removes from one ----
   await page.goto(`${BASE}/documents/${fx.docs[0].id}`);
-  await page.waitForSelector("text=Data rooms");
+  // Wait for the section heading, not bare text: the sidebar has a "Data rooms"
+  // nav link that is already on screen during the route's loading state, so a
+  // text match would resolve before the page itself had rendered.
+  await page.getByRole("heading", { name: "Data rooms" }).waitFor();
   check(
     "detail page lists the rooms",
     await page.locator("a", { hasText: "Alpha Room" }).first().isVisible()
