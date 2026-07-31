@@ -25,7 +25,6 @@ Folder (team library, nested), Document, DocumentVersion (fileKey, numPages, upl
 Dataroom, DataroomFolder (nested), DataroomDocument (ordering),
 Link (target document OR dataroom; slug; domain; access controls),
 LinkPermission (per-link file/folder grants when not sharing entire dataroom),
-ViewerGroup + ViewerGroupMember (dataroom groups) + group permissions,
 LinkRecipient (direct email invites w/ expiry tokens),
 Viewer (email identity per team), View (session), PageView (per-page duration),
 MouseBatch (sampled mouse paths per page, JSONB),
