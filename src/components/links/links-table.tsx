@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -102,6 +102,26 @@ const HEAD = "h-9 text-xs font-medium text-muted-foreground";
  */
 const LOADED_AT = Date.now();
 
+const subscribeNever = () => () => {};
+
+/**
+ * True only after hydration.
+ *
+ * Whether a link has expired depends on the clock of whoever is rendering, and
+ * the server's module-scope LOADED_AT can be hours older than the browser's.
+ * Deciding it during SSR therefore produces a different label than the client
+ * would, which fails hydration. Render every link as live, then let the client
+ * mark the expired ones. useSyncExternalStore rather than an effect: the
+ * server snapshot is explicit and there is no state written during mount.
+ */
+function useHydrated() {
+  return useSyncExternalStore(
+    subscribeNever,
+    () => true,
+    () => false
+  );
+}
+
 export function LinksTable({
   rows,
   ctx,
@@ -150,7 +170,8 @@ export function LinksTable({
  */
 function AccessChips({ link }: { link: EditorLink }) {
   const expiresAt = link.expiresAt ? new Date(link.expiresAt) : null;
-  const expired = !!expiresAt && expiresAt.getTime() < LOADED_AT;
+  const expired =
+    useHydrated() && !!expiresAt && expiresAt.getTime() < LOADED_AT;
   const chips: { icon: LucideIcon; label: string; tone?: string }[] = [];
 
   if (link.hasPassword) chips.push({ icon: Lock, label: "Password protected" });
