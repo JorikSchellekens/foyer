@@ -294,7 +294,7 @@ function DomainCard({
         </div>
       )}
       {d.lastCheckedAt && (
-        <p className="mt-1.5 text-xs text-muted-foreground">
+        <p className="mt-1.5 text-xs text-muted-foreground" suppressHydrationWarning>
           last checked {timeAgo(d.lastCheckedAt)}
         </p>
       )}

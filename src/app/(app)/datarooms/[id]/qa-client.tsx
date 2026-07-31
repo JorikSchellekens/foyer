@@ -104,7 +104,10 @@ function QuestionCard({
             <span className="truncate text-sm font-medium">
               {q.viewerEmail ?? "Anonymous visitor"}
             </span>
-            <span className="text-xs text-muted-foreground">
+            <span
+              className="text-xs text-muted-foreground"
+              suppressHydrationWarning
+            >
               {timeAgo(q.createdAt)}
             </span>
           </div>
@@ -115,7 +118,10 @@ function QuestionCard({
               <CornerDownRight className="mt-0.5 size-3.5 shrink-0 text-primary" />
               <div>
                 <p className="whitespace-pre-wrap text-sm">{q.answer}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
+                <p
+                  className="mt-1 text-xs text-muted-foreground"
+                  suppressHydrationWarning
+                >
                   {q.answeredBy} · {q.answeredAt ? timeAgo(q.answeredAt) : ""}
                 </p>
               </div>

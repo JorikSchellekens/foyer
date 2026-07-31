@@ -233,6 +233,7 @@ export function DocumentRow({
             dateTime={doc.updatedAt}
             title={formatDateTime(doc.updatedAt)}
             className="mr-1 font-mono text-xs text-muted-foreground tabular"
+            suppressHydrationWarning
           >
             {timeAgo(doc.updatedAt)}
           </time>

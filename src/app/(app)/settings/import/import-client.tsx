@@ -283,7 +283,9 @@ function PastRuns({
             key={p.id}
             className="flex items-center gap-3 rounded-md border px-3 py-2 text-sm"
           >
-            <span className="text-muted-foreground">{timeAgo(p.createdAt)}</span>
+            <span className="text-muted-foreground" suppressHydrationWarning>
+              {timeAgo(p.createdAt)}
+            </span>
             <span className="ml-auto font-mono text-xs tabular text-muted-foreground">
               {p.done} imported
               {p.failed > 0 ? `, ${p.failed} failed` : ""}

@@ -249,7 +249,7 @@ export function MembersClient({
                     </span>
                   )}
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground" suppressHydrationWarning>
                   joined {timeAgo(m.joinedAt)}
                   {m.role === "MEMBER" && m.permissions.length > 0
                     ? ` · ${m.permissions.length} scoped permission${

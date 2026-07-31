@@ -298,7 +298,7 @@ function DeliveryHistory({
               <span className="min-w-0 flex-1 truncate text-destructive">
                 {d.error ?? ""}
               </span>
-              <span className="shrink-0 text-muted-foreground tabular">
+              <span className="shrink-0 text-muted-foreground tabular" suppressHydrationWarning>
                 {timeAgo(d.createdAt)}
               </span>
             </li>
