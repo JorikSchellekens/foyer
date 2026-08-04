@@ -6,7 +6,8 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: "Foyer",
     description: "Share documents and data rooms. See everything.",
     start_url: "/",
-    display: "standalone",
+    // "browser" keeps Chrome from treating this as an installable PWA.
+    display: "browser",
     background_color: "#101418",
     theme_color: "#175B47",
     icons: [
