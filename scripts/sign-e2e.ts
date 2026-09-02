@@ -93,6 +93,10 @@ async function seed() {
   });
   await db.signatureRequest.deleteMany({ where: { teamId: team.id } });
   await db.document.deleteMany({ where: { teamId: team.id } });
+  // Remembered details are cross-team and keyed by email: start clean.
+  await db.signerProfile.deleteMany({
+    where: { email: { in: ["signer-one@example.com", "signer-two@example.com"] } },
+  });
 
   const pdfBytes = await makeFixturePdf();
   const fileKey = `${team.id}/e2e/sign-fixture.pdf`;
@@ -176,38 +180,122 @@ async function placeField(
   await clickOnPage(page, pageNum, fx, fy);
 }
 
+/**
+ * Every text-bearing field must render its value inside its own box: the
+ * font is sized from the box (as the stamper does), never from the viewport.
+ * Catches the phone-width regression where a fixed 11px date wrapped out of a
+ * 3%-tall box.
+ */
+async function auditFillRender(page: Page, label: string) {
+  const report = await page.evaluate(() => {
+    const out: { kind: string; ok: boolean; detail: string }[] = [];
+    for (const box of document.querySelectorAll<HTMLElement>("[data-sign-field]")) {
+      const kind = box.dataset.signKind ?? "?";
+      if (kind === "SIGNATURE" || kind === "INITIALS" || kind === "CHECKBOX") continue;
+      const el = box.querySelector<HTMLElement>("input, span");
+      if (!el) continue;
+      const b = box.getBoundingClientRect();
+      const fontPx = parseFloat(getComputedStyle(el).fontSize);
+      // scrollWidth > clientWidth means the text overflowed/wrapped
+      const overflow = el.scrollWidth > el.clientWidth + 1;
+      const tooTall = fontPx > b.height;
+      out.push({
+        kind,
+        ok: !overflow && !tooTall,
+        detail: `box ${b.width.toFixed(0)}x${b.height.toFixed(0)} font ${fontPx.toFixed(1)}px scroll ${el.scrollWidth}/${el.clientWidth}`,
+      });
+    }
+    return out;
+  });
+  for (const r of report)
+    check(`${label}: ${r.kind} fits its box`, r.ok, r.detail);
+}
+
 async function signAs(
   browserContextUrl: string,
   typedName: string,
-  textValue: string | null
+  textValue: string | null,
+  opts: {
+    remember?: boolean;
+    /** saved details banner expected; skip adopting, signature is pre-applied */
+    expectSaved?: boolean;
+    viewport?: { width: number; height: number };
+  } = {}
 ) {
   const browser = await chromium.launch();
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const ctx = await browser.newContext({
+    viewport: opts.viewport ?? { width: 1280, height: 900 },
+  });
   const page = await ctx.newPage();
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(String(e)));
 
   await page.goto(browserContextUrl);
   await page.waitForSelector("text=requests your signature");
-  await page.waitForSelector('[data-sign-field]');
+  try {
+    // Generous: the first hit on a route compiles it in dev.
+    await page.waitForSelector('[data-sign-field]', { timeout: 60_000 });
+  } catch (e) {
+    const shot = `${process.env.E2E_SHOTS ?? "/tmp"}/sign-fail-${typedName.replace(/\s+/g, "-")}.png`;
+    await page.screenshot({ path: shot, fullPage: true });
+    console.log(
+      `  DEBUG (${typedName}) fields in DOM: ${await page.locator("[data-sign-field]").count()}, pages: ${await page.locator("[data-sign-page]").count()}, shot: ${shot}`
+    );
+    console.log(`  DEBUG (${typedName}) errors:`, errors.slice(0, 5));
+    throw e;
+  }
+  // Give pdfjs a beat to report real page sizes before measuring.
+  await page.waitForSelector('[data-sign-page="1"] canvas', { timeout: 20_000 });
+  await page.waitForTimeout(400);
+  await auditFillRender(page, `${typedName} @${opts.viewport?.width ?? 1280}px`);
 
-  // Adopt via a signature box. Query the accessible name rather than the
-  // visible text: the box shows a short "Sign" so it survives a narrow field,
-  // and the full intent lives in the label.
-  await page
-    .getByRole("button", { name: /Add your (signature|initials)/ })
-    .first()
-    .click();
-  await page.waitForSelector("text=Adopt your signature");
-  await page.fill('input[placeholder="Your full name"]', typedName);
-  await page.click('button:has-text("Adopt and apply")');
+  if (opts.expectSaved) {
+    check(
+      `${typedName}: saved details banner shown`,
+      (await page.locator('[data-testid="saved-details"]').count()) === 1
+    );
+    check(
+      `${typedName}: saved signature pre-applied`,
+      (await page.locator('[data-sign-kind="SIGNATURE"][data-sign-filled="true"]').count()) >= 1
+    );
+  } else {
+    // Adopt via a signature box. Query the accessible name rather than the
+    // visible text: the box shows a short "Sign" so it survives a narrow field,
+    // and the full intent lives in the label.
+    await page
+      .getByRole("button", { name: /Add your (signature|initials)/ })
+      .first()
+      .click();
+    await page.waitForSelector("text=Adopt your signature");
+    await page.fill('input[placeholder="Your full name"]', typedName);
+    await page.click('button:has-text("Adopt and apply")');
+  }
 
   if (textValue !== null) {
     await page.fill('[data-sign-kind="TEXT"] input', textValue);
   }
+  if ((await page.locator('[data-sign-kind="NAME"] input').count()) > 0) {
+    check(
+      `${typedName}: NAME field carries the adopted name`,
+      (await page.inputValue('[data-sign-kind="NAME"] input')) === typedName
+    );
+  }
+  await auditFillRender(page, `${typedName} filled @${opts.viewport?.width ?? 1280}px`);
+  if (process.env.E2E_SHOTS) {
+    // Scroll the first text-bearing field into view so the shot shows fills.
+    await page.locator('[data-sign-kind="DATE_SIGNED"], [data-sign-kind="SIGNATURE"]').first().scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: `${process.env.E2E_SHOTS}/filled-${typedName.replace(/\s+/g, "-")}-${opts.viewport?.width ?? 1280}.png`,
+    });
+  }
 
   await page.click('[data-testid="sign"]');
   await page.waitForSelector('[data-testid="agree-sign"]');
+  if (opts.remember !== undefined) {
+    const box = page.locator('[data-testid="remember-details"]');
+    const checked = (await box.getAttribute("aria-checked")) === "true";
+    if (checked !== opts.remember) await box.click();
+  }
   await page.click('[data-testid="agree-sign"]');
   try {
     await page.waitForSelector("text=/You have signed|Everyone has signed/", {
@@ -238,7 +326,13 @@ async function main() {
   check("draft created", !!requestId);
 
   // ---- recipients ----
-  await addRecipient(page, "signer-one@example.com");
+  // Pasted the way a mail client copies it: quoted name + angle address.
+  await page.fill(
+    'input[placeholder="signer@company.com"]',
+    '"Signer One" <Signer-One@example.com>'
+  );
+  await page.keyboard.press("Enter");
+  await page.waitForSelector('button:has-text("signer-one@example.com")');
   await addRecipient(page, "signer-two@example.com");
   const signerOne = await db.signer.findFirst({
     where: { requestId, email: "signer-one@example.com" },
@@ -247,6 +341,19 @@ async function main() {
     where: { requestId, email: "signer-two@example.com" },
   });
   check("signers persisted", !!signerOne && !!signerTwo);
+  check(
+    "display name parsed from pasted address",
+    signerOne?.name === "Signer One",
+    `got ${signerOne?.name}`
+  );
+  // Junk is refused inline rather than silently dropped.
+  await page.fill('input[placeholder="signer@company.com"]', "not an address");
+  await page.keyboard.press("Enter");
+  check(
+    "invalid address flagged",
+    (await page.locator("text=does not look like an email address").count()) === 1
+  );
+  await page.fill('input[placeholder="signer@company.com"]', "");
 
   // ---- place fields: signer one on portrait page 1, signer two on landscape page 2 ----
   await page.waitForSelector('[data-sign-page="2"]');
@@ -257,19 +364,78 @@ async function main() {
   await placeField(page, "SIGNATURE", 1, 0.15, 0.75);
   await placeField(page, "DATE_SIGNED", 1, 0.15, 0.85);
   await placeField(page, "TEXT", 1, 0.55, 0.75);
+  // A right-aligned name field: the last placed field is selected, so the
+  // alignment radios in the panel apply to it.
+  await placeField(page, "NAME", 1, 0.55, 0.85);
+  await page.click('[data-align="RIGHT"]');
+  check(
+    "alignment radio reflects choice",
+    (await page.getAttribute('[data-align="RIGHT"]', "aria-checked")) === "true"
+  );
 
   check(
-    "4 fields on canvas",
-    (await page.locator("[data-sign-field]").count()) === 4,
+    "5 fields on canvas",
+    (await page.locator("[data-sign-field]").count()) === 5,
     `got ${await page.locator("[data-sign-field]").count()}`
   );
+
+  // ---- snapping: first a free (Alt) drag, then a drag that lands the TEXT
+  // box's left edge a few px from the NAME box's left edge: it should lock
+  // on exactly and draw a guide ----
+  {
+    const text = page.locator('[data-sign-kind="TEXT"]');
+    const nameF = page.locator('[data-sign-kind="NAME"]');
+    const tb0 = (await text.boundingBox())!;
+    await page.mouse.move(tb0.x + tb0.width / 2, tb0.y + tb0.height / 2);
+    await page.mouse.down();
+    await page.keyboard.down("Alt");
+    await page.mouse.move(tb0.x + tb0.width / 2 + 5, tb0.y + tb0.height / 2 - 20, { steps: 3 });
+    await page.mouse.up();
+    await page.keyboard.up("Alt");
+    const tb1 = (await text.boundingBox())!;
+    check("Alt drag is free", Math.abs(tb1.x - (tb0.x + 5)) < 0.75, `delta ${(tb1.x - tb0.x).toFixed(2)}`);
+
+    const tb = (await text.boundingBox())!;
+    const nb = (await nameF.boundingBox())!;
+    const grabX = tb.x + tb.width / 2;
+    const grabY = tb.y + tb.height / 2;
+    const targetLeft = nb.x + 4;
+    await page.mouse.move(grabX, grabY);
+    await page.mouse.down();
+    await page.mouse.move(grabX - 40, grabY - 30, { steps: 4 });
+    await page.mouse.move(targetLeft + tb.width / 2, grabY - 30, { steps: 6 });
+    const guideCount = await page.locator('[data-sign-guide="x"]').count();
+    await page.mouse.up();
+    const tbAfter = (await text.boundingBox())!;
+    check("snap guide drawn while dragging", guideCount >= 1, `got ${guideCount}`);
+    check(
+      "left edge snapped onto neighbour",
+      Math.abs(tbAfter.x - nb.x) < 0.75,
+      `delta ${(tbAfter.x - nb.x).toFixed(2)}px`
+    );
+  }
+
   // Poll past the debounce + server roundtrip (slow on cold dev compiles).
   let fields: Awaited<ReturnType<typeof db.signatureField.findMany>> = [];
-  for (let i = 0; i < 30 && fields.length !== 4; i++) {
+  for (let i = 0; i < 30 && (fields.length !== 5 || !fields.some((f) => f.align === "RIGHT")); i++) {
     await new Promise((r) => setTimeout(r, 500));
     fields = await db.signatureField.findMany({ where: { requestId } });
   }
-  check("4 fields persisted", fields.length === 4, `got ${fields.length}`);
+  check("5 fields persisted", fields.length === 5, `got ${fields.length}`);
+  check(
+    "NAME field persisted right-aligned",
+    fields.some((f) => f.kind === "NAME" && f.align === "RIGHT"),
+    fields.map((f) => `${f.kind}:${f.align}`).join(",")
+  );
+  {
+    const t = fields.find((f) => f.kind === "TEXT");
+    const n = fields.find((f) => f.kind === "NAME");
+    check(
+      "snapped left edges persisted equal",
+      !!t && !!n && Math.abs(t.xPct - n.xPct) < 1e-6,
+      `${t?.xPct} vs ${n?.xPct}`
+    );
+  }
   check(
     "field pcts sane",
     fields.every(
@@ -279,7 +445,7 @@ async function main() {
   );
   check(
     "fields split across signers",
-    fields.filter((f) => f.signerId === signerOne!.id).length === 3 &&
+    fields.filter((f) => f.signerId === signerOne!.id).length === 4 &&
       fields.filter((f) => f.signerId === signerTwo!.id).length === 1
   );
 
@@ -307,10 +473,30 @@ async function main() {
   check("links carry fresh tokens", !!linkFor(s1.token) && !!linkFor(s2.token));
 
   // ---- both signers sign in fresh browser contexts ----
-  await signAs(linkFor(s1.token), "Signer One", "Chief Example Officer");
+  // Phone-width for the signer who holds the text-bearing fields: the render
+  // audit inside signAs is the point of that viewport.
+  await signAs(linkFor(s1.token), "Signer One", "Chief Example Officer", {
+    remember: true,
+    viewport: { width: 390, height: 844 },
+  });
   const afterOne = await db.signatureRequest.findUnique({ where: { id: requestId } });
   check("still SENT after first signer", afterOne?.status === "SENT");
+  const profile = await db.signerProfile.findUnique({
+    where: { email: "signer-one@example.com" },
+  });
+  check(
+    "opt-in saved a signer profile with consent record",
+    !!profile && profile.name === "Signer One" && !!profile.signatureData && !!profile.consentedAt
+  );
+  const nameField = await db.signatureField.findFirst({
+    where: { requestId, kind: "NAME" },
+  });
+  check("NAME field stamped with the adopted name", nameField?.value === "Signer One", `got ${nameField?.value}`);
   await signAs(linkFor(s2.token), "Signer Two", null);
+  check(
+    "no profile without opt-in",
+    (await db.signerProfile.findUnique({ where: { email: "signer-two@example.com" } })) === null
+  );
 
   // ---- completion asserts ----
   const done = await db.signatureRequest.findUnique({ where: { id: requestId } });
@@ -324,7 +510,7 @@ async function main() {
       orderBy: { createdAt: "asc" },
     })
   ).map((e) => e.type);
-  const expectSeq = ["sent", "viewed", "consented", "signed", "completed"];
+  const expectSeq = ["sent", "viewed", "consented", "signed", "details_saved", "completed"];
   check(
     "event trail complete",
     expectSeq.every((t) => events.includes(t)) &&
@@ -418,7 +604,8 @@ async function main() {
     !!imgRequest?.pdfKey && imgRequest.pdfKey !== imgRequest.version.fileKey
   );
 
-  await addRecipient(page, "photo-signer@example.com");
+  // Same signer again: their remembered details should carry over.
+  await addRecipient(page, "signer-one@example.com");
   await page.waitForSelector('[data-sign-page="1"]');
   await placeField(page, "SIGNATURE", 1, 0.3, 0.6);
   await page.waitForSelector("[data-sign-field]");
@@ -437,7 +624,7 @@ async function main() {
     1,
     imgSendMark
   );
-  await signAs(imgLink, "Photo Signer", null);
+  await signAs(imgLink, "Signer One", null, { expectSaved: true, remember: true });
   const imgDone = await db.signatureRequest.findUnique({
     where: { id: imgRequestId },
   });
@@ -451,6 +638,31 @@ async function main() {
     imgFinal.getPageCount() === 2,
     `pages=${imgFinal.getPageCount()}`
   );
+
+  // ---- portal shows saved details and can remove them ----
+  {
+    const b4 = await chromium.launch();
+    const p4 = await (await b4.newContext()).newPage();
+    await p4.goto(linkFor(s1.token));
+    await p4.goto(`${BASE}/signed`);
+    await p4.waitForSelector("text=Your documents");
+    check(
+      "portal lists saved details",
+      (await p4.locator('[data-testid="portal-saved-details"]').count()) === 1
+    );
+    await p4.click('[data-testid="portal-forget-details"]');
+    await p4.waitForSelector("text=Your saved details have been removed");
+    for (let i = 0; i < 20; i++) {
+      if (!(await db.signerProfile.findUnique({ where: { email: "signer-one@example.com" } }))) break;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    check(
+      "portal removal deletes the profile",
+      (await db.signerProfile.findUnique({ where: { email: "signer-one@example.com" } })) === null
+    );
+    await p4.waitForSelector('[data-testid="portal-saved-details"]', { state: "detached", timeout: 10_000 });
+    await b4.close();
+  }
 
   // ---- text rendition to draft stage ----
   await page.goto(`${BASE}/signatures`);

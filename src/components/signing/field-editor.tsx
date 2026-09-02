@@ -3,7 +3,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { Loader2, Plus, Send, Trash2, X } from "lucide-react";
+import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
+  Loader2,
+  Plus,
+  Send,
+  Trash2,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,9 +23,13 @@ import {
   FIELD_KINDS,
   FIELD_LABELS,
   FIELD_DEFAULT_SIZE,
+  FIELD_ALIGNS,
+  hasAlignment,
   signerColor,
+  type FieldAlign,
   type FieldKind,
 } from "@/lib/sign-fields";
+import { parseAddressList } from "@/lib/email-address";
 import type { CanvasField } from "./pdf-field-canvas";
 
 // pdfjs touches browser globals (DOMMatrix) at module scope - never SSR it.
@@ -69,6 +82,7 @@ export function FieldEditor({
   const [armedKind, setArmedKind] = useState<FieldKind | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [newEmail, setNewEmail] = useState("");
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
 
   const colorIndex = Object.fromEntries(
@@ -92,6 +106,7 @@ export function FieldEditor({
       wPct: f.wPct,
       hPct: f.hPct,
       required: f.required,
+      align: f.align,
     }));
   const scheduleFieldSave = useCallback(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -132,23 +147,41 @@ export function FieldEditor({
     return reconciled;
   }
 
+  // Accepts whatever a mail client hands over on copy: bare addresses,
+  // "Name" <addr>, mailto: links, and lists of those. A display name seeds
+  // the recipient's name so it lands on the certificate and in NAME fields.
   async function addRecipient() {
-    const email = newEmail.trim().toLowerCase();
-    if (!email || signers.some((s) => s.email === email)) return;
+    const { addresses, invalid } = parseAddressList(newEmail);
+    if (invalid.length > 0) {
+      setEmailError(
+        invalid.length === 1
+          ? `"${invalid[0]}" does not look like an email address.`
+          : `${invalid.length} entries do not look like email addresses.`
+      );
+      return;
+    }
+    const fresh = addresses.filter(
+      (a) => !signers.some((s) => s.email === a.email)
+    );
+    if (fresh.length === 0) {
+      if (addresses.length > 0) setNewEmail("");
+      return;
+    }
+    setEmailError(null);
     const next = [
       ...signers,
-      {
-        id: `new:${email}`,
-        email,
-        name: null,
+      ...fresh.map((a, i) => ({
+        id: `new:${a.email}`,
+        email: a.email,
+        name: a.name,
         role: "SIGNER" as const,
-        order: sequential ? signers.length : 0,
-      },
+        order: sequential ? signers.length + i : 0,
+      })),
     ];
     const reconciled = await persistSigners(next);
     if (reconciled) {
       setNewEmail("");
-      const added = reconciled.find((s) => s.email === email);
+      const added = reconciled.find((s) => s.email === fresh[fresh.length - 1].email);
       if (added) setActiveSignerId(added.id);
     }
   }
@@ -175,6 +208,7 @@ export function FieldEditor({
       wPct: size.wPct,
       hPct: size.hPct,
       required: true,
+      align: "LEFT",
     };
     setFields((f) => [...f, field]);
     setSelectedId(field.id);
@@ -346,7 +380,18 @@ export function FieldEditor({
                         }}
                       />
                     )}
-                    <span className="min-w-0 flex-1 truncate">{s.email}</span>
+                    <span className="min-w-0 flex-1 truncate">
+                      {s.name ? (
+                        <>
+                          {s.name}
+                          <span className="ml-1.5 text-xs text-muted-foreground">
+                            {s.email}
+                          </span>
+                        </>
+                      ) : (
+                        s.email
+                      )}
+                    </span>
                     {s.role === "CC" && (
                       <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
                         cc
@@ -382,28 +427,50 @@ export function FieldEditor({
               })}
             </div>
             <form
-              className="mt-2 flex gap-1.5"
+              className="mt-2"
               onSubmit={(e) => {
                 e.preventDefault();
                 addRecipient();
               }}
             >
-              <Input
-                type="email"
-                value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
-                placeholder="signer@company.com"
-                className="h-8 text-sm"
-              />
-              <Button
-                type="submit"
-                size="sm"
-                variant="outline"
-                className="h-8"
-                aria-label="Add recipient"
+              <div className="flex gap-1.5">
+                {/* Plain text, not type=email: the browser's own check would
+                    reject the `Name <addr>` form mail clients copy out. */}
+                <Input
+                  type="text"
+                  inputMode="email"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={newEmail}
+                  onChange={(e) => {
+                    setNewEmail(e.target.value);
+                    if (emailError) setEmailError(null);
+                  }}
+                  placeholder="signer@company.com"
+                  aria-label="Recipient email"
+                  aria-invalid={emailError ? true : undefined}
+                  aria-describedby="recipient-email-hint"
+                  className="h-8 text-sm"
+                />
+                <Button
+                  type="submit"
+                  size="sm"
+                  variant="outline"
+                  className="h-8"
+                  aria-label="Add recipient"
+                >
+                  <Plus className="size-3.5" />
+                </Button>
+              </div>
+              <p
+                id="recipient-email-hint"
+                className={`mt-1 text-[11px] leading-snug ${
+                  emailError ? "text-destructive" : "text-muted-foreground"
+                }`}
               >
-                <Plus className="size-3.5" />
-              </Button>
+                {emailError ??
+                  "Paste one or several, in any form: nick@ebar.co.uk or Nick Beeson <nick@ebar.co.uk>."}
+              </p>
             </form>
           </section>
 
@@ -457,9 +524,45 @@ export function FieldEditor({
                     p.{selectedField.page}
                   </span>
                 </p>
+                {hasAlignment(selectedField.kind) && (
+                  <div
+                    role="radiogroup"
+                    aria-label="Text alignment"
+                    className="flex gap-1"
+                  >
+                    {FIELD_ALIGNS.map((a) => {
+                      const Icon =
+                        a === "LEFT"
+                          ? AlignLeft
+                          : a === "CENTER"
+                            ? AlignCenter
+                            : AlignRight;
+                      const on = (selectedField.align ?? "LEFT") === a;
+                      return (
+                        <Button
+                          key={a}
+                          type="button"
+                          role="radio"
+                          aria-checked={on}
+                          aria-label={`Align ${a.toLowerCase()}`}
+                          data-align={a}
+                          variant={on ? "default" : "outline"}
+                          size="sm"
+                          className="h-7 flex-1 px-0"
+                          onClick={() =>
+                            updateField(selectedField.id, { align: a as FieldAlign })
+                          }
+                        >
+                          <Icon className="size-3.5" />
+                        </Button>
+                      );
+                    })}
+                  </div>
+                )}
                 <p className="text-[11px] leading-snug text-muted-foreground">
                   Drag to move, corner to resize, arrow keys to nudge (hold
-                  Shift for a bigger step).
+                  Shift for a bigger step). Edges snap to nearby fields; hold
+                  Alt to place freely.
                 </p>
                 <Button
                   variant="ghost"

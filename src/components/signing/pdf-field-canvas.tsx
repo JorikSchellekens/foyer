@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import { Loader2 } from "lucide-react";
-import { signerColor, type FieldKind } from "@/lib/sign-fields";
+import { signerColor, type FieldAlign, type FieldKind } from "@/lib/sign-fields";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
@@ -20,45 +20,141 @@ export type CanvasField = {
   wPct: number;
   hPct: number;
   required: boolean;
+  align: FieldAlign;
 };
+
+/**
+ * The geometry a fill renderer needs to size its contents like the stamper
+ * will: the box in PDF points, and how many rendered pixels one point is.
+ */
+export type FieldBox = {
+  wPt: number;
+  hPt: number;
+  /** rendered px per PDF point */
+  scale: number;
+};
+
+type Rect = { xPct: number; yPct: number; wPct: number; hPct: number };
 
 type DragState = {
   fieldId: string;
   mode: "move" | "resize";
   startX: number;
   startY: number;
-  rect: { xPct: number; yPct: number; wPct: number; hPct: number };
+  rect: Rect;
 };
+
+type Guides = { xs: number[]; ys: number[] };
 
 // Keyboard nudge step, as a fraction of the page. Shift moves a coarse step.
 const NUDGE = 0.002;
 const NUDGE_COARSE = 0.01;
-// How close two edges must be before the alignment guide is drawn. Purely a
-// cue: nothing is snapped, the pointer stays in charge of the coordinates.
-const ALIGN_TOL = 0.006;
+// Magnet reach in rendered pixels, so snapping feels the same at any zoom or
+// on any page size. Hold Alt to drag freely.
+const SNAP_PX = 7;
+// Assumed until the page reports its real size: US Letter in points.
+const DEFAULT_PAGE_PT = { w: 612, h: 792 };
 
 const EDIT_LABELS: Partial<Record<FieldKind, string>> = {
   SIGNATURE: "Sign",
   INITIALS: "Initials",
+  NAME: "Name",
   DATE_SIGNED: "Date",
   TEXT: "Text",
 };
 
-/** Edges of `f` that line up with an edge of any other field on its page. */
-function alignmentGuides(f: CanvasField, others: CanvasField[]) {
-  const xs = new Set<number>();
-  const ys = new Set<number>();
-  const mine = {
-    x: [f.xPct, f.xPct + f.wPct / 2, f.xPct + f.wPct],
-    y: [f.yPct, f.yPct + f.hPct / 2, f.yPct + f.hPct],
-  };
+/**
+ * Snap a candidate rect to the edges and centres of the other fields on the
+ * page and to the page's own centre lines. Returns the adjusted rect plus the
+ * lines it locked onto, which the overlay draws as guides. `moving` snaps by
+ * translating the box; `resizing` moves only the far edges, and additionally
+ * matches width/height to a same-kind neighbour so a row of boxes comes out
+ * identical without fiddling.
+ */
+function snapRect(
+  candidate: Rect,
+  others: CanvasField[],
+  kind: FieldKind,
+  mode: "move" | "resize",
+  tolX: number,
+  tolY: number
+): { rect: Rect; guides: Guides } {
+  const targetsX = new Set<number>([0.5]);
+  const targetsY = new Set<number>([0.5]);
   for (const o of others) {
-    for (const edge of [o.xPct, o.xPct + o.wPct / 2, o.xPct + o.wPct])
-      if (mine.x.some((m) => Math.abs(m - edge) < ALIGN_TOL)) xs.add(edge);
-    for (const edge of [o.yPct, o.yPct + o.hPct / 2, o.yPct + o.hPct])
-      if (mine.y.some((m) => Math.abs(m - edge) < ALIGN_TOL)) ys.add(edge);
+    targetsX.add(o.xPct);
+    targetsX.add(o.xPct + o.wPct / 2);
+    targetsX.add(o.xPct + o.wPct);
+    targetsY.add(o.yPct);
+    targetsY.add(o.yPct + o.hPct / 2);
+    targetsY.add(o.yPct + o.hPct);
   }
-  return { xs: [...xs], ys: [...ys] };
+
+  // The closest target to any of my edges on one axis, if within reach.
+  const best = (mine: number[], targets: Set<number>, tol: number) => {
+    let hit: { delta: number; target: number } | null = null;
+    for (const m of mine)
+      for (const t of targets) {
+        const delta = t - m;
+        if (Math.abs(delta) < tol && (!hit || Math.abs(delta) < Math.abs(hit.delta)))
+          hit = { delta, target: t };
+      }
+    return hit;
+  };
+
+  const rect = { ...candidate };
+  const guides: Guides = { xs: [], ys: [] };
+
+  if (mode === "move") {
+    const hx = best(
+      [rect.xPct, rect.xPct + rect.wPct / 2, rect.xPct + rect.wPct],
+      targetsX,
+      tolX
+    );
+    const hy = best(
+      [rect.yPct, rect.yPct + rect.hPct / 2, rect.yPct + rect.hPct],
+      targetsY,
+      tolY
+    );
+    if (hx) {
+      rect.xPct += hx.delta;
+      guides.xs.push(hx.target);
+    }
+    if (hy) {
+      rect.yPct += hy.delta;
+      guides.ys.push(hy.target);
+    }
+  } else {
+    // Match a same-kind neighbour's size first; an edge snap then wins if one
+    // is closer, since the pointer is on that edge.
+    const twins = others.filter((o) => o.kind === kind);
+    const tw = twins.find((o) => Math.abs(o.wPct - rect.wPct) < tolX);
+    const th = twins.find((o) => Math.abs(o.hPct - rect.hPct) < tolY);
+    if (tw) rect.wPct = tw.wPct;
+    if (th) rect.hPct = th.hPct;
+    const hx = best([rect.xPct + rect.wPct], targetsX, tolX);
+    const hy = best([rect.yPct + rect.hPct], targetsY, tolY);
+    if (hx) {
+      rect.wPct += hx.delta;
+      guides.xs.push(hx.target);
+    }
+    if (hy) {
+      rect.hPct += hy.delta;
+      guides.ys.push(hy.target);
+    }
+  }
+  return { rect, guides };
+}
+
+function clampRect(r: Rect): Rect {
+  const wPct = Math.min(1, Math.max(0.02, r.wPct));
+  const hPct = Math.min(1, Math.max(0.012, r.hPct));
+  return {
+    wPct,
+    hPct,
+    xPct: Math.min(1 - wPct, Math.max(0, r.xPct)),
+    yPct: Math.min(1 - hPct, Math.max(0, r.yPct)),
+  };
 }
 
 /**
@@ -67,8 +163,10 @@ function alignmentGuides(f: CanvasField, others: CanvasField[]) {
  * space stored on SignatureField, so the overlay survives any zoom/resize.
  *
  * edit mode: click a page to place the armed field, pointer-drag to move,
- * corner handle to resize, arrow keys to nudge the selection.
- * fill mode: fields render via `renderFill` inside a tinted, labelled box.
+ * corner handle to resize, arrow keys to nudge the selection. Dragging snaps
+ * to neighbouring fields' edges and centres (Alt to bypass).
+ * fill mode: fields render via `renderFill` inside a tinted, labelled box,
+ * handed the box's size in PDF points so text can be sized as it will print.
  * Pointer events (not HTML5 DnD) keep it touch-friendly and scriptable.
  */
 export function PdfFieldCanvas({
@@ -101,11 +199,14 @@ export function PdfFieldCanvas({
   onChange?: (id: string, rect: Partial<CanvasField>) => void;
   onSelect?: (id: string | null) => void;
   /** fill: render the interactive contents of a field box */
-  renderFill?: (field: CanvasField) => ReactNode;
+  renderFill?: (field: CanvasField, box: FieldBox) => ReactNode;
 }) {
   const [numPages, setNumPages] = useState(0);
   const [width, setWidth] = useState(720);
   const [dragId, setDragId] = useState<string | null>(null);
+  const [guides, setGuides] = useState<Guides | null>(null);
+  // Real page sizes in points, per page, once pdfjs reports them.
+  const [pagePt, setPagePt] = useState<Record<number, { w: number; h: number }>>({});
   const frameRef = useRef<HTMLDivElement>(null);
   const drag = useRef<DragState | null>(null);
 
@@ -119,19 +220,21 @@ export function PdfFieldCanvas({
     return () => obs.disconnect();
   }, [numPages]);
 
+  const endDrag = () => {
+    if (!drag.current) return;
+    drag.current = null;
+    setDragId(null);
+    setGuides(null);
+  };
+
   // A pointer released off the overlay (or outside the window) must still end
   // the drag, otherwise the next move would resume it.
   useEffect(() => {
-    const end = () => {
-      if (!drag.current) return;
-      drag.current = null;
-      setDragId(null);
-    };
-    window.addEventListener("pointerup", end);
-    window.addEventListener("pointercancel", end);
+    window.addEventListener("pointerup", endDrag);
+    window.addEventListener("pointercancel", endDrag);
     return () => {
-      window.removeEventListener("pointerup", end);
-      window.removeEventListener("pointercancel", end);
+      window.removeEventListener("pointerup", endDrag);
+      window.removeEventListener("pointercancel", endDrag);
     };
   }, []);
 
@@ -162,23 +265,39 @@ export function PdfFieldCanvas({
     onSelect?.(field.id);
   }
 
-  function moveDrag(e: React.PointerEvent, pageEl: HTMLElement) {
+  function moveDrag(e: React.PointerEvent, pageEl: HTMLElement, page: number) {
     const d = drag.current;
     if (!d) return;
     const r = pageEl.getBoundingClientRect();
     const dx = (e.clientX - d.startX) / r.width;
     const dy = (e.clientY - d.startY) / r.height;
-    if (d.mode === "move") {
-      onChange?.(d.fieldId, {
-        xPct: Math.min(1 - d.rect.wPct, Math.max(0, d.rect.xPct + dx)),
-        yPct: Math.min(1 - d.rect.hPct, Math.max(0, d.rect.yPct + dy)),
-      });
-    } else {
-      onChange?.(d.fieldId, {
-        wPct: Math.min(1 - d.rect.xPct, Math.max(0.02, d.rect.wPct + dx)),
-        hPct: Math.min(1 - d.rect.yPct, Math.max(0.012, d.rect.hPct + dy)),
-      });
+    const raw: Rect =
+      d.mode === "move"
+        ? { ...d.rect, xPct: d.rect.xPct + dx, yPct: d.rect.yPct + dy }
+        : { ...d.rect, wPct: d.rect.wPct + dx, hPct: d.rect.hPct + dy };
+
+    const me = fields.find((f) => f.id === d.fieldId);
+    let next = clampRect(raw);
+    let nextGuides: Guides | null = null;
+    if (me && !e.altKey) {
+      const snapped = snapRect(
+        next,
+        fields.filter((f) => f.page === page && f.id !== d.fieldId),
+        me.kind,
+        d.mode,
+        SNAP_PX / r.width,
+        SNAP_PX / r.height
+      );
+      next = clampRect(snapped.rect);
+      nextGuides = snapped.guides;
     }
+    setGuides(nextGuides);
+    onChange?.(
+      d.fieldId,
+      d.mode === "move"
+        ? { xPct: next.xPct, yPct: next.yPct }
+        : { wPct: next.wPct, hPct: next.hPct }
+    );
   }
 
   function nudge(e: React.KeyboardEvent, f: CanvasField) {
@@ -195,7 +314,7 @@ export function PdfFieldCanvas({
     });
   }
 
-  const dragField = dragId ? fields.find((f) => f.id === dragId) : undefined;
+  const dragPage = dragId ? fields.find((f) => f.id === dragId)?.page : undefined;
 
   return (
     <div ref={frameRef} className="h-full overflow-auto bg-muted/40 p-2">
@@ -216,13 +335,9 @@ export function PdfFieldCanvas({
       >
         <div className="mx-auto space-y-5" style={{ width }}>
           {Array.from({ length: numPages }, (_, i) => i + 1).map((p) => {
-            const guides =
-              dragField && dragField.page === p
-                ? alignmentGuides(
-                    dragField,
-                    fields.filter((f) => f.page === p && f.id !== dragField.id)
-                  )
-                : null;
+            const pt = pagePt[p] ?? DEFAULT_PAGE_PT;
+            const scale = width / pt.w;
+            const pageGuides = dragPage === p ? guides : null;
             return (
               <div key={p} className="space-y-1">
                 {numPages > 1 && (
@@ -239,9 +354,20 @@ export function PdfFieldCanvas({
                     width={width}
                     renderTextLayer={false}
                     renderAnnotationLayer={false}
+                    onLoadSuccess={(page) =>
+                      setPagePt((m) =>
+                        m[p]?.w === page.originalWidth &&
+                        m[p]?.h === page.originalHeight
+                          ? m
+                          : {
+                              ...m,
+                              [p]: { w: page.originalWidth, h: page.originalHeight },
+                            }
+                      )
+                    }
                     loading={
                       <div
-                        style={{ width, height: width * 1.294 }}
+                        style={{ width, height: width * (pt.h / pt.w) }}
                         className="shimmer bg-white"
                       />
                     }
@@ -251,11 +377,8 @@ export function PdfFieldCanvas({
                     className={`absolute inset-0 ${
                       mode === "edit" && armedKind ? "cursor-crosshair" : ""
                     }`}
-                    onPointerMove={(e) => moveDrag(e, e.currentTarget)}
-                    onPointerUp={() => {
-                      drag.current = null;
-                      setDragId(null);
-                    }}
+                    onPointerMove={(e) => moveDrag(e, e.currentTarget, p)}
+                    onPointerUp={endDrag}
                     onClick={(e) => {
                       if (mode !== "edit") return;
                       if (armedKind) {
@@ -270,20 +393,23 @@ export function PdfFieldCanvas({
                       }
                     }}
                   >
-                    {/* alignment cues, drawn only while dragging */}
-                    {guides?.xs.map((x) => (
+                    {/* snap guides: drawn only for the lines the drag is
+                        currently locked onto */}
+                    {pageGuides?.xs.map((x) => (
                       <span
                         key={`x${x}`}
+                        data-sign-guide="x"
                         aria-hidden
-                        className="pointer-events-none absolute inset-y-0 w-px bg-primary/45"
+                        className="pointer-events-none absolute inset-y-0 z-20 w-px bg-primary/60"
                         style={{ left: `${x * 100}%` }}
                       />
                     ))}
-                    {guides?.ys.map((y) => (
+                    {pageGuides?.ys.map((y) => (
                       <span
                         key={`y${y}`}
+                        data-sign-guide="y"
                         aria-hidden
-                        className="pointer-events-none absolute inset-x-0 h-px bg-primary/45"
+                        className="pointer-events-none absolute inset-x-0 z-20 h-px bg-primary/60"
                         style={{ top: `${y * 100}%` }}
                       />
                     ))}
@@ -297,6 +423,11 @@ export function PdfFieldCanvas({
                         const selected = f.id === selectedId;
                         const filled = filledIds?.has(f.id) ?? false;
                         const editing = mode === "edit";
+                        const box: FieldBox = {
+                          wPt: f.wPct * pt.w,
+                          hPt: f.hPct * pt.h,
+                          scale,
+                        };
                         return (
                           <div
                             key={f.id}
@@ -351,7 +482,7 @@ export function PdfFieldCanvas({
                             onClick={(e) => e.stopPropagation()}
                           >
                             {mode === "fill" ? (
-                              renderFill?.(f)
+                              renderFill?.(f, box)
                             ) : (
                               <span
                                 className="pointer-events-none absolute left-0 top-0 max-w-full truncate px-1 text-[10px] leading-4"

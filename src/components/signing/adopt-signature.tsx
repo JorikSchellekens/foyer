@@ -51,6 +51,12 @@ export function typedToPng(text: string): string | null {
   return canvas.toDataURL("image/png");
 }
 
+/**
+ * signature: asks for the signer's full name (a dedicated field, recorded
+ * whether they type or draw) and renders it in the script face, or takes a
+ * drawn signature. initials: typed or drawn initials only.
+ * onAdopt receives the PNG plus, for signatures, the full name.
+ */
 export function AdoptSignatureDialog({
   open,
   onOpenChange,
@@ -61,8 +67,9 @@ export function AdoptSignatureDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   kind: "signature" | "initials";
+  /** signature: the full name so far; initials: initials so far */
   defaultText: string;
-  onAdopt: (pngDataUrl: string, typedText: string | null) => void;
+  onAdopt: (pngDataUrl: string, name: string | null) => void;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -91,22 +98,44 @@ function AdoptBody({
   kind: "signature" | "initials";
   defaultText: string;
   onOpenChange: (open: boolean) => void;
-  onAdopt: (pngDataUrl: string, typedText: string | null) => void;
+  onAdopt: (pngDataUrl: string, name: string | null) => void;
 }) {
   const [typed, setTyped] = useState(defaultText);
   const [drawn, setDrawn] = useState<string | null>(null);
   const [tab, setTab] = useState("type");
 
-  const label = kind === "signature" ? "signature" : "initials";
+  const isSig = kind === "signature";
+  const label = isSig ? "signature" : "initials";
   // Rasterising is not free, and this renders on every keystroke.
   const typedPng = useMemo(() => typedToPng(typed), [typed]);
   const preview = tab === "type" ? typedPng : drawn;
+  // A signature needs a name behind it however it was made: the certificate
+  // and any NAME field print it.
+  const nameOk = !isSig || typed.trim().length > 0;
 
   return (
     <>
       <DialogHeader>
         <DialogTitle>Adopt your {label}</DialogTitle>
       </DialogHeader>
+      {isSig && (
+        <div className="space-y-1.5">
+          <label htmlFor="adopt-name" className="text-sm font-medium">
+            Full name
+          </label>
+          <Input
+            id="adopt-name"
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            placeholder="Your full name"
+            autoComplete="name"
+            autoFocus
+          />
+          <p className="text-xs text-muted-foreground">
+            Printed on the completion certificate and in any name fields.
+          </p>
+        </div>
+      )}
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="type">Type</TabsTrigger>
@@ -119,16 +148,15 @@ function AdoptBody({
           forceMount
           className="space-y-2.5 pt-1 data-[state=inactive]:hidden"
         >
-          <Input
-            value={typed}
-            onChange={(e) => setTyped(e.target.value)}
-            placeholder={
-              kind === "signature" ? "Your full name" : "Your initials"
-            }
-            aria-label={kind === "signature" ? "Full name" : "Initials"}
-            autoComplete="name"
-            autoFocus
-          />
+          {!isSig && (
+            <Input
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              placeholder="Your initials"
+              aria-label="Initials"
+              autoFocus
+            />
+          )}
           {/* Rendered at the same 44px the PNG is rasterised at, so the
                 preview is the artefact rather than an impression of it. */}
           <div className="flex h-32 items-center justify-center overflow-hidden rounded-md border bg-white px-4">
@@ -141,7 +169,7 @@ function AdoptBody({
               </span>
             ) : (
               <span className="text-sm text-muted-foreground">
-                Type your {label} above
+                {isSig ? "Enter your name above" : "Type your initials above"}
               </span>
             )}
           </div>
@@ -169,10 +197,10 @@ function AdoptBody({
         </Button>
         <Button
           size="lg"
-          disabled={!preview}
+          disabled={!preview || !nameOk}
           onClick={() => {
-            if (preview) {
-              onAdopt(preview, tab === "type" ? typed.trim() : null);
+            if (preview && nameOk) {
+              onAdopt(preview, isSig ? typed.trim() : null);
               onOpenChange(false);
             }
           }}

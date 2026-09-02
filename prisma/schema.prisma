@@ -526,9 +526,17 @@ enum SignerStatus {
 enum SignFieldKind {
   SIGNATURE
   INITIALS
+  NAME
   DATE_SIGNED
   TEXT
   CHECKBOX
+}
+
+// Horizontal alignment of text-bearing fields (NAME, DATE_SIGNED, TEXT).
+enum FieldAlign {
+  LEFT
+  CENTER
+  RIGHT
 }
 
 model SignatureRequest {
@@ -614,8 +622,9 @@ model SignatureField {
   wPct      Float
   hPct      Float
   required  Boolean       @default(true)
-  // TEXT: entered text; CHECKBOX: "true"; DATE_SIGNED: ISO date.
-  // SIGNATURE/INITIALS read the signer's adopted PNG instead.
+  align     FieldAlign    @default(LEFT)
+  // TEXT: entered text; CHECKBOX: "true"; DATE_SIGNED: ISO date; NAME: the
+  // signer's full name. SIGNATURE/INITIALS read the signer's adopted PNG.
   value     String?
   filledAt  DateTime?
 
@@ -623,6 +632,25 @@ model SignatureField {
   signer  Signer           @relation(fields: [signerId], references: [id], onDelete: Cascade)
 
   @@index([requestId, page])
+}
+
+// Opt-in memory of a signer's adopted details, so a returning signer does not
+// have to re-enter their name or re-draw their signature. Keyed by the email
+// whose possession they proved with a token link, and cross-team like the
+// /signed portal. Stored only with explicit consent (recorded here), shown
+// only behind a proven-email session, and deletable by the signer from the
+// signing page or the portal at any time.
+model SignerProfile {
+  id               String   @id @default(cuid())
+  email            String   @unique
+  name             String?
+  signatureData    String?
+  initialsData     String?
+  consentedAt      DateTime
+  consentIp        String?
+  consentUserAgent String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
 
 // Append-only audit trail: rows are only ever inserted, never updated.

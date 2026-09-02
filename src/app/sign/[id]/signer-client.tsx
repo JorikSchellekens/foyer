@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import {
@@ -10,9 +10,11 @@ import {
   Circle,
   Loader2,
   PenLine,
+  UserRound,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Popover,
   PopoverContent,
@@ -27,7 +29,10 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { FoyerLogo } from "@/components/brand/logo";
-import type { CanvasField } from "@/components/signing/pdf-field-canvas";
+import type {
+  CanvasField,
+  FieldBox,
+} from "@/components/signing/pdf-field-canvas";
 
 // pdfjs touches browser globals (DOMMatrix) at module scope - never SSR it.
 const PdfFieldCanvas = dynamic(
@@ -41,8 +46,17 @@ import {
   AdoptSignatureDialog,
   typedToPng,
 } from "@/components/signing/adopt-signature";
-import { missingRequiredFields, FIELD_LABELS } from "@/lib/sign-fields";
-import { submitSignature, declineToSign } from "@/app/sign/actions";
+import {
+  missingRequiredFields,
+  fitFontSize,
+  FIELD_LABELS,
+  TEXT_INSET_PT,
+} from "@/lib/sign-fields";
+import {
+  submitSignature,
+  declineToSign,
+  forgetSavedDetails,
+} from "@/app/sign/actions";
 
 function initialsOf(name: string): string {
   return name
@@ -52,6 +66,17 @@ function initialsOf(name: string): string {
     .toUpperCase();
 }
 
+// The stamper prints in Helvetica; render fills in the same face so the fit
+// computed here matches what lands in the PDF.
+const FILL_FONT = "Helvetica, Arial, sans-serif";
+const ALIGN_CSS = { LEFT: "left", CENTER: "center", RIGHT: "right" } as const;
+
+export type SavedProfile = {
+  name: string | null;
+  signatureData: string | null;
+  initialsData: string | null;
+};
+
 export function SignerClient({
   requestId,
   title,
@@ -59,6 +84,7 @@ export function SignerClient({
   brandLogoUrl,
   signerEmail,
   signerName,
+  savedProfile,
   fileUrl,
   fields,
 }: {
@@ -68,13 +94,27 @@ export function SignerClient({
   brandLogoUrl: string | null;
   signerEmail: string;
   signerName: string | null;
+  /** details the signer previously asked us to remember, if any */
+  savedProfile: SavedProfile | null;
   fileUrl: string;
   fields: CanvasField[];
 }) {
   const router = useRouter();
-  const [signature, setSignature] = useState<string | null>(null);
-  const [initials, setInitials] = useState<string | null>(null);
-  const [adoptedName, setAdoptedName] = useState<string | null>(signerName);
+  // Remembered details are the signer's own words about themselves, so they
+  // win over whatever the sender typed; either way the signer can edit.
+  const [name, setName] = useState<string>(
+    savedProfile?.name ?? signerName ?? ""
+  );
+  const [signature, setSignature] = useState<string | null>(
+    savedProfile?.signatureData ?? null
+  );
+  const [initials, setInitials] = useState<string | null>(
+    savedProfile?.initialsData ?? null
+  );
+  const [usingSaved, setUsingSaved] = useState(!!savedProfile);
+  // Opt-in. Someone who opted in before keeps that choice unless they untick.
+  const [remember, setRemember] = useState(!!savedProfile);
+  const [forgetting, setForgetting] = useState(false);
   const [values, setValues] = useState<Record<string, string>>({});
   const [adopting, setAdopting] = useState<"signature" | "initials" | null>(null);
   const [declineOpen, setDeclineOpen] = useState(false);
@@ -90,10 +130,38 @@ export function SignerClient({
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
+  // One offscreen context for measuring fill text; created lazily because
+  // this component server-renders with the page.
+  const measureCtx = useRef<CanvasRenderingContext2D | null>(null);
+  function measurePt(text: string, sizePt: number): number {
+    if (!measureCtx.current && typeof document !== "undefined")
+      measureCtx.current = document.createElement("canvas").getContext("2d");
+    const ctx = measureCtx.current;
+    if (!ctx) return text.length * sizePt * 0.55;
+    ctx.font = `${sizePt}px ${FILL_FONT}`;
+    return ctx.measureText(text).width;
+  }
+  /** Inline style that sizes text like the stamper will, scaled to screen. */
+  function textStyle(
+    text: string,
+    box: FieldBox,
+    align: CanvasField["align"]
+  ): React.CSSProperties {
+    const sizePt = fitFontSize(measurePt, text || "Mg", box.wPt, box.hPt);
+    return {
+      fontFamily: FILL_FONT,
+      fontSize: sizePt * box.scale,
+      lineHeight: 1,
+      paddingLeft: TEXT_INSET_PT * box.scale,
+      paddingRight: TEXT_INSET_PT * box.scale,
+      textAlign: ALIGN_CSS[align ?? "LEFT"],
+    };
+  }
+
   const missing = missingRequiredFields(
     fields.map((f) => ({ ...f, value: null })),
     values,
-    { signature: !!signature, initials: !!initials }
+    { signature: !!signature, initials: !!initials, name }
   );
   const done = fields.length - missing.length;
   const ready = missing.length === 0;
@@ -104,6 +172,8 @@ export function SignerClient({
         return !!signature;
       case "INITIALS":
         return !!initials;
+      case "NAME":
+        return !!name.trim();
       case "DATE_SIGNED":
         return true;
       case "CHECKBOX":
@@ -139,7 +209,7 @@ export function SignerClient({
       behavior: still ? "auto" : "smooth",
       block: "center",
     });
-    if (field.kind === "TEXT") {
+    if (field.kind === "TEXT" || field.kind === "NAME") {
       // Focus once the scroll settles so the signer can type immediately.
       setTimeout(
         () => {
@@ -174,13 +244,14 @@ export function SignerClient({
     setBusy(true);
     try {
       const res = await submitSignature(requestId, {
-        name: adoptedName ?? undefined,
+        name: name.trim() || undefined,
         signatureData: signature ?? undefined,
         initialsData: initials ?? undefined,
         values,
         // Clicking "Agree and sign" in the confirmation dialog IS the consent
         // action (clickwrap); recorded as the consented audit event.
         consent: true,
+        remember,
       });
       if (res && "error" in res) toast.error(res.error);
       else {
@@ -194,12 +265,34 @@ export function SignerClient({
     }
   }
 
-  function renderFill(f: CanvasField) {
+  async function forget() {
+    setForgetting(true);
+    try {
+      const res = await forgetSavedDetails(requestId);
+      if (res && "error" in res) {
+        toast.error(res.error);
+        return;
+      }
+      setUsingSaved(false);
+      setRemember(false);
+      setSignature(null);
+      setInitials(null);
+      setName(signerName ?? "");
+      toast.success("Your saved details have been removed.");
+    } finally {
+      setForgetting(false);
+    }
+  }
+
+  function renderFill(f: CanvasField, box: FieldBox) {
     switch (f.kind) {
       case "SIGNATURE":
       case "INITIALS": {
         const img = f.kind === "SIGNATURE" ? signature : initials;
         const isSig = f.kind === "SIGNATURE";
+        // Prompt sized to the box, never to the viewport: a phone-width page
+        // draws a 22%-wide signature box under 80px.
+        const promptPx = Math.max(9, Math.min(13, box.hPt * box.scale * 0.45));
         return (
           <button
             type="button"
@@ -214,21 +307,42 @@ export function SignerClient({
             onClick={() => setAdopting(isSig ? "signature" : "initials")}
           >
             {img ? (
+              // Bottom-left like the stamp, so the signature sits on the line
+              // the sender placed rather than floating mid-box.
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={img}
                 alt=""
-                className="max-h-full max-w-full animate-in object-contain fade-in-0 zoom-in-95 duration-[var(--dur)] ease-[var(--ease-out-quint)]"
+                className="mr-auto mt-auto max-h-full max-w-full animate-in object-contain object-left-bottom fade-in-0 zoom-in-95 duration-[var(--dur)] ease-[var(--ease-out-quint)]"
               />
             ) : (
-              <span className="flex min-w-0 items-center gap-1 px-0.5 text-[11px] font-medium text-primary">
-                <PenLine className="size-3 shrink-0" aria-hidden />
+              <span
+                className="flex min-w-0 items-center gap-1 px-0.5 font-medium text-primary"
+                style={{ fontSize: promptPx }}
+              >
+                <PenLine
+                  className="shrink-0"
+                  style={{ width: promptPx, height: promptPx }}
+                  aria-hidden
+                />
                 <span className="truncate">{isSig ? "Sign" : "Initial"}</span>
               </span>
             )}
           </button>
         );
       }
+      case "NAME":
+        return (
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Full name"
+            aria-label={`Name field on page ${f.page}`}
+            autoComplete="name"
+            className="size-full rounded-sm bg-transparent placeholder:text-primary/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            style={textStyle(name || "Full name", box, f.align)}
+          />
+        );
       case "TEXT":
         return (
           <input
@@ -238,7 +352,8 @@ export function SignerClient({
             }
             placeholder="Text"
             aria-label={`Text field on page ${f.page}`}
-            className="size-full rounded-sm bg-transparent px-1 text-[12px] placeholder:text-primary/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="size-full rounded-sm bg-transparent placeholder:text-primary/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            style={textStyle(values[f.id] || "Text", box, f.align)}
           />
         );
       case "CHECKBOX":
@@ -266,7 +381,18 @@ export function SignerClient({
         );
       case "DATE_SIGNED":
         return (
-          <span className="flex size-full items-center px-1 font-mono text-[11px] tabular text-muted-foreground">
+          <span
+            className="flex size-full items-center whitespace-nowrap tabular text-foreground/80"
+            style={{
+              ...textStyle(today, box, f.align),
+              justifyContent:
+                f.align === "CENTER"
+                  ? "center"
+                  : f.align === "RIGHT"
+                    ? "flex-end"
+                    : "flex-start",
+            }}
+          >
             {today}
           </span>
         );
@@ -403,6 +529,30 @@ export function SignerClient({
         </span>
       </header>
 
+      {/* Remembered details are applied silently nowhere: the signer is told
+          what was reused and can drop it in one click. */}
+      {usingSaved && (
+        <div
+          data-testid="saved-details"
+          className="flex items-center gap-2 border-b bg-accent/40 px-4 py-1.5 text-xs text-muted-foreground sm:px-6"
+        >
+          <UserRound className="size-3.5 shrink-0" aria-hidden />
+          <span className="min-w-0 flex-1 truncate">
+            Using the name and signature you saved earlier
+            {name ? ` as ${name}` : ""}.
+          </span>
+          <button
+            type="button"
+            onClick={forget}
+            disabled={forgetting}
+            data-testid="forget-details"
+            className="focus-ring underline-grow shrink-0 rounded text-xs transition-colors hover:text-foreground disabled:opacity-50"
+          >
+            {forgetting ? "Removing" : "Forget my saved details"}
+          </button>
+        </div>
+      )}
+
       <p aria-live="polite" className="sr-only">
         {remainingCount === 0
           ? "All required fields are complete. You can sign."
@@ -467,7 +617,7 @@ export function SignerClient({
                 <div className="flex items-baseline justify-between gap-3 px-3 py-2">
                   <dt className="text-muted-foreground">Signing as</dt>
                   <dd className="min-w-0 truncate font-medium">
-                    {adoptedName ?? signerEmail}
+                    {name.trim() || signerEmail}
                   </dd>
                 </div>
                 <div className="flex items-baseline justify-between gap-3 px-3 py-2">
@@ -491,6 +641,27 @@ export function SignerClient({
                   signature.
                 </p>
               </div>
+              {/* Separate, unticked-by-default consent for keeping personal
+                  data past this envelope. Never bundled into the signing
+                  consent above. */}
+              <label className="flex cursor-pointer items-start gap-2.5 rounded-md border px-3 py-2.5 text-sm">
+                <Checkbox
+                  checked={remember}
+                  onCheckedChange={(v) => setRemember(v === true)}
+                  data-testid="remember-details"
+                  className="mt-0.5"
+                />
+                <span className="min-w-0">
+                  <span className="block">
+                    Remember my name and signature for next time
+                  </span>
+                  <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
+                    Kept with {signerEmail} and shown only after you open a
+                    signing link sent to it. Remove it any time from a signing
+                    page or your signed-documents page.
+                  </span>
+                </span>
+              </label>
               <DialogFooter>
                 <Button
                   variant="outline"
@@ -528,16 +699,8 @@ export function SignerClient({
         open={adopting !== null}
         onOpenChange={(open) => !open && setAdopting(null)}
         kind={adopting ?? "signature"}
-        defaultText={
-          adopting === "initials"
-            ? (signerName ?? "")
-                .split(/\s+/)
-                .map((p) => p[0] ?? "")
-                .join("")
-                .toUpperCase()
-            : (signerName ?? "")
-        }
-        onAdopt={(png, typedText) => {
+        defaultText={adopting === "initials" ? initialsOf(name) : name}
+        onAdopt={(png, adoptedName) => {
           const remaining = navTargets.filter((f) => f.id !== activeFieldId);
           if (adopting === "initials") {
             setInitials(png);
@@ -545,12 +708,12 @@ export function SignerClient({
             goToField(next);
           } else {
             setSignature(png);
-            if (typedText && !signerName) setAdoptedName(typedText);
-            // A typed name gives us initials for free - adopt them too so
+            if (adoptedName) setName(adoptedName);
+            // The name gives us initials for free - adopt them too so
             // initials fields don't demand a second dialog.
             let coveredInitials = !!initials;
-            if (typedText && !initials) {
-              const derived = typedToPng(initialsOf(typedText));
+            if (adoptedName && !initials) {
+              const derived = typedToPng(initialsOf(adoptedName));
               if (derived) {
                 setInitials(derived);
                 coveredInitials = true;
@@ -559,6 +722,7 @@ export function SignerClient({
             const next = remaining.filter(
               (f) =>
                 f.kind !== "SIGNATURE" &&
+                f.kind !== "NAME" &&
                 (!coveredInitials || f.kind !== "INITIALS")
             )[0];
             goToField(next);

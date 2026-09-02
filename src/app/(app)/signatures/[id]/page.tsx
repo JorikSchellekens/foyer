@@ -54,6 +54,7 @@ export default async function SignatureRequestPage({
           wPct: f.wPct,
           hPct: f.hPct,
           required: f.required,
+          align: f.align,
         }))}
       />
     );

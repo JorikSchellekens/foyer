@@ -175,6 +175,9 @@ export async function completeSigner(
     signatureData?: string | null;
     initialsData?: string | null;
     values: Record<string, string>; // fieldId -> value
+    // Opt-in: keep name/signature/initials under this email for next time.
+    // Explicit false removes anything previously kept.
+    remember?: boolean;
   },
   ip: string | null,
   userAgent: string | null,
@@ -188,12 +191,15 @@ export async function completeSigner(
     return { error: "This request is no longer open." };
   if (signer.status === "SIGNED") return { error: "You have already signed." };
 
+  const name = input.name?.trim() || signer.name;
   const needsSignature = signer.fields.some((f) => f.kind === "SIGNATURE");
   const needsInitials = signer.fields.some((f) => f.kind === "INITIALS");
+  const needsName = signer.fields.some((f) => f.kind === "NAME" && f.required);
   if (needsSignature && !input.signatureData)
     return { error: "Adopt a signature to finish." };
   if (needsInitials && !input.initialsData)
     return { error: "Adopt your initials to finish." };
+  if (needsName && !name) return { error: "Enter your full name to finish." };
   for (const f of signer.fields) {
     if (f.kind === "TEXT" && f.required && !(input.values[f.id] ?? "").trim())
       return { error: "Fill in all required fields to finish." };
@@ -208,9 +214,11 @@ export async function completeSigner(
           value:
             f.kind === "DATE_SIGNED"
               ? now.toISOString().slice(0, 10)
-              : f.kind === "TEXT" || f.kind === "CHECKBOX"
-                ? (input.values[f.id] ?? null)
-                : null,
+              : f.kind === "NAME"
+                ? name
+                : f.kind === "TEXT" || f.kind === "CHECKBOX"
+                  ? (input.values[f.id] ?? null)
+                  : null,
           filledAt: now,
         },
       })
@@ -220,7 +228,7 @@ export async function completeSigner(
       data: {
         status: "SIGNED",
         signedAt: now,
-        name: input.name?.trim() || signer.name,
+        name,
         signatureData: input.signatureData ?? null,
         initialsData: input.initialsData ?? null,
         ip,
@@ -235,6 +243,42 @@ export async function completeSigner(
     userAgent,
     meta: { email: signer.email },
   });
+
+  // The remembered-details choice is itself audited: it is the consent record
+  // for holding personal data beyond this envelope.
+  if (input.remember === true) {
+    await db.signerProfile.upsert({
+      where: { email: signer.email },
+      create: {
+        email: signer.email,
+        name,
+        signatureData: input.signatureData ?? null,
+        initialsData: input.initialsData ?? null,
+        consentedAt: now,
+        consentIp: ip,
+        consentUserAgent: userAgent,
+      },
+      update: {
+        name,
+        signatureData: input.signatureData ?? null,
+        initialsData: input.initialsData ?? null,
+        consentedAt: now,
+        consentIp: ip,
+        consentUserAgent: userAgent,
+      },
+    });
+    await logEvent(signer.requestId, "details_saved", { signerId, ip, userAgent });
+  } else if (input.remember === false) {
+    const gone = await db.signerProfile.deleteMany({
+      where: { email: signer.email },
+    });
+    if (gone.count > 0)
+      await logEvent(signer.requestId, "details_forgotten", {
+        signerId,
+        ip,
+        userAgent,
+      });
+  }
 
   const req = (await getFullRequest(signer.requestId))!;
   await notifyTeam(req.teamId, "signature_signed", {
@@ -274,6 +318,7 @@ async function completeRequest(req: FullRequest, origin: string) {
       yPct: f.yPct,
       wPct: f.wPct,
       hPct: f.hPct,
+      align: f.align,
       pngDataUrl:
         f.kind === "SIGNATURE"
           ? s.signatureData
@@ -356,6 +401,25 @@ async function completeRequest(req: FullRequest, origin: string) {
     documentId: req.documentId,
     finalHash,
   });
+}
+
+/**
+ * Forget a signer's remembered details. Callable from a signing session or
+ * the portal session - both prove possession of the email the profile is
+ * keyed by. Idempotent.
+ */
+export async function forgetSignerProfile(
+  email: string,
+  audit?: { requestId: string; signerId: string; ip: string | null; userAgent: string | null }
+): Promise<{ ok: true; removed: boolean }> {
+  const gone = await db.signerProfile.deleteMany({ where: { email } });
+  if (gone.count > 0 && audit)
+    await logEvent(audit.requestId, "details_forgotten", {
+      signerId: audit.signerId,
+      ip: audit.ip,
+      userAgent: audit.userAgent,
+    });
+  return { ok: true, removed: gone.count > 0 };
 }
 
 export async function declineSigner(

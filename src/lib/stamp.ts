@@ -1,18 +1,27 @@
 import "server-only";
 import { createHash } from "crypto";
 import type { PDFDocument as PDFDocumentType, PDFFont, PDFPage } from "pdf-lib";
+import { fitFontSize, alignedTextX } from "@/lib/sign-fields";
 
 // Burns field values into a PDF and appends the certificate of completion.
 // Everything visual is either an embedded PNG (drawn/typed signatures arrive
 // as data URLs) or Helvetica text, so no font embedding is needed.
 
 export type StampPlacement = {
-  kind: "SIGNATURE" | "INITIALS" | "DATE_SIGNED" | "TEXT" | "CHECKBOX" | string;
+  kind:
+    | "SIGNATURE"
+    | "INITIALS"
+    | "NAME"
+    | "DATE_SIGNED"
+    | "TEXT"
+    | "CHECKBOX"
+    | string;
   page: number; // 1-based
   xPct: number;
   yPct: number;
   wPct: number;
   hPct: number;
+  align?: "LEFT" | "CENTER" | "RIGHT" | string;
   pngDataUrl?: string | null;
   text?: string | null;
 };
@@ -58,18 +67,6 @@ function rectToPoints(page: PDFPage, p: StampPlacement) {
     w: p.wPct * width,
     h: p.hPct * height,
   };
-}
-
-/** Largest font size whose text fits the box, capped for sanity. */
-function fitFontSize(
-  font: PDFFont,
-  text: string,
-  boxW: number,
-  boxH: number
-): number {
-  let size = Math.min(boxH * 0.8, 24);
-  while (size > 4 && font.widthOfTextAtSize(text, size) > boxW) size -= 0.5;
-  return size;
 }
 
 export async function stampFields(
@@ -131,9 +128,16 @@ export async function stampFields(
         });
       }
     } else if (p.text) {
-      const size = fitFontSize(helvetica, p.text, w, h);
+      // Same fit rule the signer saw on screen (lib/sign-fields).
+      const size = fitFontSize(
+        (t, s) => helvetica.widthOfTextAtSize(t, s),
+        p.text,
+        w,
+        h
+      );
+      const textW = helvetica.widthOfTextAtSize(p.text, size);
       page.drawText(p.text, {
-        x,
+        x: alignedTextX(p.align ?? "LEFT", x, w, textW),
         y: y + (h - size) / 2,
         size,
         font: helvetica,

@@ -207,6 +207,13 @@ export default async function SignPage({
     h.get("user-agent")
   );
 
+  // Remembered details, shown only behind this proven-email session and only
+  // if the signer opted in on an earlier envelope.
+  const profile = await db.signerProfile.findUnique({
+    where: { email: signer.email },
+    select: { name: true, signatureData: true, initialsData: true },
+  });
+
   const myFields = request.fields
     .filter((f) => f.signerId === signer.id)
     .map((f) => ({
@@ -219,6 +226,7 @@ export default async function SignPage({
       wPct: f.wPct,
       hPct: f.hPct,
       required: f.required,
+      align: f.align,
     }));
 
   return (
@@ -229,6 +237,7 @@ export default async function SignPage({
       brandLogoUrl={brandLogoUrl}
       signerEmail={signer.email}
       signerName={signer.name}
+      savedProfile={profile}
       fileUrl={`/api/sign/file/${request.id}`}
       fields={myFields}
     />

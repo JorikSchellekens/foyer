@@ -5,7 +5,11 @@ import { FoyerLogo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/app/(app)/signatures/status-badge";
 import { formatDateTime } from "@/lib/format";
-import { PortalEmailForm, DifferentEmailButton } from "./portal-form";
+import {
+  PortalEmailForm,
+  DifferentEmailButton,
+  SavedDetailsCard,
+} from "./portal-form";
 
 export const metadata = { title: "Your signed documents" };
 
@@ -44,6 +48,7 @@ export default async function SignedPortalPage({
     );
   }
 
+  const profile = await db.signerProfile.findUnique({ where: { email } });
   const signings = await db.signer.findMany({
     where: { email },
     include: {
@@ -147,6 +152,14 @@ export default async function SignedPortalPage({
             );
           })}
         </div>
+        {profile && (
+          <SavedDetailsCard
+            name={profile.name}
+            signatureData={profile.signatureData}
+            initialsData={profile.initialsData}
+            consentedAt={formatDateTime(profile.consentedAt)}
+          />
+        )}
         <p className="mt-8 text-xs leading-relaxed text-muted-foreground">
           This list is tied to {email}. Signed copies stay available here for as
           long as the sender keeps them.

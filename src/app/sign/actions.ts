@@ -3,7 +3,12 @@
 import { headers } from "next/headers";
 import { z } from "zod";
 import { getSignerSession } from "@/lib/sign-session";
-import { completeSigner, declineSigner } from "@/lib/signing";
+import { db } from "@/lib/db";
+import {
+  completeSigner,
+  declineSigner,
+  forgetSignerProfile,
+} from "@/lib/signing";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 import { requestOrigin } from "@/lib/origin";
 
@@ -13,6 +18,7 @@ const submitSchema = z.object({
   initialsData: z.string().startsWith("data:image/png;base64,").max(500_000).optional(),
   values: z.record(z.string(), z.string().max(2_000)),
   consent: z.boolean(),
+  remember: z.boolean().optional(),
 });
 
 export async function submitSignature(requestId: string, input: unknown) {
@@ -36,6 +42,7 @@ export async function submitSignature(requestId: string, input: unknown) {
       signatureData: parsed.data.signatureData ?? null,
       initialsData: parsed.data.initialsData ?? null,
       values: parsed.data.values,
+      remember: parsed.data.remember,
     },
     ip === "unknown" ? null : ip,
     h.get("user-agent"),
@@ -56,4 +63,20 @@ export async function declineToSign(requestId: string, reason: string) {
     ip === "unknown" ? null : ip,
     h.get("user-agent")
   );
+}
+
+/** "Forget my saved details" from the signing page. */
+export async function forgetSavedDetails(requestId: string) {
+  const session = await getSignerSession(requestId);
+  if (!session) return { error: "Your signing session has expired. Reopen the link from your email." };
+  const signer = await db.signer.findUnique({ where: { id: session.signerId } });
+  if (!signer) return { error: "Request unavailable." };
+  const ip = await clientIp();
+  const h = await headers();
+  return forgetSignerProfile(signer.email, {
+    requestId,
+    signerId: signer.id,
+    ip: ip === "unknown" ? null : ip,
+    userAgent: h.get("user-agent"),
+  });
 }

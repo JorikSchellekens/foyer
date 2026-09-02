@@ -8,6 +8,7 @@ import { z } from "zod";
 export const FIELD_KINDS = [
   "SIGNATURE",
   "INITIALS",
+  "NAME",
   "DATE_SIGNED",
   "TEXT",
   "CHECKBOX",
@@ -18,15 +19,25 @@ export type FieldKind = (typeof FIELD_KINDS)[number];
 export const FIELD_LABELS: Record<FieldKind, string> = {
   SIGNATURE: "Signature",
   INITIALS: "Initials",
+  NAME: "Name",
   DATE_SIGNED: "Date signed",
   TEXT: "Text",
   CHECKBOX: "Checkbox",
 };
 
+export const FIELD_ALIGNS = ["LEFT", "CENTER", "RIGHT"] as const;
+export type FieldAlign = (typeof FIELD_ALIGNS)[number];
+
+/** Kinds that carry text and therefore an alignment. */
+export function hasAlignment(kind: FieldKind | string): boolean {
+  return kind === "NAME" || kind === "DATE_SIGNED" || kind === "TEXT";
+}
+
 // Default box sizes as fractions of page width/height, tuned for A4/Letter.
 export const FIELD_DEFAULT_SIZE: Record<FieldKind, { wPct: number; hPct: number }> = {
   SIGNATURE: { wPct: 0.22, hPct: 0.05 },
   INITIALS: { wPct: 0.07, hPct: 0.04 },
+  NAME: { wPct: 0.2, hPct: 0.03 },
   DATE_SIGNED: { wPct: 0.14, hPct: 0.03 },
   TEXT: { wPct: 0.2, hPct: 0.03 },
   CHECKBOX: { wPct: 0.025, hPct: 0.018 },
@@ -40,6 +51,7 @@ export const fieldRectSchema = z.object({
   wPct: z.number().min(0.005).max(1),
   hPct: z.number().min(0.005).max(1),
   required: z.boolean().default(true),
+  align: z.enum(FIELD_ALIGNS).default("LEFT"),
 });
 
 export const placedFieldSchema = fieldRectSchema.extend({
@@ -48,6 +60,47 @@ export const placedFieldSchema = fieldRectSchema.extend({
 });
 
 export type PlacedField = z.infer<typeof placedFieldSchema>;
+
+// ---- text metrics shared by the on-screen fill and the PDF stamp ----
+//
+// Both renderers size text with the same rule so what the signer sees while
+// filling is what ends up burned into the PDF: the largest size that fits the
+// box height (capped), shrunk until the string fits the width. All dimensions
+// are PDF points; the client scales the result to rendered pixels.
+
+/** Largest font size in points, capped for sanity. */
+export const MAX_FIELD_FONT_PT = 24;
+/** Horizontal breathing room inside a text box, in points, each side. */
+export const TEXT_INSET_PT = 2;
+
+export function fitFontSize(
+  measure: (text: string, size: number) => number,
+  text: string,
+  boxW: number,
+  boxH: number
+): number {
+  const avail = Math.max(1, boxW - TEXT_INSET_PT * 2);
+  let size = Math.min(boxH * 0.8, MAX_FIELD_FONT_PT);
+  while (size > 4 && measure(text, size) > avail) size -= 0.5;
+  return size;
+}
+
+/** Left edge of text inside a box, honouring the field's alignment. */
+export function alignedTextX(
+  align: FieldAlign | string,
+  boxX: number,
+  boxW: number,
+  textW: number
+): number {
+  switch (align) {
+    case "CENTER":
+      return boxX + (boxW - textW) / 2;
+    case "RIGHT":
+      return boxX + boxW - TEXT_INSET_PT - textW;
+    default:
+      return boxX + TEXT_INSET_PT;
+  }
+}
 
 // Distinct tints so each recipient's fields are tellable apart in the editor.
 // Index by the signer's position in the recipients list.
@@ -79,13 +132,15 @@ type FillableField = {
 
 /**
  * Which of a signer's required fields are still unfilled, given the values
- * entered so far plus whether a signature/initials image has been adopted.
- * DATE_SIGNED is stamped server-side at submit time, so it never blocks.
+ * entered so far plus what the signer has adopted (signature and initials
+ * images, full name). DATE_SIGNED is stamped server-side at submit time, so
+ * it never blocks. NAME draws on the signer-level name, like SIGNATURE draws
+ * on the adopted image: one entry fills every NAME box.
  */
 export function missingRequiredFields(
   fields: FillableField[],
   filled: Record<string, string>,
-  adopted: { signature: boolean; initials: boolean }
+  adopted: { signature: boolean; initials: boolean; name?: string | null }
 ): FillableField[] {
   return fields.filter((f) => {
     if (!f.required) return false;
@@ -94,6 +149,8 @@ export function missingRequiredFields(
         return !adopted.signature;
       case "INITIALS":
         return !adopted.initials;
+      case "NAME":
+        return !(adopted.name ?? "").trim();
       case "DATE_SIGNED":
         return false;
       case "CHECKBOX":

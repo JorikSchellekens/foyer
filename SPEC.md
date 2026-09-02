@@ -157,6 +157,28 @@ makes a finished migration forgettable. ImportItem doubles as the resume ledger
       token link, magic-link recovery form otherwise (SIGNED_PORTAL token
       purpose, foyer_signed cookie); completion emails and post-sign screens
       link to it. No guest accounts by design.
+      Field kinds: signature, initials, name, date signed, text, checkbox.
+      NAME is signer-level like SIGNATURE (one entry fills every NAME box);
+      the adopt dialog has a dedicated Full name input so drawn signatures
+      record a name too. Text-bearing fields carry an alignment
+      (SignatureField.align LEFT/CENTER/RIGHT, radios in the editor panel).
+      On-screen fills and the stamper share one fit rule (lib/sign-fields
+      fitFontSize: size from box height in PDF points, shrunk to width,
+      Helvetica) so a phone-width page shows what the PDF will print; the
+      e2e audits every text field's box at 390px. Editor drags snap to
+      neighbouring fields' edges/centres and page centre lines (screen-px
+      tolerance, guides drawn only for locked lines, Alt to bypass; resize
+      also matches a same-kind neighbour's size). Recipient input accepts
+      mail-client forms (`"Name" <addr>`, mailto:, lists) via
+      lib/email-address.ts; the display name seeds Signer.name.
+      Remembered signer details (SignerProfile, keyed by email, cross-team):
+      opt-in checkbox in the consent dialog, separate from the ESIGN consent
+      and unticked by default; stores name + signature/initials PNGs with
+      consentedAt/IP/UA; surfaced only behind a proven-email session (signing
+      link or portal magic link) with a banner and one-click "Forget my saved
+      details" on the signing page and a Remove card on /signed; unticking
+      on a later signing deletes it; details_saved/details_forgotten audit
+      events.
       E2E: scripts/sign-e2e.ts
 - [x] Papermark migration (Settings → Import): scan → review → resumable run →
       receipt; provenance in a side table so the record deletes cleanly;

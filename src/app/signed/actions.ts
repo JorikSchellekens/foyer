@@ -3,7 +3,8 @@
 import { z } from "zod";
 import { createVerificationToken } from "@/lib/tokens";
 import { sendSignedPortalLink } from "@/lib/email";
-import { clearPortalSession } from "@/lib/sign-session";
+import { clearPortalSession, getPortalEmail } from "@/lib/sign-session";
+import { forgetSignerProfile } from "@/lib/signing";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 import { requestOrigin } from "@/lib/origin";
 
@@ -34,4 +35,11 @@ export async function requestPortalLink(emailRaw: string) {
 
 export async function switchPortalEmail() {
   await clearPortalSession();
+}
+
+/** Remove the remembered name/signature for the portal's proven email. */
+export async function forgetPortalDetails() {
+  const email = await getPortalEmail();
+  if (!email) return { error: "Your session has expired." };
+  return forgetSignerProfile(email);
 }
