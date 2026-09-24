@@ -74,7 +74,7 @@ services:
       retries: 10
 
   minio-init:
-    image: minio/mc:latest
+    image: minio/minio:latest # ships mc; minio/mc is gone from Docker Hub
     restart: "no"
     depends_on:
       minio:
