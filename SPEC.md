@@ -8,6 +8,10 @@ Internal tool for Boop. Papermark-class feature set, no plan gates. Everything u
 - Resend for all email (magic links, invites, notifications)
 - Runtime: Bun for dev tooling; Node runtime in production container
 - Self-host: docker-compose (app + postgres + minio), /api/health, backup guidance
+- Link health check: /api/cron/link-health (CRON_SECRET) every 15 min via a
+  Coolify scheduled task; verifies every document behind a live link has
+  viewable content, emails LINK_HEALTH_EMAILS on new/resolved problems and
+  daily while open (HealthIssue table)
 
 ## Design language
 - Name: **Foyer** — the room where visitors are received.
