@@ -55,11 +55,16 @@ export async function fetchNotionPage(
   if (hit && Date.now() - hit.at < TTL) return hit.recordMap;
   try {
     const { NotionAPI } = await import("notion-client");
-    const api = new NotionAPI();
+    // Notion's Cloudflare rejects Node fetch's default "node" user-agent
+    // with a 403 bot page; any other UA is let through
+    const api = new NotionAPI({
+      ofetchOptions: { headers: { "user-agent": "Foyer (+https://data.boop.it)" } },
+    });
     const recordMap = await api.getPage(pageId);
     cache.set(pageId, { at: Date.now(), recordMap });
     return recordMap;
-  } catch {
+  } catch (err) {
+    console.error(`[notion] failed to fetch page ${pageId}:`, err);
     return null;
   }
 }
