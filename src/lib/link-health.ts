@@ -154,6 +154,11 @@ function list(items: string[]) {
  */
 export async function runLinkHealthCheck() {
   const current = await findProblems();
+  const to = recipients();
+  // Nobody to tell: report only, so nothing is marked as already notified
+  if (to.length === 0)
+    return { ok: true as const, problems: current.length, details: current.map((p) => p.summary) };
+
   const open = await db.healthIssue.findMany();
   const openKeys = new Set(open.map((i) => i.key));
   const currentKeys = new Set(current.map((p) => p.key));
@@ -167,9 +172,8 @@ export async function runLinkHealthCheck() {
   );
   const notify = added.length > 0 || resolved.length > 0 || due;
 
-  const to = recipients();
   let sent = 0;
-  if (notify && to.length > 0) {
+  if (notify) {
     const sections: string[] = [];
     if (added.length) sections.push(`<strong>New problems</strong>${list(added.map((p) => p.summary))}`);
     if (ongoing.length) sections.push(`<strong>Still broken</strong>${list(ongoing.map((p) => p.summary))}`);
@@ -198,7 +202,7 @@ export async function runLinkHealthCheck() {
       db.healthIssue.upsert({
         where: { key: p.key },
         create: { key: p.key, summary: p.summary, firstSeenAt: stamp, lastNotifiedAt: stamp },
-        update: notify && sent > 0 ? { summary: p.summary, lastNotifiedAt: stamp } : { summary: p.summary },
+        update: notify ? { summary: p.summary, lastNotifiedAt: stamp } : { summary: p.summary },
       })
     ),
   ]);
