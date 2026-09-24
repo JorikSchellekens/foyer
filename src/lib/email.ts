@@ -265,3 +265,20 @@ export async function sendActivityEmail(opts: {
     }),
   });
 }
+
+export async function sendHealthAlert(opts: {
+  to: string;
+  subject: string;
+  heading: string;
+  body: string;
+}) {
+  return sendEmail({
+    to: opts.to,
+    subject: opts.subject,
+    html: shell({
+      heading: opts.heading,
+      body: opts.body,
+      footer: "Sent by the Foyer link health check. Recipients are set by the LINK_HEALTH_EMAILS environment variable.",
+    }),
+  });
+}

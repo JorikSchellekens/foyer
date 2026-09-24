@@ -981,3 +981,17 @@ model ImportItem {
   @@index([importId, status])
   @@index([importId, kind])
 }
+
+/**
+ * An open problem found by the link health check (lib/link-health.ts), kept
+ * so alerts go out when it appears and resolves rather than on every run.
+ */
+model HealthIssue {
+  /**
+   * "doc:<documentId>" or "site"
+   */
+  key            String   @id
+  summary        String
+  firstSeenAt    DateTime @default(now())
+  lastNotifiedAt DateTime @default(now())
+}
