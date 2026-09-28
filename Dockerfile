@@ -7,7 +7,10 @@ RUN apt-get update -y && apt-get install -y openssl ca-certificates && rm -rf /v
 
 COPY package.json bun.lock ./
 COPY prisma ./prisma
-RUN bun install --frozen-lockfile
+# Retried: Coolify builds intermittently fail with "Fail extracting tarball
+# for next" (a truncated download), which a second attempt gets past
+RUN for i in 1 2 3 4; do bun install --frozen-lockfile && exit 0; \
+      echo "bun install failed (attempt $i), retrying"; rm -rf node_modules; sleep 5; done; exit 1
 RUN bunx prisma generate
 
 COPY . .
