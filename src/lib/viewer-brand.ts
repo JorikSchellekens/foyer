@@ -20,10 +20,12 @@ export function gateBrand(
   return {
     teamName: link.team.name,
     itemName: link.document?.name ?? link.dataroom?.name ?? link.name,
+    itemKind: link.target === "DATAROOM" ? "dataroom" : "document",
     brandColor: branding?.brandColor ?? "#175B47",
     backgroundColor: branding?.backgroundColor ?? "#101418",
     logoUrl: branding?.logoKey ? `/api/assets/${branding.logoKey}` : null,
     bannerUrl: branding?.bannerKey ? `/api/assets/${branding.bannerKey}` : null,
     welcomeMessage: link.welcomeMessage ?? branding?.welcomeMessage ?? null,
+    homeUrl: branding?.ctaUrl ?? null,
   };
 }
