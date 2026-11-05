@@ -38,7 +38,9 @@ export default async function DocumentPreviewPage({
 
   const recordMap =
     doc.type === "NOTION" && doc.externalUrl
-      ? await fetchNotionPage(doc.externalUrl)
+      ? // Always current: admins preview right after editing in Notion. This
+        // also refreshes the cached copy visitors are served.
+        await fetchNotionPage(doc.externalUrl, { fresh: true })
       : null;
 
   const viewerDoc: ViewerDoc = {
