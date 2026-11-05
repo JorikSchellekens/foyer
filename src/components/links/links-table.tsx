@@ -344,9 +344,6 @@ function LinkRow({
                 size="icon"
                 aria-label={`Edit ${row.name}`}
                 title="Edit link"
-                // Quiet until the row is engaged; the overflow menu stays put so
-                // there is always one visible way in, touch included.
-                className="opacity-0 transition-opacity duration-[var(--dur)] ease-[var(--ease-out-soft)] group-hover:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100"
               >
                 <Pencil className="size-3.5" />
               </Button>
