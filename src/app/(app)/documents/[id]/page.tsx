@@ -1,6 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronRight, Eye, Link2, PenLine, Plus } from "lucide-react";
+import {
+  ChevronRight,
+  ExternalLink,
+  Eye,
+  Link2,
+  PenLine,
+  Plus,
+} from "lucide-react";
 import { requireTeam } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Button } from "@/components/ui/button";
@@ -189,6 +196,20 @@ export default async function DocumentPage({
                 <Eye className="size-4" /> Preview
               </Link>
             </Button>
+            {/* Admins can jump to the Notion page this document mirrors. */}
+            {doc.type === "NOTION" &&
+              doc.externalUrl &&
+              ctx.role !== "MEMBER" && (
+                <Button variant="outline" asChild>
+                  <a
+                    href={doc.externalUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <ExternalLink className="size-4" /> Open in Notion
+                  </a>
+                </Button>
+              )}
             {isSignable(doc.type) && doc.currentVersion?.fileKey && (
               <form action={createSignatureDraft.bind(null, doc.id)}>
                 <Button variant="outline" type="submit">

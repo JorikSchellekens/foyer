@@ -76,6 +76,9 @@ export default async function DocumentPreviewPage({
       watermarkText={null}
       protection={false}
       backHref={`/documents/${doc.id}`}
+      sourceUrl={
+        doc.type === "NOTION" && ctx.role !== "MEMBER" ? doc.externalUrl : null
+      }
     />
   );
 }
