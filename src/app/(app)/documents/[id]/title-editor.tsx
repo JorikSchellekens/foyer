@@ -126,7 +126,7 @@ export function DocumentTitle({
         aria-label="Rename document"
         title="Rename document"
         onClick={() => setEditing(true)}
-        className="press focus-ring rounded-md p-1.5 text-muted-foreground opacity-0 transition-[opacity,color,background-color] duration-[var(--dur)] ease-[var(--ease-out-soft)] hover:bg-accent hover:text-foreground focus-visible:opacity-100 group-hover/title:opacity-100 max-md:opacity-100"
+        className="press focus-ring rounded-md p-1.5 text-muted-foreground transition-[color,background-color] duration-[var(--dur)] ease-[var(--ease-out-soft)] hover:bg-accent hover:text-foreground"
       >
         <Pencil className="size-4" aria-hidden />
       </button>
