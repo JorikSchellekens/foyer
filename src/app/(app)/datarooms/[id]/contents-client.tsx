@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   BookOpen,
+  Link2,
   Eye,
   FileUp,
   Folder,
@@ -64,6 +65,7 @@ import {
 import { formatBytes, formatDateTime, timeAgo, pluralize } from "@/lib/format";
 import {
   addDocumentsToDataroom,
+  addLinkToDataroom,
   addNotionToDataroom,
   createDataroomFolder,
   deleteDataroomFolder,
@@ -277,6 +279,100 @@ export function AddNotionToDataroomDialog({
                 </>
               ) : (
                 "Add page"
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function AddLinkToDataroomDialog({
+  dataroomId,
+  folderId,
+}: {
+  dataroomId: string;
+  folderId: string | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const [url, setUrl] = useState("");
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const router = useRouter();
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline">
+          <Link2 className="size-4" /> Add link
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add a link</DialogTitle>
+          <DialogDescription>
+            A web page listed alongside your documents. Visitors open it in a
+            new tab.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          action={async () => {
+            setBusy(true);
+            try {
+              const res = await addLinkToDataroom(
+                dataroomId,
+                url,
+                name,
+                folderId
+              );
+              if (res && "error" in res && res.error) {
+                toast.error(res.error);
+                return;
+              }
+              toast.success("Link added");
+              setOpen(false);
+              setUrl("");
+              setName("");
+              router.refresh();
+            } finally {
+              setBusy(false);
+            }
+          }}
+          className="space-y-4"
+        >
+          <div className="space-y-2">
+            <Label htmlFor="dr-link-url">URL</Label>
+            <Input
+              id="dr-link-url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://example.com/page"
+              autoFocus
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="dr-link-name">Name</Label>
+            <Input
+              id="dr-link-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Optional - defaults to the address"
+            />
+            <p className="text-xs text-muted-foreground">
+              Visitors see it like any other document. Opening it is counted as a
+              view and takes them straight to the link.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button type="submit" disabled={busy}>
+              {busy ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" /> Adding
+                </>
+              ) : (
+                "Add link"
               )}
             </Button>
           </DialogFooter>
@@ -879,9 +975,17 @@ function DocRowView({
       </TableCell>
       <TableCell
         className="font-mono text-xs text-muted-foreground tabular"
-        title={doc.type === "NOTION" ? undefined : `${doc.size} bytes`}
+        title={
+          doc.type === "NOTION" || doc.type === "LINK"
+            ? undefined
+            : `${doc.size} bytes`
+        }
       >
-        {doc.type === "NOTION" ? "Notion" : formatBytes(doc.size)}
+        {doc.type === "NOTION"
+          ? "Notion"
+          : doc.type === "LINK"
+            ? "Link"
+            : formatBytes(doc.size)}
       </TableCell>
       <TableCell
         className="text-xs text-muted-foreground"

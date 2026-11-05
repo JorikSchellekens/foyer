@@ -158,6 +158,7 @@ enum DocumentType {
   SHEET
   TEXT
   NOTION
+  LINK
   OTHER
 }
 
@@ -167,7 +168,7 @@ model Document {
   folderId         String?
   name             String
   type             DocumentType @default(OTHER)
-  // for NOTION type: the external URL
+  // for NOTION and LINK types: the external URL
   externalUrl      String?
   currentVersionId String?      @unique
   createdAt        DateTime     @default(now())

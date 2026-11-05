@@ -7,6 +7,7 @@ import {
   FileType,
   File,
   BookOpen,
+  Link2,
 } from "lucide-react";
 import type { DocumentType } from "@prisma/client";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,7 @@ const MAP: Record<DocumentType, { icon: typeof File; className: string }> = {
   SHEET: { icon: FileSpreadsheet, className: "text-primary" },
   TEXT: { icon: FileText, className: "text-muted-foreground" },
   NOTION: { icon: BookOpen, className: "text-foreground" },
+  LINK: { icon: Link2, className: "text-chart-2" },
   OTHER: { icon: File, className: "text-muted-foreground" },
 };
 

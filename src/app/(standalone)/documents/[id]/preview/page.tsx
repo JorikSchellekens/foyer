@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireTeam } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { fetchNotionPage } from "@/lib/notion";
@@ -27,6 +27,11 @@ export default async function DocumentPreviewPage({
     include: { currentVersion: true, versions: true },
   });
   if (!doc) notFound();
+  // Nothing to preview for a link: open it, recording nothing.
+  if (doc.type === "LINK") {
+    if (!doc.externalUrl) notFound();
+    redirect(doc.externalUrl);
+  }
 
   const version =
     (versionParam && doc.versions.find((v) => v.id === versionParam)) ||

@@ -2,12 +2,19 @@
 
 import { useId, useState } from "react";
 import Link from "next/link";
-import { ChevronRight, FileText, Folder } from "lucide-react";
+import { ChevronRight, FileText, Folder, Link2 } from "lucide-react";
 
 /** Serializable, grant-filtered tree with hrefs resolved server-side. */
 export type ViewerTreeNode =
   | { kind: "folder"; id: string; name: string; children: ViewerTreeNode[] }
-  | { kind: "document"; itemId: string; name: string; href: string };
+  | {
+      kind: "document";
+      itemId: string;
+      name: string;
+      href: string;
+      /** a link document: opens in a new tab, the room stays put */
+      external?: boolean;
+    };
 
 export type TreePalette = {
   text: string;
@@ -105,6 +112,8 @@ export function DataroomTree({
           <Link
             href={node.href}
             prefetch={false}
+            target={node.external ? "_blank" : undefined}
+            rel={node.external ? "noopener" : undefined}
             className={`${rowClass} relative`}
             style={{
               paddingLeft: pad + 18,
@@ -122,11 +131,19 @@ export function DataroomTree({
                 style={{ backgroundColor: palette.accent }}
               />
             )}
-            <FileText
-              className="size-3.5 shrink-0"
-              strokeWidth={1.5}
-              style={{ color: active ? palette.accent : palette.subtle }}
-            />
+            {node.external ? (
+              <Link2
+                className="size-3.5 shrink-0"
+                strokeWidth={1.5}
+                style={{ color: palette.subtle }}
+              />
+            ) : (
+              <FileText
+                className="size-3.5 shrink-0"
+                strokeWidth={1.5}
+                style={{ color: active ? palette.accent : palette.subtle }}
+              />
+            )}
             <span className="min-w-0 truncate">{node.name}</span>
           </Link>
         </li>

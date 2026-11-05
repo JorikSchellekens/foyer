@@ -65,9 +65,16 @@ export default async function DataroomDocumentPage({
     ? { viewId: "", trackToken: "" }
     : await ensureView(link, session, { documentId: doc.id });
 
+  // A link document: the open is recorded above, then off to the URL. The
+  // index and sidebar open these in a new tab, so the room stays put.
+  if (doc.type === "LINK") {
+    if (!doc.externalUrl) notFound();
+    redirect(doc.externalUrl);
+  }
+
   // Prev/next within the visitor-visible document order, so readers move
   // through the data room without returning to the index each time.
-  const order = viewableDocOrder(link);
+  const order = viewableDocOrder(link).filter((o) => !o.isLink);
   const pos = order.findIndex((o) => o.itemId === itemId);
   const docHref = (id: string) =>
     isPreview
@@ -93,6 +100,7 @@ export default async function DataroomDocumentPage({
             itemId: n.itemId,
             name: n.name,
             href: docHref(n.itemId),
+            external: n.isLink,
           }
     );
   const tree = toViewerTree(viewableTree(link));

@@ -33,6 +33,31 @@ function publicUrl(link: { slug: string; domain: { domain: string } | null }) {
 }
 
 /**
+ * A link document's target is checked loosely: only a definite "gone" (404,
+ * 410) or no answer at all counts. Plenty of sites answer bots with 403 or
+ * 429, and those links usually still work in a browser.
+ */
+async function externalLinkProblem(url: string): Promise<string | null> {
+  const attempt = (method: "HEAD" | "GET") =>
+    fetch(url, {
+      method,
+      redirect: "follow",
+      signal: AbortSignal.timeout(10_000),
+      headers: { "user-agent": "Foyer link check (+https://data.boop.it)" },
+    });
+  try {
+    let res = await attempt("HEAD");
+    // some servers don't do HEAD
+    if (res.status === 405 || res.status === 501) res = await attempt("GET");
+    if (res.status === 404 || res.status === 410)
+      return `link returns ${res.status}`;
+    return null;
+  } catch {
+    return "link could not be reached";
+  }
+}
+
+/**
  * Why a document would render empty for viewers, or null when it is fine.
  * Throws when storage itself cannot be reached, so one outage is reported
  * once instead of once per file.
@@ -44,6 +69,10 @@ async function documentProblem(doc: CheckedDoc): Promise<string | null> {
     if (!recordMap || Object.keys(recordMap.block).length === 0)
       return "Notion page could not be fetched";
     return null;
+  }
+  if (doc.type === "LINK") {
+    if (!doc.externalUrl) return "link has no URL";
+    return await externalLinkProblem(doc.externalUrl);
   }
   const key = doc.currentVersion?.fileKey;
   if (!key) return "no file uploaded";
@@ -114,7 +143,8 @@ export async function findProblems(): Promise<Problem[]> {
 
   let storageError: string | null = null;
   for (const { doc, links: labels } of docs.values()) {
-    if (storageError && doc.type !== "NOTION") continue;
+    if (storageError && doc.type !== "NOTION" && doc.type !== "LINK")
+      continue;
     try {
       const problem = await documentProblem(doc);
       if (problem)
