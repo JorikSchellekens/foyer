@@ -35,6 +35,16 @@ services:
       - CRON_SECRET=${SERVICE_PASSWORD_64_CRON}
       # Comma-separated recipients of link health alerts
       - LINK_HEALTH_EMAILS=${LINK_HEALTH_EMAILS:-}
+    # Custom domains get their TLS certificate automatically on first visit
+    # (Coolify's Caddy proxy only; Traefik ignores these). Caddy asks Foyer
+    # before issuing, and Foyer only allows domains added under Settings →
+    # Custom domains. caddy_9 keeps clear of the caddy_0.. routes Coolify
+    # generates for the app's own domain, which still take precedence.
+    labels:
+      - caddy.on_demand_tls.ask=${SERVICE_URL_APP}/api/domains/tls-ask
+      - caddy_9=https://
+      - caddy_9.tls.on_demand=
+      - caddy_9.reverse_proxy={{upstreams 3000}}
     depends_on:
       db:
         condition: service_healthy

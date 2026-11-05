@@ -103,8 +103,39 @@ Prisma, any S3-compatible object store, and Resend for email.
 3. Press verify. Links on that domain serve the viewer only; the dashboard
    stays on your primary host.
 
-With Cloudflare proxying enabled the edge certificate is issued
-automatically. For bare CNAMEs, terminate TLS for the domain at your proxy.
+### Certificates
+
+The server needs a TLS certificate for every custom domain. Rather than
+adding each one by hand, let the proxy issue them on demand: before it
+requests a certificate, it calls `GET /api/domains/tls-ask?domain=<host>`,
+which returns 200 only for domains added in Settings → Custom domains.
+
+**Coolify (Caddy proxy):** `docker-compose.coolify.yaml` already carries the
+labels. Redeploy, then visit a newly added domain once its CNAME resolves.
+
+**Caddy elsewhere:**
+
+```caddyfile
+{
+	on_demand_tls {
+		ask http://localhost:3000/api/domains/tls-ask
+	}
+}
+
+https:// {
+	tls {
+		on_demand
+	}
+	reverse_proxy localhost:3000
+}
+```
+
+Keep your primary host's own site block; the more specific block wins.
+
+If the customer's DNS is on Cloudflare, have them set the record to
+**DNS only** (grey cloud) so the certificate challenge reaches your server.
+A proxied record also works with SSL/TLS mode **Full (strict)** once the
+certificate exists.
 
 ## MCP
 
