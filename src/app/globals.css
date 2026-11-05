@@ -427,3 +427,27 @@
     display: none;
   }
 }
+
+/* ---- Notion pages ------------------------------------------------------
+ * react-notion-x gives every simple-table cell Notion's stored column width
+ * as an inline style (120px by default), so a three-column table sat in the
+ * left half of the page with its text wrapping word by word. Let tables span
+ * the page and share it out instead; a column never drops below a readable
+ * minimum, and a table with too many columns scrolls sideways on its own.
+ * Unlayered on purpose: react-notion-x's stylesheet is unlayered too, and
+ * layered rules would lose to it.
+ */
+.foyer-notion .notion-simple-table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.foyer-notion .notion-simple-table > tbody {
+  display: table;
+  width: 100%;
+  border-collapse: collapse;
+}
+.foyer-notion .notion-simple-table td {
+  width: auto !important;
+  min-width: 7rem;
+}

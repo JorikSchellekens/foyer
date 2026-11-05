@@ -18,6 +18,7 @@ import {
   type ViewerTreeNode,
 } from "@/components/viewer/dataroom-tree";
 import { IndexTracker } from "./index-tracker";
+import { DataroomBanner } from "./dataroom-banner";
 import { QaWidget } from "./qa-widget";
 
 function luminance(hex: string) {
@@ -173,13 +174,7 @@ export async function DataroomIndex({
       {previewToken && <PreviewBanner />}
       {link.watermark && session.email && <Watermark text={session.email} />}
       {brand.bannerUrl && (
-        <div
-          className="h-32 w-full overflow-hidden border-b sm:h-56"
-          style={{ borderColor: hairline }}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={brand.bannerUrl} alt="" className="h-full w-full object-cover" />
-        </div>
+        <DataroomBanner src={brand.bannerUrl} borderColor={hairline} />
       )}
 
       <IndexTracker
