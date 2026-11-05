@@ -164,18 +164,23 @@ export function PdfViewer({
     setSearchMsg("No matches");
   }
 
-  // Fit to width: fill the frame horizontally (capped so an ultrawide monitor
-  // does not produce a blurry, oversized canvas). This fills the screen for a
-  // landscape deck AND a portrait document - the latter simply scrolls
-  // vertically, the standard reading experience. Zoom scales up from there.
-  const H_PAD = 40; // horizontal breathing room
-  const MAX_W = 1600;
-  const baseWidth = Math.min(frame.w - H_PAD, MAX_W);
-  const renderWidth = Math.round(Math.max(320, baseWidth) * zoom);
   // Size the sheet from this page's real shape, falling back to the first page
   // we measured, so the frame holds its geometry before pdf.js paints.
   const firstAspect = Object.values(aspects)[0];
   const pageAspect = aspects[page] ?? firstAspect ?? FALLBACK_ASPECT;
+
+  // Fit the whole page: as large as the frame allows in both directions, so
+  // 100% always shows the full page without scrolling. Capped so an ultrawide
+  // monitor does not produce a blurry, oversized canvas. Zoom scales from here.
+  // The padding covers the frame's p-4/sm:p-6 on both sides plus a margin.
+  const PAD = frame.w < 640 ? 40 : 56;
+  const MAX_W = 1600;
+  const fitWidth = Math.min(
+    frame.w - PAD,
+    (frame.h - PAD) / pageAspect,
+    MAX_W
+  );
+  const renderWidth = Math.round(Math.max(240, fitWidth) * zoom);
   const sheetHeight = Math.round(renderWidth * pageAspect);
   const ready = !!painted[page];
 
@@ -326,8 +331,8 @@ export function PdfViewer({
           <button
             onClick={() => setZoom(1)}
             className="hidden min-w-11 rounded-md px-1 py-1 text-center font-mono text-xs tabular text-white/55 outline-none transition-colors duration-[var(--dur-fast)] hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/40 sm:block"
-            title="Reset zoom"
-            aria-label="Reset zoom to 100%"
+            title="Fit page"
+            aria-label="Reset zoom to fit the page"
           >
             {Math.round(zoom * 100)}%
           </button>
@@ -404,64 +409,71 @@ export function PdfViewer({
             </div>
           )}
 
-          {/* main page - the current page plus pre-rendered neighbours */}
-          <div
-            ref={frameRef}
-            className="relative min-w-0 flex-1 overflow-auto overscroll-contain"
-          >
-            <div className="flex min-h-full min-w-max justify-center p-4 sm:p-6">
-              {/*
-               * The sheet: a fixed-size box built from the page's own aspect
-               * ratio. Pages stack inside it absolutely, so turning a page
-               * crossfades in place instead of remeasuring the layout.
-               */}
-              <div
-                className="relative m-auto overflow-hidden bg-white shadow-[0_1px_2px_rgb(0_0_0/0.45),0_18px_44px_-14px_rgb(0_0_0/0.6)]"
-                style={{ width: renderWidth, height: sheetHeight }}
-              >
-                {/* Blank paper while pdf.js rasterises: never a dark gap. */}
-                {!ready && (
-                  <div aria-hidden className="shimmer absolute inset-0 bg-white" />
-                )}
-                {mounted.map((p) => {
-                  const active = p === page;
-                  const isOut = !active && p === outgoing;
-                  // Neighbours stay mounted but fully transparent: pdf.js has
-                  // already rasterised them, so the turn is instant.
-                  const opacity = active ? (ready ? 1 : 0) : isOut ? (ready ? 0 : 1) : 0;
-                  return (
-                    <div
-                      key={p}
-                      // Only the visible page carries the tracking hook so the
-                      // heatmap's querySelector matches the page in view.
-                      data-track-page={active ? "" : undefined}
-                      aria-hidden={active ? undefined : true}
-                      className="absolute left-0 top-0 transition-opacity duration-[var(--dur)] ease-[var(--ease-out-soft)]"
-                      style={{
-                        opacity,
-                        zIndex: active ? 2 : 1,
-                        pointerEvents: active ? undefined : "none",
-                      }}
-                    >
-                      <Page
-                        pageNumber={p}
-                        width={renderWidth}
-                        renderTextLayer={active && !protection}
-                        renderAnnotationLayer={false}
-                        loading=""
-                        onRenderSuccess={() => markPainted(p)}
-                        onLoadSuccess={(pg) => {
-                          const w = pg.originalWidth || pg.width;
-                          const h = pg.originalHeight || pg.height;
-                          if (w && h)
-                            setAspects((prev) =>
-                              prev[p] ? prev : { ...prev, [p]: h / w }
-                            );
+          {/*
+           * Main page: the current page plus pre-rendered neighbours. The page
+           * arrows overlay the frame from outside its scroll area, so
+           * they stay centred on screen and add nothing to the scrollable size
+           * (inside it they sat below the page and forced a scrollbar).
+           */}
+          <div className="relative min-w-0 flex-1">
+            <div
+              ref={frameRef}
+              className="absolute inset-0 overflow-auto overscroll-contain"
+            >
+              <div className="flex min-h-full min-w-max justify-center p-4 sm:p-6">
+                {/*
+                 * The sheet: a fixed-size box built from the page's own aspect
+                 * ratio. Pages stack inside it absolutely, so turning a page
+                 * crossfades in place instead of remeasuring the layout.
+                 */}
+                <div
+                  className="relative m-auto overflow-hidden bg-white shadow-[0_1px_2px_rgb(0_0_0/0.45),0_18px_44px_-14px_rgb(0_0_0/0.6)]"
+                  style={{ width: renderWidth, height: sheetHeight }}
+                >
+                  {/* Blank paper while pdf.js rasterises: never a dark gap. */}
+                  {!ready && (
+                    <div aria-hidden className="shimmer absolute inset-0 bg-white" />
+                  )}
+                  {mounted.map((p) => {
+                    const active = p === page;
+                    const isOut = !active && p === outgoing;
+                    // Neighbours stay mounted but fully transparent: pdf.js has
+                    // already rasterised them, so the turn is instant.
+                    const opacity = active ? (ready ? 1 : 0) : isOut ? (ready ? 0 : 1) : 0;
+                    return (
+                      <div
+                        key={p}
+                        // Only the visible page carries the tracking hook so the
+                        // heatmap's querySelector matches the page in view.
+                        data-track-page={active ? "" : undefined}
+                        aria-hidden={active ? undefined : true}
+                        className="absolute left-0 top-0 transition-opacity duration-[var(--dur)] ease-[var(--ease-out-soft)]"
+                        style={{
+                          opacity,
+                          zIndex: active ? 2 : 1,
+                          pointerEvents: active ? undefined : "none",
                         }}
-                      />
-                    </div>
-                  );
-                })}
+                      >
+                        <Page
+                          pageNumber={p}
+                          width={renderWidth}
+                          renderTextLayer={active && !protection}
+                          renderAnnotationLayer={false}
+                          loading=""
+                          onRenderSuccess={() => markPainted(p)}
+                          onLoadSuccess={(pg) => {
+                            const w = pg.originalWidth || pg.width;
+                            const h = pg.originalHeight || pg.height;
+                            if (w && h)
+                              setAspects((prev) =>
+                                prev[p] ? prev : { ...prev, [p]: h / w }
+                              );
+                          }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
@@ -471,7 +483,7 @@ export function PdfViewer({
                   aria-label="Previous page"
                   onClick={() => go(page - 1)}
                   disabled={page <= 1}
-                  className="sticky left-2 top-1/2 z-30 float-left -translate-y-1/2 rounded-full border border-white/10 bg-black/35 p-2.5 text-white/70 outline-none backdrop-blur transition-[background-color,color,opacity] duration-[var(--dur)] ease-[var(--ease-out-soft)] hover:bg-black/60 hover:text-white focus-visible:ring-2 focus-visible:ring-white/50 disabled:pointer-events-none disabled:opacity-0 sm:left-3"
+                  className="absolute left-2 top-1/2 z-30 -translate-y-1/2 rounded-full border border-white/10 bg-black/35 p-2.5 text-white/70 outline-none backdrop-blur transition-[background-color,color,opacity] duration-[var(--dur)] ease-[var(--ease-out-soft)] hover:bg-black/60 hover:text-white focus-visible:ring-2 focus-visible:ring-white/50 disabled:pointer-events-none disabled:opacity-0 sm:left-3"
                 >
                   <ChevronLeft className="size-5" />
                 </button>
@@ -479,7 +491,7 @@ export function PdfViewer({
                   aria-label="Next page"
                   onClick={() => go(page + 1)}
                   disabled={page >= numPages}
-                  className="sticky right-2 top-1/2 z-30 float-right -translate-y-1/2 rounded-full border border-white/10 bg-black/35 p-2.5 text-white/70 outline-none backdrop-blur transition-[background-color,color,opacity] duration-[var(--dur)] ease-[var(--ease-out-soft)] hover:bg-black/60 hover:text-white focus-visible:ring-2 focus-visible:ring-white/50 disabled:pointer-events-none disabled:opacity-0 sm:right-3"
+                  className="absolute right-2 top-1/2 z-30 -translate-y-1/2 rounded-full border border-white/10 bg-black/35 p-2.5 text-white/70 outline-none backdrop-blur transition-[background-color,color,opacity] duration-[var(--dur)] ease-[var(--ease-out-soft)] hover:bg-black/60 hover:text-white focus-visible:ring-2 focus-visible:ring-white/50 disabled:pointer-events-none disabled:opacity-0 sm:right-3"
                 >
                   <ChevronRight className="size-5" />
                 </button>
