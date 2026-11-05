@@ -83,6 +83,7 @@ export function DocumentViewer({
   tree = null,
   currentItemId = null,
   previewText,
+  sourceUrl = null,
 }: {
   doc: ViewerDoc;
   viewId: string;
@@ -99,6 +100,12 @@ export function DocumentViewer({
   tree?: ViewerTreeNode[] | null;
   currentItemId?: string | null;
   previewText?: string;
+  /**
+   * The page this document mirrors (a Notion page), opened in a new tab.
+   * Only the internal preview passes it, and only for admins: visitors on a
+   * shared link never see where the content lives.
+   */
+  sourceUrl?: string | null;
 }) {
   const hasTree = !!tree && tree.length > 0;
   // null = untouched: CSS opens it on large screens, keeps it closed on
@@ -247,6 +254,18 @@ export function DocumentViewer({
           >
             {brand.ctaLabel}
             <ExternalLink className="size-3" />
+          </a>
+        )}
+        {sourceUrl && (
+          <a
+            href={sourceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Open in Notion"
+            className="press inline-flex items-center justify-center gap-1.5 rounded-md border border-white/15 px-2.5 py-1.5 text-xs font-medium text-white/85 outline-none transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out-soft)] hover:border-white/30 hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/40 max-sm:size-10 max-sm:px-0 sm:px-3"
+          >
+            <ExternalLink className="size-3.5" />
+            <span className="max-sm:hidden">Open in Notion</span>
           </a>
         )}
         {doc.downloadUrl && (
