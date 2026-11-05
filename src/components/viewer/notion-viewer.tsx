@@ -64,10 +64,21 @@ export function NotionViewer({
 }: {
   recordMap: ExtendedRecordMap;
 }) {
+  // Honour Notion's own "Full width" page setting: the root block is first.
+  const root = Object.values(recordMap.block)[0] as
+    | { value?: { format?: { page_full_width?: boolean } } }
+    | undefined;
+  const fullWidth = !!root?.value?.format?.page_full_width;
+
   return (
-    <div className="mx-auto max-w-4xl px-3 py-6 sm:px-4 sm:py-8">
+    <div
+      // foyer-notion-frame: width and type scale with the screen (globals.css)
+      className={`foyer-notion-frame mx-auto w-full px-3 py-6 sm:px-4 sm:py-8 ${
+        fullWidth ? "foyer-notion-wide" : ""
+      }`}
+    >
       <div
-        // foyer-notion: tables fill the page (see globals.css)
+        // foyer-notion: tables fill the page, type scale (see globals.css)
         className="foyer-notion reveal overflow-hidden rounded-lg bg-white shadow-[0_1px_2px_rgb(0_0_0/0.45),0_18px_44px_-14px_rgb(0_0_0/0.6)]"
       >
         <NotionRenderer

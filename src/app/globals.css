@@ -451,3 +451,30 @@
   width: auto !important;
   min-width: 7rem;
 }
+
+/* ---- Notion page width and type ----------------------------------------
+ * react-notion-x fixes the text column at Notion's 720px "narrow page" with
+ * 16px text and 16px side padding. Inside Foyer's viewer that reads as a
+ * thin, cramped strip on anything larger than a laptop. Width, padding and
+ * type now grow with the screen together, so lines stay a comfortable
+ * length (roughly 85-95 characters) rather than becoming a wall of text:
+ * an 840px page at 16px on a laptop, up to 1120px at 19px on a large
+ * monitor.
+ * A page set to "Full width" in Notion gets up to 1600px. Phones unchanged.
+ */
+.foyer-notion-frame {
+  --foyer-notion-w: clamp(840px, 60vw, 1120px);
+  max-width: calc(var(--foyer-notion-w) + 2rem);
+}
+.foyer-notion-frame.foyer-notion-wide {
+  --foyer-notion-w: clamp(720px, 82vw, 1600px);
+}
+.foyer-notion .notion {
+  font-size: clamp(16px, calc(0.45vw + 10px), 19px);
+  line-height: 1.65;
+}
+.foyer-notion .notion-page {
+  --notion-max-width: 100%;
+  width: 100%;
+  padding: clamp(1.25rem, 3vw, 3.5rem) clamp(1.25rem, 3vw, 4rem);
+}
