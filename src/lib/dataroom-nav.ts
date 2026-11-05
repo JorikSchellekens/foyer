@@ -1,6 +1,7 @@
 import { itemGrant, type FullLink } from "@/lib/access";
 
-export type NavDoc = { itemId: string; name: string };
+/** isLink: a link document, opened in a new tab rather than the viewer. */
+export type NavDoc = { itemId: string; name: string; isLink: boolean };
 
 type Ordered = { orderIndex: number; createdAt: Date | string };
 
@@ -51,7 +52,11 @@ export function viewableDocOrder(link: FullLink): NavDoc[] {
       } else {
         if (!itemGrant(link, "DATAROOM_DOCUMENT", entry.item.id).canView)
           continue;
-        out.push({ itemId: entry.item.id, name: entry.item.document.name });
+        out.push({
+          itemId: entry.item.id,
+          name: entry.item.document.name,
+          isLink: entry.item.document.type === "LINK",
+        });
       }
     }
   };
@@ -61,7 +66,7 @@ export function viewableDocOrder(link: FullLink): NavDoc[] {
 
 export type NavTreeNode =
   | { kind: "folder"; id: string; name: string; children: NavTreeNode[] }
-  | { kind: "document"; itemId: string; name: string };
+  | { kind: "document"; itemId: string; name: string; isLink: boolean };
 
 /**
  * The visitor-visible folder/document tree of a data room, filtered by the
@@ -89,6 +94,7 @@ export function viewableTree(link: FullLink): NavTreeNode[] {
           kind: "document",
           itemId: entry.item.id,
           name: entry.item.document.name,
+          isLink: entry.item.document.type === "LINK",
         });
       }
     }

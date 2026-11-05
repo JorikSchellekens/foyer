@@ -12,7 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { teamMemberEmails, externalViews } from "@/lib/internal-views";
-import { NewFolderDialog, AddNotionDialog } from "./toolbar";
+import { NewFolderDialog, AddNotionDialog, AddLinkDialog } from "./toolbar";
 import { DocumentRow, FolderRow, LibCrumbDropLink } from "./rows";
 import { SelectionProvider, SelectAllCheckbox } from "./selection";
 import type { RoomOption, RoomRef } from "./dataroom-picker";
@@ -118,6 +118,7 @@ export default async function DocumentsPage({
       >
         <NewFolderDialog parentId={folderId} />
         <AddNotionDialog folderId={folderId} />
+        <AddLinkDialog folderId={folderId} />
         <UploadButtons folderId={folderId} />
       </PageHeader>
 

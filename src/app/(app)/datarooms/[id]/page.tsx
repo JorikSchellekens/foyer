@@ -31,6 +31,7 @@ import { formatDuration } from "@/lib/format";
 import { DataroomMenu } from "./dataroom-menu";
 import {
   AddFromLibraryDialog,
+  AddLinkToDataroomDialog,
   AddNotionToDataroomDialog,
   ContentsRows,
   CrumbDropLink,
@@ -494,9 +495,15 @@ async function ContentsTabInner({
             </span>
           ))}
         </nav>
-        <div className="flex items-center gap-2">
+        {/* wraps rather than running off the edge: six actions don't fit
+            beside the explorer at laptop widths */}
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <NewDrFolderButton dataroomId={dataroom.id} parentId={folderId} />
           <AddNotionToDataroomDialog
+            dataroomId={dataroom.id}
+            folderId={folderId}
+          />
+          <AddLinkToDataroomDialog
             dataroomId={dataroom.id}
             folderId={folderId}
           />

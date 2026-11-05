@@ -55,6 +55,8 @@ export function docTypeLabel(type: DocumentType): string {
       return "Text";
     case "NOTION":
       return "Notion";
+    case "LINK":
+      return "Link";
     default:
       return "File";
   }

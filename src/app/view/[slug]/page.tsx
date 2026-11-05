@@ -1,5 +1,5 @@
 import { headers } from "next/headers";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
 import {
@@ -147,6 +147,12 @@ export default async function ViewPage({
 
   if (link.target === "DOCUMENT" && link.document) {
     const doc = link.document;
+    // A link document has nothing to render: the view is recorded above,
+    // then the visitor goes straight to the URL.
+    if (doc.type === "LINK") {
+      if (!doc.externalUrl) notFound();
+      redirect(doc.externalUrl);
+    }
     const version = doc.currentVersion;
     const recordMap =
       doc.type === "NOTION" && doc.externalUrl

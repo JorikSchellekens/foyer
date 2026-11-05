@@ -191,11 +191,25 @@ export default async function DocumentPage({
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" asChild>
-              <Link href={`/documents/${doc.id}/preview`}>
-                <Eye className="size-4" /> Preview
-              </Link>
-            </Button>
+            {doc.type === "LINK" ? (
+              doc.externalUrl && (
+                <Button variant="outline" asChild>
+                  <a
+                    href={doc.externalUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <ExternalLink className="size-4" /> Open link
+                  </a>
+                </Button>
+              )
+            ) : (
+              <Button variant="outline" asChild>
+                <Link href={`/documents/${doc.id}/preview`}>
+                  <Eye className="size-4" /> Preview
+                </Link>
+              </Button>
+            )}
             {/* Admins can jump to the Notion page this document mirrors. */}
             {doc.type === "NOTION" &&
               doc.externalUrl &&
@@ -217,7 +231,7 @@ export default async function DocumentPage({
                 </Button>
               </form>
             )}
-            {doc.type !== "NOTION" && (
+            {doc.type !== "NOTION" && doc.type !== "LINK" && (
               <VersionUploadButton documentId={doc.id} />
             )}
             {createLinkButton}

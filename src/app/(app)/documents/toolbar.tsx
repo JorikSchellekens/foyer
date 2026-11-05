@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { FolderPlus, BookOpen } from "lucide-react";
+import { FolderPlus, BookOpen, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,7 +15,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createFolder, createNotionDocument } from "./actions";
+import {
+  createFolder,
+  createLinkDocument,
+  createNotionDocument,
+} from "./actions";
 
 export function NewFolderDialog({ parentId }: { parentId: string | null }) {
   const [open, setOpen] = useState(false);
@@ -113,6 +117,71 @@ export function AddNotionDialog({ folderId }: { folderId: string | null }) {
           </div>
           <DialogFooter>
             <Button type="submit">Add page</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function AddLinkDialog({ folderId }: { folderId: string | null }) {
+  const [open, setOpen] = useState(false);
+  const [url, setUrl] = useState("");
+  const [name, setName] = useState("");
+  const router = useRouter();
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline">
+          <Link2 className="size-4" /> Add link
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add a link</DialogTitle>
+        </DialogHeader>
+        <form
+          action={async () => {
+            const res = await createLinkDocument(url, name, folderId);
+            if (res && "error" in res && res.error) {
+              toast.error(res.error);
+              return;
+            }
+            toast.success("Link added");
+            setOpen(false);
+            setUrl("");
+            setName("");
+            router.refresh();
+          }}
+          className="space-y-4"
+        >
+          <div className="space-y-2">
+            <Label htmlFor="link-url">URL</Label>
+            <Input
+              id="link-url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://example.com/page"
+              autoFocus
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="link-name">Name</Label>
+            <Input
+              id="link-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Optional - defaults to the address"
+            />
+            <p className="text-xs text-muted-foreground">
+              Visitors see it like any other document. Opening it is counted as a
+              view and takes them straight to the link.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button type="submit">Add link</Button>
           </DialogFooter>
         </form>
       </DialogContent>

@@ -216,7 +216,7 @@ export function DocumentRow({
       </TableCell>
       <TableCell className={META}>{docTypeLabel(doc.type)}</TableCell>
       <TableCell className={NUM}>
-        {doc.type === "NOTION" ? (
+        {doc.type === "NOTION" || doc.type === "LINK" ? (
           <span aria-hidden>-</span>
         ) : (
           formatBytes(doc.size)

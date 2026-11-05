@@ -5,6 +5,7 @@ import { requireTeam } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { docTypeFromName } from "@/lib/doc-types";
 import { parseNotionUrl } from "@/lib/notion";
+import { parseExternalUrl } from "@/lib/external-link";
 import { getObjectBuffer, isTeamKey } from "@/lib/storage";
 import { generateVersionThumbnails } from "@/lib/thumbnails";
 
@@ -119,6 +120,42 @@ export async function createNotionDocument(
           versionNumber: 1,
           fileName: "notion",
           contentType: "text/html",
+          uploadedById: ctx.user.id,
+        },
+      },
+    },
+    include: { versions: true },
+  });
+  await db.document.update({
+    where: { id: doc.id },
+    data: { currentVersionId: doc.versions[0].id },
+  });
+  revalidatePath("/documents");
+  return { id: doc.id };
+}
+
+/** A link document: listed like any file, opening it goes to the URL. */
+export async function createLinkDocument(
+  url: string,
+  name: string,
+  folderId: string | null
+) {
+  const ctx = await requireTeam();
+  const parsed = parseExternalUrl(url, name);
+  if ("error" in parsed) return parsed;
+
+  const doc = await db.document.create({
+    data: {
+      teamId: ctx.team.id,
+      folderId,
+      name: parsed.name,
+      type: "LINK",
+      externalUrl: parsed.url,
+      versions: {
+        create: {
+          versionNumber: 1,
+          fileName: "link",
+          contentType: "text/uri-list",
           uploadedById: ctx.user.id,
         },
       },

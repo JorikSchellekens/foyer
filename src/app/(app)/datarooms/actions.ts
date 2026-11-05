@@ -6,6 +6,7 @@ import { canAccessDataroom } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { docTypeFromName } from "@/lib/doc-types";
 import { parseNotionUrl } from "@/lib/notion";
+import { parseExternalUrl } from "@/lib/external-link";
 import { notifyTeam } from "@/lib/notify";
 import { isTeamKey } from "@/lib/storage";
 import type { PermissionLevel } from "@prisma/client";
@@ -318,6 +319,56 @@ export async function addNotionToDataroom(
           versionNumber: 1,
           fileName: "notion",
           contentType: "text/html",
+          uploadedById: ctx.user.id,
+        },
+      },
+    },
+    include: { versions: true },
+  });
+  await db.document.update({
+    where: { id: doc.id },
+    data: { currentVersionId: doc.versions[0].id },
+  });
+
+  await db.dataroomDocument.create({
+    data: {
+      dataroomId,
+      documentId: doc.id,
+      folderId,
+      orderIndex: await nextOrderIndex(dataroomId),
+    },
+  });
+
+  bust(dataroomId);
+  revalidatePath("/documents");
+  return { added: 1 };
+}
+
+/** Add a link document straight into a dataroom. */
+export async function addLinkToDataroom(
+  dataroomId: string,
+  url: string,
+  name: string,
+  folderId: string | null
+) {
+  const owned = await ownDataroom(dataroomId);
+  if (!owned) return { error: "Data room not found." };
+  const { ctx } = owned;
+
+  const parsed = parseExternalUrl(url, name);
+  if ("error" in parsed) return parsed;
+
+  const doc = await db.document.create({
+    data: {
+      teamId: ctx.team.id,
+      name: parsed.name,
+      type: "LINK",
+      externalUrl: parsed.url,
+      versions: {
+        create: {
+          versionNumber: 1,
+          fileName: "link",
+          contentType: "text/uri-list",
           uploadedById: ctx.user.id,
         },
       },

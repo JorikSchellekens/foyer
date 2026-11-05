@@ -38,6 +38,15 @@ const ghostAction =
 /** Cap the mount cascade: a 200-file data room should not ripple for 8s. */
 const MAX_STAGGER = 12;
 
+/** "example.com" for a link document's meta column. */
+function linkHost(url: string | null): string {
+  try {
+    return url ? new URL(url).hostname.replace(/^www\./, "") : "link";
+  } catch {
+    return "link";
+  }
+}
+
 type Entry =
   | {
       kind: "folder";
@@ -54,6 +63,8 @@ type Entry =
       key: string;
       itemId: string;
       meta: string;
+      /** a link document: opens the URL in a new tab */
+      isLink: boolean;
     };
 
 export async function DataroomIndex({
@@ -111,11 +122,16 @@ export async function DataroomIndex({
         const grant = itemGrant(link, "DATAROOM_DOCUMENT", item.id);
         if (!grant.canView) continue;
         const version = item.document.currentVersion;
-        const metaBits = [
-          item.document.type === "NOTION" ? "Notion" : version?.fileName?.split(".").pop()?.toUpperCase(),
-          version?.numPages ? `${version.numPages} pp` : null,
-          version?.fileSize ? formatBytes(version.fileSize) : null,
-        ].filter(Boolean);
+        const isLink = item.document.type === "LINK";
+        const metaBits = isLink
+          ? [`${linkHost(item.document.externalUrl)} ↗`]
+          : [
+              item.document.type === "NOTION"
+                ? "Notion"
+                : version?.fileName?.split(".").pop()?.toUpperCase(),
+              version?.numPages ? `${version.numPages} pp` : null,
+              version?.fileSize ? formatBytes(version.fileSize) : null,
+            ].filter(Boolean);
         entries.push({
           kind: "document",
           number,
@@ -124,6 +140,7 @@ export async function DataroomIndex({
           key: `d-${item.id}`,
           itemId: item.id,
           meta: metaBits.join(" · "),
+          isLink,
         });
         n++;
       }
@@ -154,6 +171,7 @@ export async function DataroomIndex({
             itemId: n.itemId,
             name: n.name,
             href: `/view/${slug}/d/${n.itemId}${previewQuery}`,
+            external: n.isLink,
           }
     );
   const tree = toViewerTree(viewableTree(link));
@@ -329,6 +347,8 @@ export async function DataroomIndex({
                       <Link
                         href={`/view/${slug}/d/${entry.itemId}${previewQuery}`}
                         prefetch={false}
+                        target={entry.isLink ? "_blank" : undefined}
+                        rel={entry.isLink ? "noopener" : undefined}
                         className="group flex items-baseline gap-0 rounded-md px-2 py-2 outline-none transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out-soft)] hover:bg-current/5 focus-visible:bg-current/5 focus-visible:ring-2 focus-visible:ring-current/25 max-sm:flex-wrap"
                         style={{ marginLeft: entry.depth * 24 - 8 }}
                       >
