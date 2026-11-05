@@ -76,6 +76,8 @@ export async function DataroomIndex({
   viewId,
   trackToken,
   previewToken = null,
+  itemHref,
+  previewText,
 }: {
   link: FullLink;
   slug: string;
@@ -86,11 +88,17 @@ export async function DataroomIndex({
   trackToken: string;
   currentFolderId: string | null;
   previewToken?: string | null;
+  /** Where a document row points; defaults to this link's viewer page. */
+  itemHref?: (itemId: string) => string;
+  /** Show the preview strip with this text (the internal room preview). */
+  previewText?: string;
 }) {
   const dataroom = link.dataroom!;
   const previewQuery = previewToken
     ? `?preview=${encodeURIComponent(previewToken)}`
     : "";
+  const hrefFor =
+    itemHref ?? ((id: string) => `/view/${slug}/d/${id}${previewQuery}`);
 
   // flatten visible tree with book-index numbering; folders and files share
   // one order at each level, so a file may precede a folder
@@ -170,7 +178,7 @@ export async function DataroomIndex({
             kind: "document",
             itemId: n.itemId,
             name: n.name,
-            href: `/view/${slug}/d/${n.itemId}${previewQuery}`,
+            href: hrefFor(n.itemId),
             external: n.isLink,
           }
     );
@@ -189,7 +197,7 @@ export async function DataroomIndex({
       className="relative min-h-screen"
       style={{ backgroundColor: bg, color: text }}
     >
-      {previewToken && <PreviewBanner />}
+      {(previewToken || previewText) && <PreviewBanner text={previewText} />}
       {link.watermark && session.email && <Watermark text={session.email} />}
       {brand.bannerUrl && (
         <DataroomBanner src={brand.bannerUrl} borderColor={hairline} />
@@ -198,7 +206,7 @@ export async function DataroomIndex({
       <IndexTracker
         viewId={viewId}
         trackToken={trackToken}
-        preview={!!previewToken}
+        preview={!!previewToken || !!previewText}
       >
         <div className="mx-auto max-w-3xl px-5 pb-[max(5rem,env(safe-area-inset-bottom))] pt-10 sm:px-6 lg:max-w-5xl">
           <header className="reveal flex flex-wrap items-center justify-between gap-4">
@@ -345,7 +353,7 @@ export async function DataroomIndex({
                   ) : (
                     <li key={entry.key} className="stagger-item" style={stagger}>
                       <Link
-                        href={`/view/${slug}/d/${entry.itemId}${previewQuery}`}
+                        href={hrefFor(entry.itemId)}
                         prefetch={false}
                         target={entry.isLink ? "_blank" : undefined}
                         rel={entry.isLink ? "noopener" : undefined}

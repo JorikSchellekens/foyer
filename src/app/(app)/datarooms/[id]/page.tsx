@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronRight, Plus } from "lucide-react";
+import { ChevronRight, Eye, Plus } from "lucide-react";
 import { requireTeam } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { cn } from "@/lib/utils";
@@ -172,6 +172,17 @@ export default async function DataroomPage({
             )}
           </div>
           <div className="flex items-center gap-2">
+            {/* The whole room as visitors see it, without needing a link.
+                New tab, so editing stays where it was. */}
+            <Button variant="outline" asChild>
+              <a
+                href={`/datarooms/${dataroom.id}/preview`}
+                target="_blank"
+                rel="noopener"
+              >
+                <Eye className="size-4" /> Preview
+              </a>
+            </Button>
             {createLinkButton}
             <DataroomMenu
               dataroom={{
