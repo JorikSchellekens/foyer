@@ -53,7 +53,7 @@ custom welcome/branding/link-preview per link, notify-on-access toggle.
 
 ## Viewer (/view/[slug], custom domains rewrite via middleware Host check)
 Access gates in order: password → email/verification → allow/block → NDA → content.
-Document viewer: pdf.js paged reader (tracks page + dwell), images, video/audio,
+Document viewer: pdf.js reader, all pages in one scrolling column (tracks page + dwell), images, video/audio,
 docx (mammoth), xlsx/csv (SheetJS), md/txt/code, Notion links (react-notion-x).
 Dataroom viewer: branded front page (banner/logo/welcome), dot-leader index,
 folder navigation, per-file open. Downloads (file + full dataroom zip) when allowed.
