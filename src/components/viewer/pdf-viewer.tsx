@@ -28,6 +28,8 @@ const FALLBACK_ASPECT = 1.294;
 const RENDER_AHEAD = 2;
 /** Arrow up / down scroll by this share of the frame's height. */
 const LINE_STEP = 0.15;
+/** The thumbnail rail starts open when the viewer is at least this wide. */
+const THUMBS_MIN_W = 900;
 
 // Minimal structural view of the loaded PDF, enough to extract page text for
 // search without depending on a specific pdfjs-dist type version.
@@ -80,10 +82,14 @@ export function PdfViewer({
   const [painted, setPainted] = useState<Record<number, true>>({});
   const [loadPct, setLoadPct] = useState<number | null>(null);
   const [zoom, setZoom] = useState(1);
-  const [showThumbs, setShowThumbs] = useState(false);
+  // null = untouched: the rail is open when the viewer has the room for it
+  // and closed when it does not. Once the reader toggles it, their choice holds.
+  const [thumbsChoice, setThumbsChoice] = useState<boolean | null>(null);
+  const [rootW, setRootW] = useState(0);
   const [showSearch, setShowSearch] = useState(false);
   const [query, setQuery] = useState("");
   const [searchMsg, setSearchMsg] = useState<string | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   const pdfRef = useRef<PdfDoc | null>(null);
   const pageTextRef = useRef<Map<number, string>>(new Map());
@@ -101,6 +107,19 @@ export function PdfViewer({
   // reader scrolls away, even where the scroll position alone would name a
   // neighbour: short pages near either end cannot be brought to the middle.
   const pinRef = useRef<{ page: number; top: number } | null>(null);
+
+  // The viewer's own width, not the window's: beside an open contents pane
+  // there is less room than the screen suggests.
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const measure = () => setRootW(el.clientWidth);
+    measure();
+    const obs = new ResizeObserver(measure);
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+  const showThumbs = thumbsChoice ?? rootW >= THUMBS_MIN_W;
 
   // Re-run when the document finishes loading: the frame element only exists
   // once <Document> renders its children (during loading it shows the loader),
@@ -301,7 +320,7 @@ export function PdfViewer({
   );
 
   return (
-    <div className="flex h-full flex-col">
+    <div ref={rootRef} className="flex h-full flex-col">
       {/* toolbar - hidden until the document is ready to avoid a dead bar over the loader */}
       <div
         className={`relative items-center gap-0.5 px-2 py-1.5 text-white/70 sm:px-3 ${
@@ -309,7 +328,7 @@ export function PdfViewer({
         }`}
       >
         <button
-          onClick={() => setShowThumbs((s) => !s)}
+          onClick={() => setThumbsChoice(!showThumbs)}
           className={`${toolBtn} ${showThumbs ? "bg-white/10 text-white" : ""}`}
           title="Pages"
           aria-label="Toggle page thumbnails"
