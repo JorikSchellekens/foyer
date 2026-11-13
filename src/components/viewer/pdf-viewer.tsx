@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import {
   ChevronLeft,
@@ -24,8 +24,12 @@ const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 3;
 /** Fallback page shape (US Letter) until the real aspect ratio is known. */
 const FALLBACK_ASPECT = 1.294;
-/** Crossfade window for a page turn, matched to --dur. */
-const TURN_MS = 220;
+/** Pages kept rendered on each side of the one being read. */
+const RENDER_AHEAD = 2;
+/** Arrow up / down scroll by this share of the frame's height. */
+const LINE_STEP = 0.15;
+/** The thumbnail rail starts open when the viewer is at least this wide. */
+const THUMBS_MIN_W = 900;
 
 // Minimal structural view of the loaded PDF, enough to extract page text for
 // search without depending on a specific pdfjs-dist type version.
@@ -45,6 +49,18 @@ type PdfDoc = {
  */
 const toolBtn =
   "inline-flex items-center justify-center rounded-md p-1.5 max-sm:size-10 max-sm:p-0 text-white/55 outline-none transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out-soft)] hover:bg-white/10 hover:text-white focus-visible:bg-white/10 focus-visible:text-white focus-visible:ring-2 focus-visible:ring-white/40 disabled:pointer-events-none disabled:opacity-25";
+
+/* The page-turn pair in the toolbar: larger than the other tools, and lit. */
+const pageBtn =
+  "inline-flex size-9 items-center justify-center rounded-md bg-white/10 text-white outline-none transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out-soft)] hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/50 disabled:pointer-events-none disabled:opacity-25 max-sm:size-10";
+
+/*
+ * The arrows floating at the sides of the page. A white disc on the dark
+ * frame so they read as buttons at a glance, 56px on a desktop and 44px on a
+ * phone, where they sit over the page and scrolling does most of the work.
+ */
+const sideBtn =
+  "absolute top-1/2 z-30 inline-flex size-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-[#101418] shadow-[0_2px_6px_rgb(0_0_0/0.4),0_12px_28px_-8px_rgb(0_0_0/0.6)] outline-none transition-[background-color,opacity,scale] duration-[var(--dur)] ease-[var(--ease-out-soft)] hover:scale-105 hover:bg-white focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#101418] active:scale-95 disabled:pointer-events-none disabled:opacity-0 sm:size-14";
 
 export function PdfViewer({
   fileUrl,
@@ -66,13 +82,44 @@ export function PdfViewer({
   const [painted, setPainted] = useState<Record<number, true>>({});
   const [loadPct, setLoadPct] = useState<number | null>(null);
   const [zoom, setZoom] = useState(1);
-  const [showThumbs, setShowThumbs] = useState(false);
+  // null = untouched: the rail is open when the viewer has the room for it
+  // and closed when it does not. Once the reader toggles it, their choice holds.
+  const [thumbsChoice, setThumbsChoice] = useState<boolean | null>(null);
+  const [rootW, setRootW] = useState(0);
   const [showSearch, setShowSearch] = useState(false);
   const [query, setQuery] = useState("");
   const [searchMsg, setSearchMsg] = useState<string | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   const pdfRef = useRef<PdfDoc | null>(null);
   const pageTextRef = useRef<Map<number, string>>(new Map());
+  // One box per page in the scrolling column, indexed by page number.
+  const slotsRef = useRef<Array<HTMLDivElement | null>>([]);
+  const thumbsRef = useRef<HTMLDivElement>(null);
+  // The latest current page, for handlers that fire faster than a render.
+  const pageRef = useRef(1);
+  // Where the reader is, as a point inside a page (0 = its top edge, 1 = its
+  // bottom edge) held at the middle of the frame. When the layout changes -
+  // zoom, a resize, a page reporting its real shape - the same point is put
+  // back in the middle, so the reader keeps their place.
+  const anchorRef = useRef<{ page: number; frac: number } | null>(null);
+  // A page reached with a button or key stays the current page until the
+  // reader scrolls away, even where the scroll position alone would name a
+  // neighbour: short pages near either end cannot be brought to the middle.
+  const pinRef = useRef<{ page: number; top: number } | null>(null);
+
+  // The viewer's own width, not the window's: beside an open contents pane
+  // there is less room than the screen suggests.
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const measure = () => setRootW(el.clientWidth);
+    measure();
+    const obs = new ResizeObserver(measure);
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+  const showThumbs = thumbsChoice ?? rootW >= THUMBS_MIN_W;
 
   // Re-run when the document finishes loading: the frame element only exists
   // once <Document> renders its children (during loading it shows the loader),
@@ -89,38 +136,102 @@ export function PdfViewer({
     return () => obs.disconnect();
   }, [numPages]);
 
+  // Read the scroll position: which page is being read, and where in it.
+  const sync = useCallback(() => {
+    const el = frameRef.current;
+    if (!el || !numPages) return;
+    const slots = slotsRef.current;
+    const top = el.scrollTop;
+    const center = top + el.clientHeight / 2;
+    let current: number;
+    const pin = pinRef.current;
+    if (pin && Math.abs(pin.top - top) < 2) {
+      current = pin.page;
+    } else {
+      pinRef.current = null;
+      if (top <= 1) {
+        current = 1;
+      } else if (top + el.clientHeight >= el.scrollHeight - 1) {
+        // The end of the document counts as its last page, however short.
+        current = numPages;
+      } else {
+        // The page under the middle of the frame: the last one that starts
+        // above it. Offsets only grow, so halve the range each step.
+        let lo = 1;
+        let hi = numPages;
+        while (lo < hi) {
+          const mid = (lo + hi + 1) >> 1;
+          const slot = slots[mid];
+          if (slot && slot.offsetTop <= center) lo = mid;
+          else hi = mid - 1;
+        }
+        current = lo;
+      }
+    }
+    const slot = slots[current];
+    if (slot && slot.offsetHeight > 0) {
+      anchorRef.current = {
+        page: current,
+        frac: (center - slot.offsetTop) / slot.offsetHeight,
+      };
+    }
+    pageRef.current = current;
+    setPage(current);
+  }, [numPages]);
+
+  // Bring a page into view: centred when it fits the frame, otherwise its top
+  // edge just under the toolbar.
   const go = useCallback(
     (next: number) => {
-      if (!numPages) return;
+      const el = frameRef.current;
+      if (!el || !numPages) return;
       const clamped = Math.min(Math.max(next, 1), numPages);
-      setPage(clamped);
-      onPageChange(clamped, numPages);
+      const slot = slotsRef.current[clamped];
+      if (!slot) return;
+      el.scrollTop =
+        slot.offsetTop - Math.max(12, (el.clientHeight - slot.offsetHeight) / 2);
+      pinRef.current = { page: clamped, top: el.scrollTop };
+      sync();
     },
-    [numPages, onPageChange]
+    [numPages, sync]
   );
+
+  // Tell the tracker whenever the page being read changes, however the reader
+  // got there: scrolling, a button, a key, a thumbnail or search.
+  useEffect(() => {
+    if (numPages > 0) onPageChange(page, numPages);
+  }, [page, numPages, onPageChange]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // Do not hijack keys while typing, or space while a control is focused.
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       const interactive =
         t && (t.tagName === "BUTTON" || t.tagName === "A" || t.tagName === "SELECT");
-      if (e.key === "ArrowRight" || e.key === "ArrowDown" || e.key === "PageDown") {
-        go(page + 1);
-      } else if (e.key === " " && !interactive) {
-        // Space pages forward; without this it would also scroll the frame.
+      const el = frameRef.current;
+      if (e.key === "ArrowRight" || e.key === "PageDown") {
         e.preventDefault();
-        go(page + 1);
-      } else if (
-        e.key === "ArrowLeft" ||
-        e.key === "ArrowUp" ||
-        e.key === "PageUp"
-      ) {
-        go(page - 1);
+        go(pageRef.current + 1);
+      } else if (e.key === "ArrowLeft" || e.key === "PageUp") {
+        e.preventDefault();
+        go(pageRef.current - 1);
+      } else if (e.key === " " && !interactive) {
+        // Space pages forward, shift-space back.
+        e.preventDefault();
+        go(pageRef.current + (e.shiftKey ? -1 : 1));
+      } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        // Up and down move a little at a time, as they do in any scrolling page.
+        if (!el) return;
+        e.preventDefault();
+        const step = Math.max(40, el.clientHeight * LINE_STEP);
+        el.scrollBy({ top: e.key === "ArrowDown" ? step : -step });
       } else if (e.key === "Home") {
+        e.preventDefault();
         go(1);
       } else if (e.key === "End") {
+        e.preventDefault();
         go(numPages);
       } else if (e.key === "Escape" && showSearch) {
         setShowSearch(false);
@@ -128,7 +239,7 @@ export function PdfViewer({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [go, page, numPages, showSearch]);
+  }, [go, numPages, showSearch]);
 
   const zoomBy = (delta: number) =>
     setZoom((z) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, +(z + delta).toFixed(2))));
@@ -164,56 +275,44 @@ export function PdfViewer({
     setSearchMsg("No matches");
   }
 
-  // Size the sheet from this page's real shape, falling back to the first page
-  // we measured, so the frame holds its geometry before pdf.js paints.
+  // Each page is sized from its own real shape, falling back to the first
+  // shape we measured, so the column holds its geometry before pdf.js paints.
+  //
+  // Fit the whole page: as large as the frame allows in both directions, so at
+  // 100% a full page is in view at a time and a scroll moves to the next one.
+  // Capped so an ultrawide monitor does not produce a blurry, oversized canvas.
+  // Zoom scales from here. The padding covers the frame's p-4/sm:p-6 on both
+  // sides plus a margin, which leaves the edge of the next page showing.
   const firstAspect = Object.values(aspects)[0];
-  const pageAspect = aspects[page] ?? firstAspect ?? FALLBACK_ASPECT;
-
-  // Fit the whole page: as large as the frame allows in both directions, so
-  // 100% always shows the full page without scrolling. Capped so an ultrawide
-  // monitor does not produce a blurry, oversized canvas. Zoom scales from here.
-  // The padding covers the frame's p-4/sm:p-6 on both sides plus a margin.
   const PAD = frame.w < 640 ? 40 : 56;
   const MAX_W = 1600;
-  const fitWidth = Math.min(
-    frame.w - PAD,
-    (frame.h - PAD) / pageAspect,
-    MAX_W
-  );
-  const renderWidth = Math.round(Math.max(240, fitWidth) * zoom);
-  const sheetHeight = Math.round(renderWidth * pageAspect);
-  const ready = !!painted[page];
+  const sizeOf = (p: number) => {
+    const aspect = aspects[p] ?? firstAspect ?? FALLBACK_ASPECT;
+    const fitWidth = Math.min(frame.w - PAD, (frame.h - PAD) / aspect, MAX_W);
+    const width = Math.round(Math.max(240, fitWidth) * zoom);
+    return { width, height: Math.round(width * aspect) };
+  };
 
-  // Keep a small window of pages mounted - previous, current, next - so a page
-  // turn reveals an already-rasterised canvas instead of re-rendering (and
-  // often re-fetching bytes) from scratch. Reading is mostly forward, so
-  // pre-rendering the next page removes the wait for the common case, and
-  // holding the previous page keeps back-navigation instant. Neighbours render
-  // off to the side (still painted by pdf.js) while the reader is on the
-  // current page; only the active page carries the text layer and tracking.
-  const windowPages: number[] = [];
-  if (numPages > 0) {
-    for (let p = page - 1; p <= page + 1; p++) {
-      if (p >= 1 && p <= numPages) windowPages.push(p);
-    }
-  }
+  // Put the reader's place back after anything that moves the pages. Runs
+  // before the browser paints, so the page does not visibly jump.
+  useLayoutEffect(() => {
+    const el = frameRef.current;
+    const anchor = anchorRef.current;
+    if (!el || !anchor) return;
+    const slot = slotsRef.current[anchor.page];
+    if (!slot) return;
+    el.scrollTop =
+      slot.offsetTop + anchor.frac * slot.offsetHeight - el.clientHeight / 2;
+    if (pinRef.current) pinRef.current.top = el.scrollTop;
+  }, [zoom, frame.w, frame.h, aspects, numPages]);
 
-  // The page being turned away from, kept mounted underneath the incoming one
-  // so the turn is a crossfade rather than a blank frame. Held until the new
-  // page has painted, then for one more transition to fade out.
-  const [outgoing, setOutgoing] = useState<number | null>(null);
-  const shownRef = useRef(1);
+  // Keep the thumbnail of the page being read in view as the reader scrolls.
   useEffect(() => {
-    if (shownRef.current === page) return;
-    setOutgoing(shownRef.current);
-    if (!painted[page]) return;
-    shownRef.current = page;
-    const t = setTimeout(() => setOutgoing(null), TURN_MS);
-    return () => clearTimeout(t);
-  }, [page, painted]);
-
-  const mounted = windowPages.slice();
-  if (outgoing !== null && !mounted.includes(outgoing)) mounted.push(outgoing);
+    if (!showThumbs) return;
+    thumbsRef.current
+      ?.querySelector('[aria-current="page"]')
+      ?.scrollIntoView({ block: "nearest" });
+  }, [page, showThumbs]);
 
   const markPainted = useCallback(
     (p: number) => setPainted((prev) => (prev[p] ? prev : { ...prev, [p]: true })),
@@ -221,7 +320,7 @@ export function PdfViewer({
   );
 
   return (
-    <div className="flex h-full flex-col">
+    <div ref={rootRef} className="flex h-full flex-col">
       {/* toolbar - hidden until the document is ready to avoid a dead bar over the loader */}
       <div
         className={`relative items-center gap-0.5 px-2 py-1.5 text-white/70 sm:px-3 ${
@@ -229,7 +328,7 @@ export function PdfViewer({
         }`}
       >
         <button
-          onClick={() => setShowThumbs((s) => !s)}
+          onClick={() => setThumbsChoice(!showThumbs)}
           className={`${toolBtn} ${showThumbs ? "bg-white/10 text-white" : ""}`}
           title="Pages"
           aria-label="Toggle page thumbnails"
@@ -292,29 +391,31 @@ export function PdfViewer({
         {/* page position: the one number a reader looks for, set in mono */}
         {numPages > 0 && (
           <div
-            className={`mx-auto flex items-center gap-0.5 ${
+            className={`mx-auto flex items-center gap-1 ${
               showSearch ? "max-sm:hidden" : ""
             }`}
           >
             <button
               onClick={() => go(page - 1)}
               disabled={page <= 1}
-              className={toolBtn}
+              className={pageBtn}
+              title="Previous page"
               aria-label="Previous page"
             >
-              <ChevronLeft className="size-4" />
+              <ChevronLeft className="size-5" />
             </button>
-            <span className="min-w-16 text-center font-mono text-xs tabular text-white/80">
+            <span className="min-w-[4.5rem] text-center font-mono text-sm tabular text-white">
               {page}
-              <span className="text-white/35"> / {numPages}</span>
+              <span className="text-white/45"> / {numPages}</span>
             </span>
             <button
               onClick={() => go(page + 1)}
               disabled={page >= numPages}
-              className={toolBtn}
+              className={pageBtn}
+              title="Next page"
               aria-label="Next page"
             >
-              <ChevronRight className="size-4" />
+              <ChevronRight className="size-5" />
             </button>
           </div>
         )}
@@ -363,7 +464,6 @@ export function PdfViewer({
         onLoadSuccess={(pdf) => {
           pdfRef.current = pdf as unknown as PdfDoc;
           setNumPages(pdf.numPages);
-          onPageChange(1, pdf.numPages);
         }}
         onLoadProgress={({ loaded, total }) =>
           setLoadPct(total ? Math.min(100, Math.round((loaded / total) * 100)) : null)
@@ -381,7 +481,10 @@ export function PdfViewer({
         <div className="flex min-h-0 flex-1">
           {/* thumbnail rail */}
           {showThumbs && numPages > 0 && (
-            <div className="w-32 shrink-0 space-y-2 overflow-y-auto border-r border-white/10 bg-black/25 p-2 sm:w-40">
+            <div
+              ref={thumbsRef}
+              className="w-32 shrink-0 space-y-2 overflow-y-auto border-r border-white/10 bg-black/25 p-2 sm:w-40"
+            >
               {Array.from({ length: numPages }, (_, i) => i + 1).map((p) => (
                 <button
                   key={p}
@@ -410,54 +513,51 @@ export function PdfViewer({
           )}
 
           {/*
-           * Main page: the current page plus pre-rendered neighbours. The page
-           * arrows overlay the frame from outside its scroll area, so
-           * they stay centred on screen and add nothing to the scrollable size
-           * (inside it they sat below the page and forced a scrollbar).
+           * Every page, top to bottom, in one scrolling column: the wheel, a
+           * trackpad or a finger moves through the document. Each page has its
+           * box from the start, so the scrollbar spans the whole document, but
+           * only the pages around the one being read are rendered. The page
+           * arrows overlay the frame from outside its scroll area, so they stay
+           * centred on screen and add nothing to the scrollable size.
            */}
           <div className="relative min-w-0 flex-1">
             <div
               ref={frameRef}
-              className="absolute inset-0 overflow-auto overscroll-contain"
+              onScroll={sync}
+              // The reader's place is restored by hand (see anchorRef); the
+              // browser's own scroll anchoring would correct it a second time.
+              className="absolute inset-0 overflow-auto overscroll-contain [overflow-anchor:none]"
             >
-              <div className="flex min-h-full min-w-max justify-center p-4 sm:p-6">
-                {/*
-                 * The sheet: a fixed-size box built from the page's own aspect
-                 * ratio. Pages stack inside it absolutely, so turning a page
-                 * crossfades in place instead of remeasuring the layout.
-                 */}
-                <div
-                  className="relative m-auto overflow-hidden bg-white shadow-[0_1px_2px_rgb(0_0_0/0.45),0_18px_44px_-14px_rgb(0_0_0/0.6)]"
-                  style={{ width: renderWidth, height: sheetHeight }}
-                >
-                  {/* Blank paper while pdf.js rasterises: never a dark gap. */}
-                  {!ready && (
-                    <div aria-hidden className="shimmer absolute inset-0 bg-white" />
-                  )}
-                  {mounted.map((p) => {
-                    const active = p === page;
-                    const isOut = !active && p === outgoing;
-                    // Neighbours stay mounted but fully transparent: pdf.js has
-                    // already rasterised them, so the turn is instant.
-                    const opacity = active ? (ready ? 1 : 0) : isOut ? (ready ? 0 : 1) : 0;
-                    return (
-                      <div
-                        key={p}
-                        // Only the visible page carries the tracking hook so the
-                        // heatmap's querySelector matches the page in view.
-                        data-track-page={active ? "" : undefined}
-                        aria-hidden={active ? undefined : true}
-                        className="absolute left-0 top-0 transition-opacity duration-[var(--dur)] ease-[var(--ease-out-soft)]"
-                        style={{
-                          opacity,
-                          zIndex: active ? 2 : 1,
-                          pointerEvents: active ? undefined : "none",
-                        }}
-                      >
+              <div className="relative flex min-h-full min-w-max flex-col items-center justify-center gap-4 p-4 sm:gap-6 sm:p-6">
+                {Array.from({ length: numPages }, (_, i) => i + 1).map((p) => {
+                  const active = p === page;
+                  const near = Math.abs(p - page) <= RENDER_AHEAD;
+                  const { width, height } = sizeOf(p);
+                  return (
+                    /*
+                     * The sheet: a fixed-size box built from the page's own
+                     * aspect ratio, white like paper until pdf.js has painted.
+                     */
+                    <div
+                      key={p}
+                      ref={(node) => {
+                        slotsRef.current[p] = node;
+                      }}
+                      // Only the page being read carries the tracking hook, so
+                      // the heatmap's querySelector matches that page.
+                      data-track-page={active ? "" : undefined}
+                      data-page={p}
+                      className="relative shrink-0 overflow-hidden bg-white shadow-[0_1px_2px_rgb(0_0_0/0.45),0_18px_44px_-14px_rgb(0_0_0/0.6)]"
+                      style={{ width, height }}
+                    >
+                      {near && !painted[p] && (
+                        <div aria-hidden className="shimmer absolute inset-0 bg-white" />
+                      )}
+                      {near && (
                         <Page
                           pageNumber={p}
-                          width={renderWidth}
-                          renderTextLayer={active && !protection}
+                          width={width}
+                          renderTextLayer={!protection}
                           renderAnnotationLayer={false}
                           loading=""
                           onRenderSuccess={() => markPainted(p)}
@@ -470,10 +570,10 @@ export function PdfViewer({
                               );
                           }}
                         />
-                      </div>
-                    );
-                  })}
-                </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -481,19 +581,21 @@ export function PdfViewer({
               <>
                 <button
                   aria-label="Previous page"
+                  title="Previous page"
                   onClick={() => go(page - 1)}
                   disabled={page <= 1}
-                  className="absolute left-2 top-1/2 z-30 -translate-y-1/2 rounded-full border border-white/10 bg-black/35 p-2.5 text-white/70 outline-none backdrop-blur transition-[background-color,color,opacity] duration-[var(--dur)] ease-[var(--ease-out-soft)] hover:bg-black/60 hover:text-white focus-visible:ring-2 focus-visible:ring-white/50 disabled:pointer-events-none disabled:opacity-0 sm:left-3"
+                  className={`${sideBtn} left-2 sm:left-5`}
                 >
-                  <ChevronLeft className="size-5" />
+                  <ChevronLeft className="size-6 sm:size-7" strokeWidth={2.25} />
                 </button>
                 <button
                   aria-label="Next page"
+                  title="Next page"
                   onClick={() => go(page + 1)}
                   disabled={page >= numPages}
-                  className="absolute right-2 top-1/2 z-30 -translate-y-1/2 rounded-full border border-white/10 bg-black/35 p-2.5 text-white/70 outline-none backdrop-blur transition-[background-color,color,opacity] duration-[var(--dur)] ease-[var(--ease-out-soft)] hover:bg-black/60 hover:text-white focus-visible:ring-2 focus-visible:ring-white/50 disabled:pointer-events-none disabled:opacity-0 sm:right-3"
+                  className={`${sideBtn} right-2 sm:right-5`}
                 >
-                  <ChevronRight className="size-5" />
+                  <ChevronRight className="size-6 sm:size-7" strokeWidth={2.25} />
                 </button>
               </>
             )}
