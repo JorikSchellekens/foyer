@@ -46,10 +46,17 @@ export async function submitPassword(slug: string, password: string) {
 export async function submitEmail(
   slug: string,
   emailRaw: string,
-  name?: string
+  name?: string,
+  /** Data room document the visitor opened directly; they return to it. */
+  itemIdRaw?: string
 ) {
   const link = await loadLink(slug);
   if (!link) return { error: "Link unavailable." };
+  // Only a document of this link's own room is carried into the email.
+  const itemId =
+    itemIdRaw && link.dataroom?.documents.some((d) => d.id === itemIdRaw)
+      ? itemIdRaw
+      : null;
   const parsed = z.string().email().safeParse(emailRaw.trim().toLowerCase());
   if (!parsed.success) return { error: "Enter a valid email address." };
   const email = parsed.data;
@@ -75,7 +82,7 @@ export async function submitEmail(
     const token = await createVerificationToken({
       email,
       purpose: "VIEWER_VERIFY",
-      context: { linkId: link.id, slug, name: name ?? null },
+      context: { linkId: link.id, slug, name: name ?? null, itemId },
       ttlMinutes: 30,
     });
     const itemName =

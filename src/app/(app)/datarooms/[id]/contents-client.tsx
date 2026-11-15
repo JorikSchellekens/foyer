@@ -45,6 +45,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -617,6 +618,18 @@ export type DrItem =
       addedAt: string;
     };
 
+/**
+ * An access link of this data room, as far as a row needs it to build the
+ * address of one document under that link: <link url>/d/<item id>.
+ */
+export type ShareLink = {
+  id: string;
+  name: string;
+  url: string;
+  /** Data room document ids the link shares; null when it shares them all. */
+  itemIds: string[] | null;
+};
+
 type Zone = "before" | "into" | "after";
 type Target = { key: string; zone: Zone } | null;
 
@@ -641,10 +654,12 @@ export function ContentsRows({
   dataroomId,
   currentFolderId,
   items,
+  shareLinks,
 }: {
   dataroomId: string;
   currentFolderId: string | null;
   items: DrItem[];
+  shareLinks: ShareLink[];
 }) {
   const router = useRouter();
   const [order, setOrder] = useState(items);
@@ -764,6 +779,9 @@ export function ContentsRows({
             key={rowKey(item)}
             doc={item}
             dataroomId={dataroomId}
+            shareLinks={shareLinks.filter(
+              (l) => l.itemIds === null || l.itemIds.includes(item.id)
+            )}
             index={i}
             {...dragProps(item)}
           />
@@ -927,9 +945,67 @@ function FolderRowView({
   );
 }
 
+/**
+ * Copies the address of one document under an access link, so it can be sent
+ * to someone on its own. With several access links the menu asks which one,
+ * since each link has its own gates and its own visitors.
+ */
+function CopyDocLink({
+  doc,
+  shareLinks,
+}: {
+  doc: Extract<DrItem, { kind: "doc" }>;
+  shareLinks: ShareLink[];
+}) {
+  if (shareLinks.length === 0) return null;
+  const copy = async (link: ShareLink) => {
+    try {
+      await navigator.clipboard.writeText(`${link.url}/d/${doc.id}`);
+      toast.success(`Copied the link to ${doc.name}`);
+    } catch {
+      toast.error("Could not copy the link");
+    }
+  };
+  const trigger = (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      aria-label={`Copy link to ${doc.name}`}
+      title="Copy link to this document"
+      className="opacity-0 transition-opacity duration-[var(--dur-fast)] group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
+      onClick={(e) => {
+        e.stopPropagation();
+        if (shareLinks.length === 1) void copy(shareLinks[0]);
+      }}
+    >
+      <Link2 className="size-3.5" />
+    </Button>
+  );
+  if (shareLinks.length === 1) return trigger;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        className="w-max max-w-80"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <DropdownMenuLabel>Copy link through</DropdownMenuLabel>
+        {shareLinks.map((link) => (
+          <DropdownMenuItem key={link.id} onClick={() => void copy(link)}>
+            <Link2 className="size-4 shrink-0" />
+            <span className="truncate">{link.name}</span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function DocRowView({
   doc,
   dataroomId,
+  shareLinks,
   index,
   dragging,
   zone,
@@ -937,6 +1013,7 @@ function DocRowView({
 }: {
   doc: Extract<DrItem, { kind: "doc" }>;
   dataroomId: string;
+  shareLinks: ShareLink[];
   index: number;
 } & RowDragProps) {
   const router = useRouter();
@@ -1009,6 +1086,7 @@ function DocRowView({
         >
           <Eye className="size-3.5" />
         </Button>
+        <CopyDocLink doc={doc} shareLinks={shareLinks} />
         <Button
           variant="ghost"
           size="icon-sm"

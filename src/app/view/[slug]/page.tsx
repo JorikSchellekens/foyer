@@ -1,7 +1,6 @@
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
-import { db } from "@/lib/db";
 import {
   evaluateAccess,
   getViewerSession,
@@ -12,18 +11,12 @@ import { ensureView } from "@/lib/view-session";
 import { resolveBranding, gateBrand } from "@/lib/viewer-brand";
 import { fetchNotionPage } from "@/lib/notion";
 import {
-  AgreementGate,
-  BlockedGate,
-  EmailGate,
-  ExpiredGate,
-  PasswordGate,
-  VerifySentGate,
-} from "@/components/viewer/gates";
-import {
   DocumentViewer,
   type ViewerDoc,
 } from "@/components/viewer/document-viewer";
 import { DataroomIndex } from "./dataroom-index";
+import { AccessGate } from "./access-gate";
+import { linkMetadata } from "./link-metadata";
 
 async function load(slug: string) {
   const h = await headers();
@@ -37,41 +30,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const link = await load(slug);
-  if (!link) return { title: "Not found" };
-  const branding = await resolveBranding(link);
-  // Preview resolution: link's own fields → link's preview preset →
-  // the team's default preview preset → branding → sensible fallback.
-  const defaultPreset =
-    link.previewPreset ??
-    (await db.previewPreset.findFirst({
-      where: { teamId: link.teamId, isDefault: true },
-    }));
-  const title =
-    link.metaTitle ??
-    defaultPreset?.metaTitle ??
-    branding?.metaTitle ??
-    `${link.document?.name ?? link.dataroom?.name ?? "Shared documents"} · ${link.team.name}`;
-  const description =
-    link.metaDescription ??
-    defaultPreset?.metaDescription ??
-    branding?.metaDescription ??
-    `${link.team.name} shared this with you via Foyer.`;
-  const imageKey =
-    link.metaImageKey ??
-    defaultPreset?.metaImageKey ??
-    branding?.metaImageKey;
-  return {
-    title,
-    description,
-    robots: { index: false, follow: false },
-    openGraph: {
-      title,
-      description,
-      ...(imageKey ? { images: [`/api/assets/${imageKey}`] } : {}),
-    },
-    twitter: { card: imageKey ? "summary_large_image" : "summary" },
-  };
+  return linkMetadata(slug);
 }
 
 export default async function ViewPage({
@@ -93,48 +52,16 @@ export default async function ViewPage({
 
   if (!isPreview) {
     const access = evaluateAccess(link, session);
-    switch (access.kind) {
-      case "expired":
-        return <ExpiredGate brand={brand} />;
-      case "blocked":
-        return (
-          <BlockedGate
-            slug={slug}
-            brand={brand}
-            reason={access.reason}
-            defaultEmail={session.email ?? ""}
-          />
-        );
-      case "password":
-        return <PasswordGate slug={slug} brand={brand} />;
-      case "email":
-        return (
-          <EmailGate
-            slug={slug}
-            brand={brand}
-            requireVerification={access.requireVerification}
-          />
-        );
-      case "verify-sent":
-        return <VerifySentGate brand={brand} email={session.email} />;
-      case "agreement":
-        return (
-          <AgreementGate
-            slug={slug}
-            brand={brand}
-            agreement={{
-              name: link.agreement!.name,
-              type: link.agreement!.type,
-              requireName: link.agreement!.requireName,
-              content: link.agreement!.content,
-              externalUrl: link.agreement!.externalUrl,
-              fileUrl: link.agreement!.fileKey
-                ? `/api/view/agreement/${slug}`
-                : null,
-            }}
-          />
-        );
-    }
+    if (access.kind !== "granted")
+      return (
+        <AccessGate
+          access={access}
+          link={link}
+          slug={slug}
+          brand={brand}
+          session={session}
+        />
+      );
   }
 
   // granted (or an owner preview, which records nothing)

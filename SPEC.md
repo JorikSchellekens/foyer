@@ -57,6 +57,9 @@ Document viewer: pdf.js reader, all pages in one scrolling column (tracks page +
 docx (mammoth), xlsx/csv (SheetJS), md/txt/code, Notion links (react-notion-x).
 Dataroom viewer: branded front page (banner/logo/welcome), dot-leader index,
 folder navigation, per-file open. Downloads (file + full dataroom zip) when allowed.
+Direct document links: `<link url>/d/<dataroom document id>` opens one document of a room. Gates
+render at that address and return to it (verification email included); invite links take `?d=<id>`.
+Admins copy the address from the room's Contents list.
 Tracking: heartbeat 5s (sendBeacon on hide), per-page dwell, throttled mouse samples
 batched to /api/view/track. Watermark overlay when enabled.
 

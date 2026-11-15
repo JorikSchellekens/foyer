@@ -30,9 +30,14 @@ export async function GET(
   });
 
   const isCustom = link.domainId !== null && link.domain;
+  const room = isCustom
+    ? `https://${link.domain!.domain}/${link.slug}`
+    : `${origin}/view/${link.slug}`;
+  // ?d=<itemId> opens one document of the room instead of its index.
+  const itemId = req.nextUrl.searchParams.get("d");
   return NextResponse.redirect(
-    isCustom
-      ? `https://${link.domain!.domain}/${link.slug}`
-      : `${origin}/view/${link.slug}`
+    itemId && /^[A-Za-z0-9_-]{1,64}$/.test(itemId)
+      ? `${room}/d/${itemId}`
+      : room
   );
 }

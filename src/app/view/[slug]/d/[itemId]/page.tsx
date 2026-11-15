@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import type { Metadata } from "next";
 import {
   evaluateAccess,
   getViewerSession,
@@ -21,7 +22,24 @@ import {
   DocumentViewer,
   type ViewerDoc,
 } from "@/components/viewer/document-viewer";
+import { AccessGate } from "../../access-gate";
+import { linkMetadata } from "../../link-metadata";
 
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  return linkMetadata(slug);
+}
+
+/**
+ * One document of a data room, at its own address: /view/<slug>/d/<itemId>.
+ * The address works as a link to send someone. A visitor who has not passed
+ * the link's gates yet meets them here, and the same address then shows the
+ * document.
+ */
 export default async function DataroomDocumentPage({
   params,
   searchParams,
@@ -47,11 +65,25 @@ export default async function DataroomDocumentPage({
 
   if (!isPreview) {
     const access = evaluateAccess(link, session);
-    if (access.kind !== "granted") redirect(`/view/${slug}`);
+    if (access.kind !== "granted") {
+      const branding = await resolveBranding(link);
+      return (
+        <AccessGate
+          access={access}
+          link={link}
+          slug={slug}
+          brand={gateBrand(link, branding)}
+          session={session}
+          itemId={itemId}
+        />
+      );
+    }
   }
 
+  // A document that has left the room, or one this link does not share: the
+  // visitor is through the gate, so show them the room instead of a dead end.
   const item = link.dataroom.documents.find((d) => d.id === itemId);
-  if (!item) notFound();
+  if (!item) redirect(backHref);
   const grant = itemGrant(link, "DATAROOM_DOCUMENT", item.id);
   if (!grant.canView) redirect(backHref);
 

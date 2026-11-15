@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
     linkId?: string;
     slug?: string;
     name?: string | null;
+    itemId?: string | null;
   } | null;
   if (!context?.linkId || !context.slug) return NextResponse.redirect(home);
 
@@ -36,6 +37,10 @@ export async function GET(req: NextRequest) {
   // On custom domains the public path has no /view prefix.
   const host = req.headers.get("host") ?? "";
   const isCustom = link.domainId !== null;
-  const path = isCustom ? `/${link.slug}` : `/view/${link.slug}`;
+  const room = isCustom ? `/${link.slug}` : `/view/${link.slug}`;
+  // The visitor asked for one document of the room: send them back to it.
+  const path = context.itemId
+    ? `${room}/d/${encodeURIComponent(context.itemId)}`
+    : room;
   return NextResponse.redirect(new URL(path, `${req.nextUrl.protocol}//${host}`));
 }
