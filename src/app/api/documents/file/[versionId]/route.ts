@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { contentTypeForFile } from "@/lib/content-type";
 import { getTeamContext } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { streamObject } from "@/lib/object-response";
@@ -24,11 +25,11 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   if (req.nextUrl.searchParams.get("download") === "1")
-    return streamObject(version.fileKey, version.contentType, {
+    return streamObject(version.fileKey, contentTypeForFile(version.fileName), {
       disposition: `attachment; filename="${encodeURIComponent(version.fileName)}"`,
     });
 
-  return streamObject(version.fileKey, version.contentType, {
+  return streamObject(version.fileKey, contentTypeForFile(version.fileName), {
     disposition: "inline",
     range: req.headers.get("range"),
   });

@@ -1,20 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { authenticateApi } from "@/lib/api-auth";
+import { admitApi } from "@/lib/api-rest";
+import { visibilityFor } from "@/lib/api-visibility";
+import { appOrigin } from "@/lib/mcp/context";
+import { canAccessDataroom } from "@/lib/permissions";
+import { recordApiEvent } from "@/lib/api-audit";
 import { db } from "@/lib/db";
 import { generateSlug } from "@/lib/slug";
-import { originFromRequest } from "@/lib/origin";
 import { teamMemberEmails, externalViews } from "@/lib/internal-views";
 
 export async function GET(req: NextRequest) {
-  const auth = await authenticateApi(req);
-  if (!auth)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admitted = await admitApi(req, "read");
+  if ("response" in admitted) return admitted.response;
+  const auth = admitted.principal;
+  const v = await visibilityFor(auth);
 
   // Internal visits (team members opening their own links) are not counted.
   const extFilter = externalViews(await teamMemberEmails(auth.teamId));
   const links = await db.link.findMany({
-    where: { teamId: auth.teamId },
+    where: v.link,
     include: {
       domain: true,
       document: true,
@@ -30,7 +34,7 @@ export async function GET(req: NextRequest) {
       name: l.name,
       url: l.domain
         ? `https://${l.domain.domain}/${l.slug}`
-        : `${originFromRequest(req)}/view/${l.slug}`,
+        : `${appOrigin()}/view/${l.slug}`,
       target: l.target,
       targetId: l.documentId ?? l.dataroomId,
       targetName: l.document?.name ?? l.dataroom?.name,
@@ -42,23 +46,36 @@ export async function GET(req: NextRequest) {
   });
 }
 
-const createSchema = z.object({
+/** An email, or a domain such as "@acme.com". */
+const listEntry = z
+  .string()
+  .max(254)
+  .transform((s) => s.trim().toLowerCase())
+  .refine(
+    (s) =>
+      /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(s) ||
+      /^@?[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(s),
+    "Use an email address or a domain such as @acme.com"
+  );
+
+const createSchema = z.strictObject({
   targetType: z.enum(["DOCUMENT", "DATAROOM"]),
-  targetId: z.string(),
-  name: z.string().min(1),
+  targetId: z.string().regex(/^[a-zA-Z0-9]{8,40}$/),
+  name: z.string().trim().min(1).max(120),
   accessMode: z.enum(["PUBLIC", "EMAIL", "EMAIL_VERIFIED"]).default("PUBLIC"),
   allowDownload: z.boolean().default(true),
   watermark: z.boolean().default(false),
   screenshotProtection: z.boolean().default(false),
-  expiresInDays: z.number().int().positive().optional(),
-  allowList: z.array(z.string()).default([]),
-  blockList: z.array(z.string()).default([]),
+  expiresInDays: z.number().int().positive().max(3650).optional(),
+  allowList: z.array(listEntry).max(500).default([]),
+  blockList: z.array(listEntry).max(500).default([]),
 });
 
 export async function POST(req: NextRequest) {
-  const auth = await authenticateApi(req);
-  if (!auth)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admitted = await admitApi(req, "share");
+  if ("response" in admitted) return admitted.response;
+  const auth = admitted.principal;
+  const v = await visibilityFor(auth);
 
   const parsed = createSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success)
@@ -68,15 +85,30 @@ export async function POST(req: NextRequest) {
     );
   const body = parsed.data;
 
+  if (body.allowList.length && body.accessMode !== "EMAIL_VERIFIED")
+    return NextResponse.json(
+      {
+        error:
+          "An allow list only protects a link when visitors must prove their email. Use accessMode EMAIL_VERIFIED with allowList.",
+      },
+      { status: 400 }
+    );
+
   const target =
     body.targetType === "DOCUMENT"
       ? await db.document.findFirst({
-          where: { id: body.targetId, teamId: auth.teamId },
+          where: { AND: [{ id: body.targetId }, v.docEdit] },
         })
       : await db.dataroom.findFirst({
           where: { id: body.targetId, teamId: auth.teamId },
         });
   if (!target)
+    return NextResponse.json({ error: "Target not found" }, { status: 404 });
+  // Same rule as the app: sharing a data room needs edit access to it.
+  if (
+    body.targetType === "DATAROOM" &&
+    !(await canAccessDataroom(auth.ctx, body.targetId, "EDIT"))
+  )
     return NextResponse.json({ error: "Target not found" }, { status: 404 });
 
   const link = await db.link.create({
@@ -98,10 +130,14 @@ export async function POST(req: NextRequest) {
         : null,
     },
   });
+  await recordApiEvent(auth, {
+    tool: "rest:create_link",
+    summary: `Created ${body.accessMode} link "${link.name}" for ${body.targetType.toLowerCase()} "${target.name}"`,
+  });
   return NextResponse.json(
     {
       id: link.id,
-      url: `${originFromRequest(req)}/view/${link.slug}`,
+      url: `${appOrigin()}/view/${link.slug}`,
     },
     { status: 201 }
   );

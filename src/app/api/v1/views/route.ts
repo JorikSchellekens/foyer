@@ -1,18 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { authenticateApi } from "@/lib/api-auth";
+import { admitApi } from "@/lib/api-rest";
+import { visibilityFor } from "@/lib/api-visibility";
 import { db } from "@/lib/db";
 
 export async function GET(req: NextRequest) {
-  const auth = await authenticateApi(req);
-  if (!auth)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admitted = await admitApi(req, "read");
+  if ("response" in admitted) return admitted.response;
+  const auth = admitted.principal;
+  const v = await visibilityFor(auth);
 
-  const limit = Math.min(
-    Number(req.nextUrl.searchParams.get("limit") ?? 100),
-    500
-  );
+  // Whole number between 1 and 500; anything else falls back to 100. A
+  // negative "take" would otherwise mean "the last N", with no ceiling.
+  const asked = Number(req.nextUrl.searchParams.get("limit") ?? 100);
+  const limit = Number.isInteger(asked) && asked >= 1 ? Math.min(asked, 500) : 100;
   const views = await db.view.findMany({
-    where: { link: { teamId: auth.teamId } },
+    where: v.view,
     include: { link: true, document: true, dataroom: true },
     orderBy: { startedAt: "desc" },
     take: limit,

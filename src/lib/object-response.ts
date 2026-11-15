@@ -21,6 +21,14 @@ export async function streamObject(
       "x-content-type-options": "nosniff",
       "accept-ranges": "bytes",
     };
+    // Stored files are other people's content served from our origin. If a
+    // browser is ever pointed straight at one, it renders with no script, no
+    // forms and no access to the app's cookies or storage. PDFs are left out:
+    // they cannot run script in the page's origin, and the browser's own PDF
+    // viewer (used for embedded agreements) refuses to load when sandboxed.
+    if (contentType !== "application/pdf")
+      headers["content-security-policy"] =
+        "sandbox; default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'";
     if (obj.ContentLength != null)
       headers["content-length"] = String(obj.ContentLength);
     if (obj.ContentRange) headers["content-range"] = obj.ContentRange;
