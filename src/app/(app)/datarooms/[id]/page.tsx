@@ -582,7 +582,7 @@ async function ContentsTabInner({
                 <TableHead className="w-36 font-mono text-[10px] font-normal uppercase tracking-[0.18em] text-muted-foreground">
                   Added
                 </TableHead>
-                <TableHead className="w-28">
+                <TableHead className="w-48">
                   <span className="sr-only">Actions</span>
                 </TableHead>
               </TableRow>

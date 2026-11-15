@@ -957,7 +957,16 @@ function CopyDocLink({
   doc: Extract<DrItem, { kind: "doc" }>;
   shareLinks: ShareLink[];
 }) {
-  if (shareLinks.length === 0) return null;
+  // No access link yet: there is no address to copy. The button stays in
+  // place, greyed out, and says what is missing.
+  if (shareLinks.length === 0)
+    return (
+      <span title="Create an access link for this data room first">
+        <Button variant="outline" size="sm" disabled>
+          <Link2 className="size-3.5" /> Copy link
+        </Button>
+      </span>
+    );
   const copy = async (link: ShareLink) => {
     try {
       await navigator.clipboard.writeText(`${link.url}/d/${doc.id}`);
@@ -968,17 +977,16 @@ function CopyDocLink({
   };
   const trigger = (
     <Button
-      variant="ghost"
-      size="icon-sm"
+      variant="outline"
+      size="sm"
       aria-label={`Copy link to ${doc.name}`}
-      title="Copy link to this document"
-      className="opacity-0 transition-opacity duration-[var(--dur-fast)] group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
+      title="Copy a link that opens this document"
       onClick={(e) => {
         e.stopPropagation();
         if (shareLinks.length === 1) void copy(shareLinks[0]);
       }}
     >
-      <Link2 className="size-3.5" />
+      <Link2 className="size-3.5" /> Copy link
     </Button>
   );
   if (shareLinks.length === 1) return trigger;
