@@ -71,6 +71,8 @@ model Team {
   presets           LinkPreset[]
   previewPresets    PreviewPreset[]
   apiTokens         ApiToken[]
+  apiTokenEvents    ApiTokenEvent[]
+  apiUploads        ApiUpload[]
   webhooks          Webhook[]
   notifications     Notification[]
   notifPrefs        NotificationPreference[]
@@ -781,11 +783,65 @@ model ApiToken {
   name       String
   hashedKey  String    @unique
   partialKey String
+  // What the token may do: any of "read", "write" (add and organise),
+  // "share" (links and invitations), "delete". See src/lib/api-scopes.ts.
+  scopes     String[]  @default(["read"])
+  expiresAt  DateTime?
   lastUsedAt DateTime?
   createdAt  DateTime  @default(now())
 
-  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team    Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events  ApiTokenEvent[]
+  uploads ApiUpload[]
+}
+
+// Every change made through the API or MCP with a token: the audit trail an
+// owner reads to see what an integration or an AI assistant did.
+model ApiTokenEvent {
+  id        String   @id @default(cuid())
+  teamId    String
+  tokenId   String?
+  tokenName String
+  userId    String?
+  tool      String
+  summary   String
+  ok        Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  team  Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  token ApiToken? @relation(fields: [tokenId], references: [id], onDelete: SetNull)
+
+  @@index([teamId, createdAt])
+  @@index([tokenId, createdAt])
+}
+
+// A one-time upload slot handed to an API client. The secret is only ever
+// stored hashed; the slot records where the file should land.
+model ApiUpload {
+  id               String    @id @default(cuid())
+  teamId           String
+  tokenId          String
+  userId           String
+  hashedSecret     String    @unique
+  fileName         String
+  name             String?
+  // new document: library folder and optional data room placement
+  folderId         String?
+  dataroomId       String?
+  dataroomFolderId String?
+  // new version of an existing document
+  documentId       String?
+  note             String?
+  expiresAt        DateTime
+  usedAt           DateTime?
+  resultDocumentId String?
+  createdAt        DateTime  @default(now())
+
+  team  Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  token ApiToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+
+  @@index([teamId, createdAt])
 }
 
 model Webhook {

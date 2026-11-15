@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTeamContext, verifyPayload } from "@/lib/auth";
 import { putObject } from "@/lib/storage";
+import { contentTypeForFile } from "@/lib/content-type";
 
 // Documents can be large (decks, videos); allow generous bodies.
 export const maxDuration = 300;
@@ -57,10 +58,9 @@ export async function PUT(req: NextRequest) {
       { status: 400 }
     );
 
-  const contentType =
-    req.headers.get("content-type") ||
-    payload.ct ||
-    "application/octet-stream";
+  // Decided by the file's extension, never by what the browser declares:
+  // the object is later served from the app's own origin.
+  const contentType = contentTypeForFile(payload.key);
 
   await putObject(payload.key, body, contentType);
   return NextResponse.json({ ok: true, key: payload.key });

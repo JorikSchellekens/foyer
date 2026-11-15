@@ -433,29 +433,36 @@ export async function moveDataroomFolder(
   if (!owned) return { error: "Data room not found." };
   if (folderId === newParentId)
     return { error: "A folder cannot contain itself." };
-  const folders = await db.dataroomFolder.findMany({
-    where: { dataroomId },
-    select: { id: true, parentId: true },
-  });
-  const byId = new Map(folders.map((f) => [f.id, f]));
-  if (!byId.has(folderId)) return { error: "Folder not found." };
-  if (newParentId) {
-    if (!byId.has(newParentId))
-      return { error: "Destination folder not found." };
-    // walk up from the destination; reaching the moved folder means a cycle
-    let cursor: string | null = newParentId;
-    while (cursor) {
-      if (cursor === folderId)
-        return { error: "A folder cannot move into its own subfolder." };
-      cursor = byId.get(cursor)?.parentId ?? null;
+  // One move at a time per tree: two opposite moves checked against each
+  // other's old position would otherwise both pass and form a loop.
+  const result = await db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`foyer-tree:room:${dataroomId}`}))`;
+    const folders = await tx.dataroomFolder.findMany({
+      where: { dataroomId },
+      select: { id: true, parentId: true },
+    });
+    const byId = new Map(folders.map((f) => [f.id, f]));
+    if (!byId.has(folderId)) return { error: "Folder not found." };
+    if (newParentId) {
+      if (!byId.has(newParentId))
+        return { error: "Destination folder not found." };
+      // walk up from the destination; reaching the moved folder means a cycle
+      let cursor: string | null = newParentId;
+      // The step bound stops a parent cycle in bad data from looping forever.
+      for (let steps = 0; cursor && steps < 1000; steps++) {
+        if (cursor === folderId)
+          return { error: "A folder cannot move into its own subfolder." };
+        cursor = byId.get(cursor)?.parentId ?? null;
+      }
     }
-  }
-  await db.dataroomFolder.update({
-    where: { id: folderId },
-    data: { parentId: newParentId },
+    await tx.dataroomFolder.update({
+      where: { id: folderId },
+      data: { parentId: newParentId },
+    });
+    return { ok: true as const };
   });
   bust(dataroomId);
-  return { ok: true };
+  return result;
 }
 
 /**

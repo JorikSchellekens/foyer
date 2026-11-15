@@ -103,15 +103,24 @@ export async function sendViewerVerification(
 ) {
   return sendEmail({
     to: email,
-    subject: `Verify your email to view ${documentName}`,
+    subject: `Verify your email to view ${documentName}`.replace(/[\r\n]+/g, " "),
     html: shell({
       heading: "Verify your email",
-      body: `You requested access to <strong>${documentName}</strong>. Confirm this is your email address to continue.${button(
+      body: `You requested access to <strong>${esc(documentName)}</strong>. Confirm this is your email address to continue.${button(
         href,
         "Verify and view"
       )}`,
     }),
   });
+}
+
+/** Names come from users and API clients; they must never become markup. */
+function esc(s: string) {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 export async function sendLinkInvite(opts: {
@@ -129,10 +138,10 @@ export async function sendLinkInvite(opts: {
     : "";
   return sendEmail({
     to: opts.email,
-    subject: `${opts.teamName} shared "${opts.itemName}" with you`,
+    subject: `${opts.teamName} shared "${opts.itemName}" with you`.replace(/[\r\n]+/g, " "),
     html: shell({
-      heading: `${opts.teamName} shared a document with you`,
-      body: `You have been invited to view <strong>${opts.itemName}</strong>.${button(
+      heading: `${esc(opts.teamName)} shared a document with you`,
+      body: `You have been invited to view <strong>${esc(opts.itemName)}</strong>.${button(
         opts.url,
         "Open document"
       )}${expiry}`,
@@ -149,9 +158,9 @@ export async function sendTeamInvite(opts: {
   const href = opts.inviteUrl;
   return sendEmail({
     to: opts.email,
-    subject: `Join ${opts.teamName} on Foyer`,
+    subject: `Join ${opts.teamName} on Foyer`.replace(/[\r\n]+/g, " "),
     html: shell({
-      heading: `${opts.inviterName} invited you to ${opts.teamName}`,
+      heading: `${esc(opts.inviterName)} invited you to ${esc(opts.teamName)}`,
       body: `Accept the invitation to start sharing documents with your team.${button(
         href,
         "Accept invitation"

@@ -1514,13 +1514,14 @@ async function main() {
 
   // ---- api tokens ----
   for (const t of [
-    { key: "cli", name: "Deal team CLI", plain: API_KEY_PLAIN, lastUsed: hoursAgo(5) },
-    { key: "ci", name: "Reporting job", plain: API_KEY_PLAIN_CI, lastUsed: atDay(9, 3, 15) },
+    { key: "cli", name: "Deal team CLI", plain: API_KEY_PLAIN, lastUsed: hoursAgo(5), scopes: ["read", "write", "share", "delete"] },
+    { key: "ci", name: "Reporting job", plain: API_KEY_PLAIN_CI, lastUsed: atDay(9, 3, 15), scopes: ["read"] },
   ]) {
     await db.apiToken.upsert({
       where: { id: sid(`token:${t.key}`) },
-      update: { lastUsedAt: t.lastUsed },
+      update: { lastUsedAt: t.lastUsed, scopes: t.scopes },
       create: {
+        scopes: t.scopes,
         id: sid(`token:${t.key}`),
         teamId: T,
         userId: userId("avery"),

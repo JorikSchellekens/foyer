@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { EXPIRY_CHOICES, SCOPE_PRESETS } from "@/lib/api-scopes";
 import { z } from "zod";
 import { requireTeam, requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -302,17 +303,38 @@ export async function deletePreset(presetId: string) {
 
 // ---------- API tokens ----------
 
-export async function createApiToken(name: string) {
+export async function createApiToken(
+  name: string,
+  presetId: string = "read",
+  expiresInDays: number | null = null
+) {
   const ctx = await requireTeam();
-  if (!name.trim()) return { error: "Give the token a name." };
+  const clean = name.trim().slice(0, 80);
+  if (!clean) return { error: "Give the key a name." };
+  // Only the offered combinations are accepted; anything else is read only.
+  const preset =
+    SCOPE_PRESETS.find((p) => p.id === presetId) ?? SCOPE_PRESETS[0];
+  const expiry = EXPIRY_CHOICES.find((c) => c.days === expiresInDays);
+  if (!expiry) return { error: "Pick how long the key should last." };
+  // Limits are counted per person, so more keys buy nothing; the cap just
+  // keeps the list something a person can review.
+  const mine = await db.apiToken.count({
+    where: { teamId: ctx.team.id, userId: ctx.user.id },
+  });
+  if (mine >= 25)
+    return { error: "You have 25 keys already. Revoke one you no longer use." };
   const { key, hashed, partial } = generateApiKey();
   await db.apiToken.create({
     data: {
       teamId: ctx.team.id,
       userId: ctx.user.id,
-      name: name.trim(),
+      name: clean,
       hashedKey: hashed,
       partialKey: partial,
+      scopes: preset.scopes,
+      expiresAt: expiry.days
+        ? new Date(Date.now() + expiry.days * 86400_000)
+        : null,
     },
   });
   revalidatePath("/settings/tokens");
@@ -321,10 +343,18 @@ export async function createApiToken(name: string) {
 
 export async function revokeApiToken(tokenId: string) {
   const ctx = await requireTeam();
-  await db.apiToken.deleteMany({
-    where: { id: tokenId, teamId: ctx.team.id },
+  // A member revokes their own keys; owners and admins revoke anyone's.
+  const result = await db.apiToken.deleteMany({
+    where: {
+      id: tokenId,
+      teamId: ctx.team.id,
+      ...(ctx.role === "MEMBER" ? { userId: ctx.user.id } : {}),
+    },
   });
   revalidatePath("/settings/tokens");
+  if (result.count === 0)
+    return { error: "Only the key's owner or a workspace admin can revoke it." };
+  return { ok: true };
 }
 
 // ---------- webhooks ----------

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { contentTypeForFile } from "@/lib/content-type";
 import { db } from "@/lib/db";
 import {
   evaluateAccess,
@@ -72,14 +73,14 @@ export async function GET(
         })
         .catch(() => {});
     }
-    return streamObject(version.fileKey, version.contentType, {
+    return streamObject(version.fileKey, contentTypeForFile(version.fileName), {
       disposition: `attachment; filename="${encodeURIComponent(version.fileName)}"`,
     });
   }
 
   // The object store is private and internal, so all bytes stream through
   // the app.
-  return streamObject(version.fileKey, version.contentType, {
+  return streamObject(version.fileKey, contentTypeForFile(version.fileName), {
     disposition: "inline",
     range: req.headers.get("range"),
   });

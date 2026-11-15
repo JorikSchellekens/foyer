@@ -77,8 +77,31 @@ signing; pdf-lib stamps signed copy), notifications matrix, link presets, API to
 webhooks (document.viewed, dataroom.visited, link.created, agreement.signed…).
 
 ## MCP (/api/mcp, Bearer ApiToken)
-Tools: list/search documents & datarooms, create/manage links, get analytics
-(document/link/visitor), invite recipients, list visits.
+For an AI assistant to read, structure and share a workspace. Streamable HTTP only.
+Code in src/lib/mcp/; regression test scripts/mcp-e2e.ts; hand client scripts/mcp-cli.ts.
+
+Keys (ApiToken): scopes read / write (add and organise) / share (links, invitations,
+and any change to content already shared through a live link) / delete, offered as four
+presets; optional expiry. A key acts as the member who created it with their current
+role and data room permissions, and stops when they leave the team. A member limited to
+specific rooms gets a key confined to those rooms (src/lib/api-visibility.ts), which is
+tighter than the web app. Limits are per person, not per key. Every change is recorded
+in ApiTokenEvent and shown under Settings > API and MCP.
+
+Tools: get_workspace; library (list_library_folders, list_documents, get_document,
+get_document_text, get_document_previews, create/update/delete_library_folder,
+move_library_documents, rename_documents); adding (request_upload,
+request_version_upload, add_url_document, add_notion_document, create_text_document,
+update_text_document); data rooms (list_datarooms, get_dataroom, create/update_dataroom,
+organize_dataroom, create/update/delete_dataroom_folder, remove_from_dataroom,
+reorder_dataroom); sharing (list_sharing_links, get_sharing_link_visits,
+create/update_sharing_link, invite_recipients, revoke_invitations, list_visitors,
+get_visitor_activity); delete_documents, delete_dataroom; list_recent_changes.
+
+Files arrive through one-time upload slots (ApiUpload, /api/upload/agent/[id]): the tool
+returns a curl command with a single-use secret in a header. The server never fetches a
+URL it is given. Stored files are served with a content type decided by their extension
+(src/lib/content-type.ts) and a sandbox policy, never the type the uploader declared.
 
 ## Import from Papermark (Settings → Import)
 Connect (API token + optional session cookie) → scan → review → run → receipt.

@@ -29,7 +29,13 @@ export function parseExternalUrl(
 
   const given = nameInput?.trim();
   const host = parsed.hostname.replace(/^www\./, "");
-  const path = decodeURIComponent(parsed.pathname).replace(/\/+$/, "");
+  let path = parsed.pathname;
+  try {
+    path = decodeURIComponent(parsed.pathname);
+  } catch {
+    // a stray "%" in the address; use it as written
+  }
+  path = path.replace(/\/+$/, "");
   const fallback = path ? `${host}${path}` : host;
   return {
     url: parsed.toString(),

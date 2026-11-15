@@ -52,8 +52,8 @@ export function parseNotionUrl(
     return { error: "Enter a valid Notion URL." };
   }
   if (
-    !parsed.hostname.endsWith("notion.site") &&
-    !parsed.hostname.endsWith("notion.so")
+    parsed.protocol !== "https:" ||
+    !/(^|\.)notion\.(site|so)$/i.test(parsed.hostname)
   )
     return {
       error: "Only public notion.site or notion.so links are supported.",
@@ -61,13 +61,18 @@ export function parseNotionUrl(
   if (!notionPageId(url))
     return { error: "That link doesn't point to a specific Notion page." };
 
-  const name = decodeURIComponent(
-    parsed.pathname.split("/").filter(Boolean).pop() ?? "Notion page"
-  )
+  const last = parsed.pathname.split("/").filter(Boolean).pop() ?? "Notion page";
+  let decoded = last;
+  try {
+    decoded = decodeURIComponent(last);
+  } catch {
+    // a stray "%" in the address; use it as written
+  }
+  const name = decoded
     .replace(/-[a-f0-9]{32}$/i, "")
     .replace(/-/g, " ")
     .trim();
-  return { url, name: name || "Notion page" };
+  return { url, name: (name || "Notion page").slice(0, 200) };
 }
 
 async function notionApi() {
