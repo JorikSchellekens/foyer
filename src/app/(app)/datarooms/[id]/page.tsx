@@ -34,6 +34,7 @@ import {
   AddLinkToDataroomDialog,
   AddNotionToDataroomDialog,
   ContentsRows,
+  type ShareLink,
   CrumbDropLink,
   DataroomUploadButtons,
   NewDrFolderButton,
@@ -224,6 +225,24 @@ export default async function DataroomPage({
             dataroom={dataroom}
             folderId={folderId}
             teamId={ctx.team.id}
+            shareLinks={await Promise.all(
+              dataroom.links
+                .filter((l) => !l.isArchived)
+                .map(async (l) => ({
+                  id: l.id,
+                  name: l.name,
+                  url: await linkUrl(l),
+                  // null: the link shares every document in the room
+                  itemIds: l.fullAccess
+                    ? null
+                    : l.permissions
+                        .filter(
+                          (p) =>
+                            p.itemType === "DATAROOM_DOCUMENT" && p.canView
+                        )
+                        .map((p) => p.itemId),
+                }))
+            )}
           />
         )}
 
@@ -331,6 +350,7 @@ function ContentsTab({
   dataroom,
   folderId,
   teamId,
+  shareLinks,
 }: {
   dataroom: {
     id: string;
@@ -356,14 +376,23 @@ function ContentsTab({
   };
   folderId: string | null;
   teamId: string;
+  shareLinks: ShareLink[];
 }) {
-  return <ContentsTabInner dataroom={dataroom} folderId={folderId} teamId={teamId} />;
+  return (
+    <ContentsTabInner
+      dataroom={dataroom}
+      folderId={folderId}
+      teamId={teamId}
+      shareLinks={shareLinks}
+    />
+  );
 }
 
 async function ContentsTabInner({
   dataroom,
   folderId,
   teamId,
+  shareLinks,
 }: {
   dataroom: {
     id: string;
@@ -389,6 +418,7 @@ async function ContentsTabInner({
   };
   folderId: string | null;
   teamId: string;
+  shareLinks: ShareLink[];
 }) {
   // library documents (for add-from-library), with folder path labels
   const [libraryDocs, libraryFolders] = await Promise.all([
@@ -552,7 +582,7 @@ async function ContentsTabInner({
                 <TableHead className="w-36 font-mono text-[10px] font-normal uppercase tracking-[0.18em] text-muted-foreground">
                   Added
                 </TableHead>
-                <TableHead className="w-20">
+                <TableHead className="w-48">
                   <span className="sr-only">Actions</span>
                 </TableHead>
               </TableRow>
@@ -566,6 +596,7 @@ async function ContentsTabInner({
                 dataroomId={dataroom.id}
                 currentFolderId={folderId}
                 items={itemsHere}
+                shareLinks={shareLinks}
               />
             </TableBody>
           </Table>

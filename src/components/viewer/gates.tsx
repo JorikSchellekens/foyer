@@ -263,10 +263,13 @@ export function EmailGate({
   slug,
   brand,
   requireVerification,
+  itemId,
 }: {
   slug: string;
   brand: GateBrand;
   requireVerification: boolean;
+  /** The data room document the visitor opened directly, if any. */
+  itemId?: string;
 }) {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
@@ -295,7 +298,7 @@ export function EmailGate({
         action={async () => {
           if (!isEmail(email)) return invalid();
           setError(null);
-            const res = await submitEmail(slug, email);
+            const res = await submitEmail(slug, email, undefined, itemId);
             if (res && "error" in res && res.error) {
               setError(res.error);
               field.current?.focus();
